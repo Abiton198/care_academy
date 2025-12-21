@@ -23,6 +23,7 @@ import {
   where,
   onSnapshot,
   orderBy,
+  setDoc,
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import {
@@ -33,18 +34,25 @@ import {
   User,
   GraduationCap,
   ExternalLink,
-  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-/* ---------------- Helper: Normalize Grade ---------------- */
-const normalizeGrade = (grade?: string): string => {
-  if (!grade) return "";
-  return grade.replace(/^grade\s*/i, "").trim().toLowerCase();
-};
+/* ===========================================================
+   HELPERS
+   =========================================================== */
+const normalizeGrade = (grade?: string): string =>
+  grade ? grade.replace(/^grade\s*/i, "").trim().toLowerCase() : "";
 
-/* ---------------- Types ---------------- */
+/* ===========================================================
+   TYPES
+   =========================================================== */
 interface Student {
   id: string;
   firstName: string;
@@ -65,22 +73,43 @@ interface TimetableEntry {
   curriculum: "CAPS" | "Cambridge";
 }
 
-/* ---------------- Sections ---------------- */
-const sections = ["Overview", "Registration", "Payments", "Communications", "Status", "Settings"];
+const sections = [
+  "Overview",
+  "Registration",
+  "Payments",
+  "Communications",
+  "Status",
+  "Settings",
+];
 
+/* ===========================================================
+   MAIN COMPONENT
+   =========================================================== */
 export default function ParentDashboard() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState("Overview");
-  const [parentName, setParentName] = useState("");
-  const [title, setTitle] = useState("");
-  const [students, setStudents] = useState<Student[]>([]);
-  const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
-
   const navigate = useNavigate();
 
-  /* ---------------- Real-Time Data Fetch ---------------- */
+  /* ---------------- Core Dashboard State ---------------- */
+  const [activeTab, setActiveTab] = useState("Overview");
+  const [students, setStudents] = useState<Student[]>([]);
+  const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  /* ---------------- Parent Profile State ---------------- */
+  const [title, setTitle] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [contact, setContact] = useState("");
+  const [address, setAddress] = useState("");
+
+  /* ---------------- Wizard Enforcement ---------------- */
+  const [showWizard, setShowWizard] = useState(false);
+  const [profileCompleted, setProfileCompleted] = useState(true);
+  const [wizardStep, setWizardStep] = useState<1 | 2>(1);
+
+  /* ===========================================================
+     DATA FETCH
+     =========================================================== */
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -89,118 +118,189 @@ export default function ParentDashboard() {
 
     const fetchData = async () => {
       try {
-        // Parent name
-        const parentDoc = await getDoc(doc(db, "parents", user.uid));
-        if (parentDoc.exists()) {
-          const data = parentDoc.data();
-          setParentName(data.name || data.parentName || "");
+        /* -------- Parent Profile -------- */
+        const parentSnap = await getDoc(doc(db, "parents", user.uid));
+        if (parentSnap.exists()) {
+          const data = parentSnap.data();
+
           setTitle(data.title || "");
+          setFullName(data.fullName || "");
+          setContact(data.contact || "");
+          setAddress(data.address || "");
+
+          const completed = data.profileCompleted === true;
+          setProfileCompleted(completed);
+
+          // 🔁 Enforce wizard
+          if (!completed) {
+            setShowWizard(true);
+            setWizardStep(1);
+          }
         }
 
-        // Students (real-time)
-        const studentQuery = query(
+        /* -------- Students -------- */
+        const qStudents = query(
           collection(db, "students"),
           where("parentId", "==", user.uid)
         );
-        unsubStudents = onSnapshot(studentQuery, (snap) => {
-          const list: Student[] = snap.docs.map((d) => ({
+        unsubStudents = onSnapshot(qStudents, (snap) => {
+          const list = snap.docs.map((d) => ({
             id: d.id,
             ...(d.data() as Student),
           }));
           setStudents(list);
-          if (list.length > 0 && !selectedChildId) {
+          if (!selectedChildId && list.length > 0) {
             setSelectedChildId(list[0].id);
           }
         });
 
-        // Timetable (real-time)
-        const timetableQuery = query(
+        /* -------- Timetable -------- */
+        const qTimetable = query(
           collection(db, "timetable"),
           orderBy("day"),
           orderBy("time")
         );
-        unsubTimetable = onSnapshot(timetableQuery, (snap) => {
-          const entries: TimetableEntry[] = snap.docs.map((d) => ({
-            id: d.id,
-            ...(d.data() as TimetableEntry),
-          }));
-          setTimetable(entries);
+        unsubTimetable = onSnapshot(qTimetable, (snap) => {
+          setTimetable(
+            snap.docs.map((d) => ({
+              id: d.id,
+              ...(d.data() as TimetableEntry),
+            }))
+          );
         });
 
         setLoading(false);
       } catch (err) {
-        console.error("Error:", err);
+        console.error("Dashboard load error:", err);
         setLoading(false);
       }
     };
 
     fetchData();
-
     return () => {
       unsubStudents?.();
       unsubTimetable?.();
     };
-  }, [user?.uid, selectedChildId]);
+  }, [user?.uid]);
 
+  /* ===========================================================
+     LOGOUT
+     =========================================================== */
   const handleLogout = async () => {
     await signOut(auth);
     navigate("/login");
   };
 
+  /* ===========================================================
+     SAVE PROFILE (WIZARD STEP 1)
+     =========================================================== */
+  const saveProfileAndContinue = async () => {
+    if (!fullName || !contact || !address) {
+      alert("Please complete all required fields.");
+      return;
+    }
+
+    await setDoc(
+      doc(db, "parents", user!.uid),
+      {
+        title,
+        fullName,
+        contact,
+        address,
+        profileCompleted: true,
+        updatedAt: new Date(),
+      },
+      { merge: true }
+    );
+
+    setProfileCompleted(true);
+    setWizardStep(2);
+    setActiveTab("Registration");
+  };
+
+  /* ===========================================================
+     SECTION RENDER
+     =========================================================== */
   const renderSection = () => {
     switch (activeTab) {
-      case "Overview": return <OverviewSection students={students} selectedChildId={selectedChildId} setSelectedChildId={setSelectedChildId} timetable={timetable} />;
-      case "Registration": return <RegistrationSection />;
-      case "Payments": return <PaymentsSection />;
-      case "Communications": return <CommunicationsSection />;
-      case "Status": return <StatusSection />;
-      case "Settings": return <SettingsSection />;
-      default: return null;
+      case "Overview":
+        return <OverviewSection {...{ students, selectedChildId, setSelectedChildId, timetable }} />;
+      case "Registration":
+        return <RegistrationSection />;
+      case "Payments":
+        return <PaymentsSection />;
+      case "Communications":
+        return <CommunicationsSection />;
+      case "Status":
+        return <StatusSection />;
+      case "Settings":
+        return (
+          <>
+            <SettingsSection />
+            <Button
+              onClick={() => {
+                setShowWizard(true);
+                setWizardStep(1);
+              }}
+              className="mt-4 bg-indigo-600 text-white"
+            >
+              Edit Parent Profile
+            </Button>
+          </>
+        );
+      default:
+        return null;
     }
   };
 
-  /* ---------------- UI ---------------- */
+  /* ===========================================================
+     LOADING
+     =========================================================== */
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-700 font-medium">Loading your dashboard...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin h-10 w-10 border-b-2 border-indigo-600 rounded-full" />
       </div>
     );
   }
 
+  /* ===========================================================
+     UI
+     =========================================================== */
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
 
-        {/* Header */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 flex justify-between items-start">
+        {/* HEADER */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 flex justify-between">
           <div>
+
+            {/* personalized welcome updated after profile update */}
             <h1 className="text-3xl font-bold text-indigo-800">
-              Welcome {title && `${title} `}{parentName}
+              {profileCompleted ? (
+                <>Welcome {title && `${title} `}{fullName} 👋</>
+              ) : (
+                <>Welcome 👋</>
+              )}
             </h1>
-            <p className="text-gray-600 mt-1">Parent Dashboard</p>
+
+            <p className="text-gray-600">Parent Dashboard</p>
           </div>
-          <Button
-            onClick={handleLogout}
-            className="bg-red-600 hover:bg-red-700 text-white flex items-center gap-2"
-          >
+          <Button onClick={handleLogout} className="bg-red-600 text-white">
             <LogOut size={18} /> Logout
           </Button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex flex-wrap gap-2 bg-white p-2 rounded-xl shadow-md">
+        {/* TABS */}
+        <div className="flex gap-2 bg-white p-2 rounded-xl shadow">
           {sections.map((s) => (
             <button
               key={s}
               onClick={() => setActiveTab(s)}
-              className={`px-5 py-2 rounded-lg font-medium transition-all ${
+              className={`px-4 py-2 rounded-lg ${
                 activeTab === s
-                  ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md"
-                  : "text-gray-700 hover:bg-gray-100"
+                  ? "bg-indigo-600 text-white"
+                  : "hover:bg-gray-100"
               }`}
             >
               {s}
@@ -208,29 +308,78 @@ export default function ParentDashboard() {
           ))}
         </div>
 
-        {/* Section Content */}
+        {/* CONTENT */}
         <div className="bg-white rounded-2xl shadow-lg p-6">
           {renderSection()}
         </div>
       </div>
+
+      {/* ===================================================
+         ONBOARDING WIZARD MODAL
+         =================================================== */}
+      {showWizard && !profileCompleted && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-xl max-w-xl w-full p-6">
+
+            {/* STEP 1 */}
+            {wizardStep === 1 && (
+              <>
+                <h2 className="text-2xl font-bold text-indigo-700 mb-4">
+                  Complete Parent Profile
+                </h2>
+
+                <div className="space-y-3">
+                  <input className="w-full border p-3 rounded" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+                  <input className="w-full border p-3 rounded" placeholder="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+                  <input className="w-full border p-3 rounded" placeholder="Contact Number" value={contact} onChange={(e) => setContact(e.target.value)} />
+                  <textarea className="w-full border p-3 rounded" placeholder="Home Address" rows={3} value={address} onChange={(e) => setAddress(e.target.value)} />
+                </div>
+
+                <div className="flex justify-between mt-6">
+                  <button onClick={() => setShowWizard(false)} className="text-gray-500">
+                    Later
+                  </button>
+                  <Button onClick={saveProfileAndContinue} className="bg-indigo-600 text-white">
+                    Continue to Child Enrolment
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* STEP 2 */}
+            {wizardStep === 2 && (
+              <>
+                <h2 className="text-2xl font-bold text-indigo-700 mb-4">
+                  Enrol Your Child
+                </h2>
+                <p className="text-gray-600 mb-6">
+                  Please complete your child’s registration to continue.
+                </p>
+                <Button
+                  onClick={() => setShowWizard(false)}
+                  className="bg-green-600 text-white w-full"
+                >
+                  Go to Registration
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 /* ===========================================================
-   OVERVIEW SECTION
+   OVERVIEW SECTION (UNCHANGED LOGIC)
    =========================================================== */
 function OverviewSection({
   students,
   selectedChildId,
   setSelectedChildId,
   timetable,
-}: {
-  students: Student[];
-  selectedChildId: string | null;
-  setSelectedChildId: (id: string) => void;
-  timetable: TimetableEntry[];
-}) {
+}: any) {
+
   const selectedChild = students.find((s) => s.id === selectedChildId);
   const childGradeNorm = useMemo(() => normalizeGrade(selectedChild?.grade), [selectedChild?.grade]);
   const childSubjects = useMemo(() => selectedChild?.subjects || [], [selectedChild?.subjects]);

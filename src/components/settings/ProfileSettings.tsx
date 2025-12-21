@@ -54,42 +54,74 @@ export default function ProfileSettings({ onProfileUpdate }: ProfileSettingsProp
   const user = auth.currentUser;
 
   // 🔹 Load profile + children
-  useEffect(() => {
-    if (!user) return;
+ useEffect(() => {
+  if (!user) return;
 
-    const loadProfile = async () => {
-      try {
-        const parentRef = doc(db, "parents", user.uid);
-        const parentSnap = await getDoc(parentRef);
+  const loadProfile = async () => {
+    try {
+      const parentRef = doc(db, "parents", user.uid);
+      const parentSnap = await getDoc(parentRef);
 
-        if (parentSnap.exists()) {
-          const data = parentSnap.data();
-          setTitle(data.title || "");
-          setFirstName(data.firstName || "");
-          setLastName(data.lastName || "");
-          setContact(data.contact || "");
-          setEmail(data.email || user.email || "");
-          setAddress(data.address || "");
-          setPhotoURL(data.photoURL || "");
-        } else {
-          setEmail(user.email || "");
+      if (parentSnap.exists()) {
+        const data = parentSnap.data();
+
+        setTitle(data.title || "");
+        setFirstName(data.firstName || "");
+        setLastName(data.lastName || "");
+        setContact(data.contact || "");
+        setEmail(data.email || user.email || "");
+        setAddress(data.address || "");
+
+        // ✅ Prefer Firestore photo, fallback to Google photo
+        const finalPhoto =
+          data.photoURL || user.photoURL || "";
+
+        setPhotoURL(finalPhoto);
+
+        // ✅ Save Google photo to Firestore if missing
+        if (!data.photoURL && user.photoURL) {
+          await setDoc(
+            parentRef,
+            {
+              photoURL: user.photoURL,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
         }
+      } else {
+        // 🔥 First-ever login
+        setEmail(user.email || "");
+        setPhotoURL(user.photoURL || "");
 
-        // fetch children registered by this parent
-        const q = query(
-          collection(db, "registrations"),
-          where("parentId", "==", user.uid)
+        await setDoc(
+          parentRef,
+          {
+            email: user.email,
+            photoURL: user.photoURL || "",
+            createdAt: new Date().toISOString(),
+          },
+          { merge: true }
         );
-        const snap = await getDocs(q);
-        setChildren(snap.docs.map((doc) => doc.data().learnerData || {}));
-      } catch (err) {
-        console.error("Error loading profile:", err);
       }
-      setLoading(false);
-    };
 
-    loadProfile();
-  }, [user]);
+      // fetch children
+      const q = query(
+        collection(db, "registrations"),
+        where("parentId", "==", user.uid)
+      );
+      const snap = await getDocs(q);
+      setChildren(snap.docs.map((d) => d.data().learnerData || {}));
+    } catch (err) {
+      console.error("Error loading profile:", err);
+    }
+
+    setLoading(false);
+  };
+
+  loadProfile();
+}, [user]);
+
 
   // 🔹 Upload profile picture
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

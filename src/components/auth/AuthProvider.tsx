@@ -5,13 +5,19 @@ import { auth, db } from "@/lib/firebaseConfig";
 import {
   doc,
   getDoc,
+  setDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import React, { createContext, useContext, useEffect, useState } from "react";
+
+/* ======================================================
+   Types
+   ====================================================== */
 
 interface AppUser {
   uid: string;
   email: string | null;
-  role: "parent" | "teacher" | "principal" | "admin"; // student removed
+  role: "parent" | "teacher" | "principal" | "admin";
 }
 
 interface AuthContextType {
@@ -19,10 +25,18 @@ interface AuthContextType {
   loading: boolean;
 }
 
+/* ======================================================
+   Context
+   ====================================================== */
+
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
 });
+
+/* ======================================================
+   Provider
+   ====================================================== */
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AppUser | null>(null);
@@ -31,6 +45,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (!firebaseUser) {
+        // User signed out
         setUser(null);
         setLoading(false);
         return;
@@ -40,27 +55,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const userRef = doc(db, "users", firebaseUser.uid);
         const userSnap = await getDoc(userRef);
 
+        /* ======================================================
+           CASE 1: Existing user → normal sign-in
+           ====================================================== */
         if (userSnap.exists()) {
           const data = userSnap.data();
           const role = data.role;
 
-          // Only allow parent, teacher, principal, admin
           if (["parent", "teacher", "principal", "admin"].includes(role)) {
             setUser({
               uid: firebaseUser.uid,
               email: firebaseUser.email,
-              role: role as AppUser["role"],
+              role,
             });
           } else {
-            console.warn("Unauthorized role:", role);
+            console.warn("Unauthorized role detected:", role);
             setUser(null);
           }
-        } else {
-          console.warn("No user doc found for UID:", firebaseUser.uid);
-          setUser(null);
+        }
+
+        /* ======================================================
+           CASE 2: New user → auto-provision (SIGN-UP)
+           ====================================================== */
+        else {
+          console.info("No user doc found. Creating default parent profile…");
+
+          // Create base user record
+          await setDoc(userRef, {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            role: "parent",              // ✅ default role
+            createdAt: serverTimestamp(),
+          });
+
+          setUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            role: "parent",
+          });
         }
       } catch (err) {
-        console.error("Auth error:", err);
+        console.error("Auth provider error:", err);
         setUser(null);
       } finally {
         setLoading(false);
@@ -76,5 +111,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     </AuthContext.Provider>
   );
 };
+
+/* ======================================================
+   Hook
+   ====================================================== */
 
 export const useAuth = () => useContext(AuthContext);
