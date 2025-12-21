@@ -1,479 +1,245 @@
 "use client";
 
-import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { auth, db } from "@/lib/firebaseConfig";
+
+/* Firebase Auth */
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  GoogleAuthProvider,
   signInWithPopup,
+  GoogleAuthProvider,
+  fetchSignInMethodsForEmail,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  PhoneAuthProvider,
 } from "firebase/auth";
+
+/* Firestore */
 import {
   doc,
   getDoc,
-  getDocs,
   setDoc,
-  updateDoc,
-  query,
-  where,
-  collection,
   serverTimestamp,
 } from "firebase/firestore";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 export default function LoginForm() {
+  const navigate = useNavigate();
+
+  /* ---------------- STATE ---------------- */
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"student" | "teacher" | "parent" | "principal" | null>(null);
-  const [teacherAction, setTeacherAction] = useState<"none" | "apply" | "signin">("none");
-  const [isParentSignup, setIsParentSignup] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
 
-  const unauthorized = new URLSearchParams(location.search).get("unauthorized") === "true";
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [confirmation, setConfirmation] = useState<any>(null);
 
-  /* -------------------- Login or Signup -------------------- */
-  const handleLoginOrSignup = async () => {
-    if (!role) {
-      alert("Please select your role first.");
-      return;
+  const [role, setRole] = useState<string | null>(null);
+  const [accountExists, setAccountExists] = useState<boolean | null>(null);
+  const [method, setMethod] = useState<"email" | "phone">("email");
+
+  /* ---------------- INVISIBLE RECAPTCHA ---------------- */
+  useEffect(() => {
+    if (!(window as any).recaptchaVerifier) {
+      (window as any).recaptchaVerifier = new RecaptchaVerifier(
+        auth,
+        "recaptcha-container",
+        { size: "invisible" }
+      );
     }
+  }, []);
+
+  /* =====================================================
+     📧 CHECK EMAIL REGISTRATION STATUS
+  ===================================================== */
+  const checkEmail = async (email: string) => {
+    if (!email) return;
+
+    const methods = await fetchSignInMethodsForEmail(auth, email);
+    setAccountExists(methods.length > 0);
+  };
+
+  /* =====================================================
+     📧 EMAIL AUTH (STRICT MODE)
+  ===================================================== */
+  const handleEmail = async () => {
+    if (!role) return alert("Select role");
 
     try {
-      let userCred;
+      const userCred = accountExists
+        ? await signInWithEmailAndPassword(auth, email, password)
+        : await createUserWithEmailAndPassword(auth, email, password);
 
-      /* -------------------- Parent Signup -------------------- */
-      if (role === "parent" && isParentSignup) {
-        userCred = await createUserWithEmailAndPassword(auth, email, password);
-        const user = userCred.user;
-
-        await setDoc(
-          doc(db, "parents", user.uid),
-          {
-            uid: user.uid,
-            name: user.displayName || "",
-            email: user.email || "",
-            createdAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-
-        await setDoc(
-          doc(db, "users", user.uid),
-          {
-            uid: user.uid,
-            email: user.email,
-            role: "parent",
-            createdAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-
-        alert("Parent account created! Redirecting to parent dashboard...");
-        navigate("/parent-dashboard");
-        return;
-      }
-
-      /* -------------------- Normal Login -------------------- */
-      userCred = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCred.user;
-      const userRef = doc(db, "users", user.uid);
-
-      /* ---------- Principal ---------- */
-      if (role === "principal") {
-        const ref = doc(db, "principals", user.uid);
-        const snap = await getDoc(ref);
-        if (!snap.exists()) {
-          alert("Access denied. Not authorized as a principal.");
-          return;
-        }
-
-        await setDoc(
-          userRef,
-          { uid: user.uid, email: user.email, role: "principal", createdAt: serverTimestamp() },
-          { merge: true }
-        );
-        navigate("/principal-dashboard");
-        return;
-      }
-
-      /* ---------- Teacher ---------- */
-      if (role === "teacher") {
-        const ref = doc(db, "teachers", user.uid);
-        const snap = await getDoc(ref);
-        if (!snap.exists()) {
-          alert("No teacher profile found. Please apply first.");
-          navigate("/teacher-application");
-          return;
-        }
-
-        const data = snap.data();
-        await setDoc(
-          userRef,
-          { uid: user.uid, email: user.email, role: "teacher", createdAt: serverTimestamp() },
-          { merge: true }
-        );
-
-        if (data.status === "approved" && data.classActivated) {
-          navigate("/teacher-dashboard");
-        } else {
-          alert("Your teacher account is not yet fully active.");
-          navigate("/teacher-application");
-        }
-        return;
-      }
-
-      /* ---------- Student ---------- */
-      if (role === "student") {
-        let studentDoc = null;
-
-        // 1️⃣ Try finding student by uid
-        let q = query(collection(db, "students"), where("uid", "==", user.uid));
-        let querySnap = await getDocs(q);
-
-        // 2️⃣ If not found, try by email
-        if (querySnap.empty) {
-          q = query(collection(db, "students"), where("email", "==", user.email));
-          querySnap = await getDocs(q);
-        }
-
-        // 3️⃣ If still not found, try by linked parent email
-        if (querySnap.empty) {
-          q = query(collection(db, "students"), where("linkedParentEmail", "==", user.email));
-          querySnap = await getDocs(q);
-        }
-
-        if (!querySnap.empty) studentDoc = querySnap.docs[0];
-
-        if (!studentDoc) {
-          alert("No linked student record found. Please contact your parent or school.");
-          await auth.signOut();
-          return;
-        }
-
-        const data = studentDoc.data();
-
-        // 4️⃣ Check approval or enrollment status
-        if (!data.approvedByPrincipal && data.status !== "enrolled") {
-          alert("Your account is not yet approved by the principal.");
-          await auth.signOut();
-          return;
-        }
-
-        // 5️⃣ Sync everything across users + students
-        await setDoc(
-          userRef,
-          {
-            uid: user.uid,
-            email: user.email,
-            role: "student",
-            linkedParentId: data.parentId || null,
-            linkedParentEmail: data.linkedParentEmail || null,
-            linkedStudentId: studentDoc.id,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-
-        await updateDoc(doc(db, "students", studentDoc.id), {
-          uid: user.uid,
-          email: user.email,
-          lastLogin: serverTimestamp(),
-        });
-
-        navigate("/student-dashboard");
-        return;
-      }
-
-      /* ---------- Parent Login ---------- */
-      if (role === "parent") {
-        const parentRef = doc(db, "parents", user.uid);
-        const parentSnap = await getDoc(parentRef);
-        if (!parentSnap.exists()) {
-          alert("No parent record found. Please register first.");
-          return;
-        }
-
-        await setDoc(
-          userRef,
-          { uid: user.uid, email: user.email, role: "parent", createdAt: serverTimestamp() },
-          { merge: true }
-        );
-
-        navigate("/parent-dashboard");
-        return;
-      }
-    } catch (err: any) {
-      console.error("Login error:", err);
-      alert(isParentSignup ? "Signup failed. Try again." : "Login failed. Check credentials.");
+      await postAuth(userCred.user);
+    } catch (err) {
+      alert("Authentication failed");
     }
   };
 
- 
-  /* -------------------- Google Login -------------------- */
-const handleGoogleLogin = async () => {
-  if (!role) {
-    alert("Please select your role before using Google login.");
-    return;
-  }
+  /* =====================================================
+     📱 PHONE AUTH (STRICT MODE)
+  ===================================================== */
+  const sendOtp = async () => {
+    if (!phone) return alert("Enter phone");
 
-  try {
+    const appVerifier = (window as any).recaptchaVerifier;
+    const result = await signInWithPhoneNumber(auth, phone, appVerifier);
+
+    setConfirmation(result);
+  };
+
+  const verifyOtp = async () => {
+    const credential = PhoneAuthProvider.credential(
+      confirmation.verificationId,
+      otp
+    );
+
+    const userCred = await auth.signInWithCredential(credential);
+    await postAuth(userCred.user);
+  };
+
+  /* =====================================================
+     🌐 GOOGLE AUTH (AUTO MODE)
+  ===================================================== */
+  const handleGoogle = async () => {
+    if (!role) return alert("Select role");
+
     const provider = new GoogleAuthProvider();
-
-    // 👇 This line forces Google to always show the account chooser
-    provider.setCustomParameters({ prompt: "select_account" });
-
     const result = await signInWithPopup(auth, provider);
-    const user = result.user;
+    await postAuth(result.user);
+  };
+
+  /* =====================================================
+     🔁 POST AUTH ROUTING + ROLE SETUP
+  ===================================================== */
+  const postAuth = async (user: any) => {
     const userRef = doc(db, "users", user.uid);
+    const snap = await getDoc(userRef);
 
-    /* ---------- Student Google Login ---------- */
-    if (role === "student") {
-      let studentDoc = null;
-
-      // Find by UID or email or linkedParentEmail
-      let q = query(collection(db, "students"), where("uid", "==", user.uid));
-      let querySnap = await getDocs(q);
-
-      if (querySnap.empty) {
-        q = query(collection(db, "students"), where("email", "==", user.email));
-        querySnap = await getDocs(q);
-      }
-
-      if (querySnap.empty) {
-        q = query(collection(db, "students"), where("linkedParentEmail", "==", user.email));
-        querySnap = await getDocs(q);
-      }
-
-      if (!querySnap.empty) studentDoc = querySnap.docs[0];
-
-      if (!studentDoc) {
-        alert("No linked student record found. Contact your parent or school.");
-        await auth.signOut();
-        return;
-      }
-
-      const data = studentDoc.data();
-
-      if (!data.approvedByPrincipal && data.status !== "enrolled") {
-        alert("Your account is not yet approved by the principal.");
-        await auth.signOut();
-        return;
-      }
-
-      await setDoc(
-        userRef,
-        {
-          uid: user.uid,
-          email: user.email,
-          role: "student",
-          linkedParentId: data.parentId || null,
-          linkedParentEmail: data.linkedParentEmail || null,
-          linkedStudentId: studentDoc.id,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      await updateDoc(doc(db, "students", studentDoc.id), {
+    if (!snap.exists()) {
+      // New user → Sign Up
+      await setDoc(userRef, {
         uid: user.uid,
-        email: user.email,
-        lastLogin: serverTimestamp(),
+        role,
+        email: user.email ?? null,
+        phone: user.phoneNumber ?? null,
+        createdAt: serverTimestamp(),
       });
-
-      navigate("/student-dashboard");
-      return;
     }
 
-    /* ---------- Parent Google Login ---------- */
-    if (role === "parent") {
-      const ref = doc(db, "parents", user.uid);
-      const snap = await getDoc(ref);
+    navigate(`/${role}-dashboard`);
+  };
 
-      if (!snap.exists()) {
-        await setDoc(ref, {
-          uid: user.uid,
-          name: user.displayName || "",
-          email: user.email || "",
-          photoURL: user.photoURL || "",
-          createdAt: serverTimestamp(),
-          status: "active",
-        });
-      }
-
-      await setDoc(
-        userRef,
-        { uid: user.uid, email: user.email, role: "parent", createdAt: serverTimestamp() },
-        { merge: true }
-      );
-
-      navigate("/parent-dashboard");
-      return;
-    }
-
-    /* ---------- Teacher / Principal ---------- */
-    if (role === "teacher" || role === "principal") {
-      const ref = doc(db, `${role}s`, user.uid);
-      const snap = await getDoc(ref);
-      if (!snap.exists()) {
-        alert(`Access denied. No ${role} record found.`);
-        return;
-      }
-      await setDoc(
-        userRef,
-        { uid: user.uid, email: user.email, role, createdAt: serverTimestamp() },
-        { merge: true }
-      );
-      navigate(`/${role}-dashboard`);
-      return;
-    }
-  } catch (err) {
-    console.error("Google login error:", err);
-    alert("Google login failed. Please try again.");
-  }
-};
-
-  const handleClose = () => navigate("/");
-
-  /* -------------------- UI -------------------- */
+  /* =====================================================
+     🧩 UI
+  ===================================================== */
   return (
-    <div className="max-w-md mx-auto p-6 border rounded bg-white shadow relative">
-      {/* Close Button */}
-      <button
-        onClick={handleClose}
-        className="absolute top-2 right-2 text-gray-600 hover:text-red-500 text-xl font-bold"
-      >
-        ✕
-      </button>
+    <div className="max-w-md mx-auto p-6">
+      <div id="recaptcha-container" />
 
-      {/* Unauthorized banner */}
-      {unauthorized && (
-        <div className="mb-4 p-3 rounded bg-red-100 border border-red-400 text-red-700 text-center">
-          You are not authorized to access that page. Please log in with the correct role.
-        </div>
-      )}
-
-      <h2 className="text-xl font-bold mb-4 text-center">Welcome — Choose Your Role</h2>
-
-      {/* Role selection */}
-      <div className="mb-4 flex flex-wrap justify-center gap-2">
-        {(["student", "teacher", "parent", "admin"] as const).map((r) => (
+      {/* ROLE */}
+      <div className="flex gap-2 justify-center mb-4">
+        {["student", "teacher", "parent", "principal"].map((r) => (
           <button
             key={r}
-            onClick={() => {
-              setRole(r);
-              setTeacherAction("none");
-              setIsParentSignup(false);
-            }}
-            className={`px-3 py-1 rounded ${role === r ? "bg-blue-600 text-white" : "bg-gray-200"}`}
+            onClick={() => setRole(r)}
+            className={`px-3 py-1 rounded ${
+              role === r ? "bg-blue-600 text-white" : "bg-gray-200"
+            }`}
           >
-            {r.charAt(0).toUpperCase() + r.slice(1)}
+            {r}
           </button>
         ))}
       </div>
 
-      {/* Teacher action */}
-      {role === "teacher" && teacherAction === "none" && (
-        <div className="mb-4 border p-3 rounded bg-gray-50">
-          <p className="mb-2 font-medium text-center">Are you new or returning?</p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => navigate("/teacher-application")}
-              className="flex-1 px-3 py-2 bg-green-600 text-white rounded"
-            >
-              📝 Apply (New)
-            </button>
-            <button
-              onClick={() => setTeacherAction("signin")}
-              className="flex-1 px-3 py-2 bg-blue-600 text-white rounded"
-            >
-              🔑 Returning
-            </button>
-          </div>
-        </div>
-      )}
+      {/* METHOD */}
+      <div className="flex gap-2 justify-center mb-4">
+        <button onClick={() => setMethod("email")}>Email</button>
+        <button onClick={() => setMethod("phone")}>Phone</button>
+      </div>
 
-      {/* Login / Signup Form */}
-      {(role && (role !== "teacher" || teacherAction === "signin")) && (
-        <Card className="p-6 shadow-lg border rounded-2xl bg-white">
-          <CardHeader>
-            <CardTitle className="text-xl font-semibold text-center text-blue-700">
-              {role === "parent" && isParentSignup ? "Parent Signup" : "Sign in to Your Account"}
-            </CardTitle>
-          </CardHeader>
+      {/* EMAIL */}
+      {method === "email" && (
+        <>
+          <input
+            type="email"
+            placeholder="Email"
+            className="w-full border p-2 mb-2"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              checkEmail(e.target.value);
+            }}
+          />
 
-          <CardContent className="space-y-4">
-            <input
-              type="email"
-              placeholder="Email"
-              className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-
+          {accountExists !== null && (
             <input
               type="password"
-              placeholder="Password"
-              className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder={accountExists ? "Enter password" : "Create password"}
+              className="w-full border p-2 mb-2"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+          )}
 
+          {accountExists !== null && (
             <button
-              onClick={handleLoginOrSignup}
-              className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition"
+              onClick={handleEmail}
+              className="w-full bg-blue-600 text-white py-2"
             >
-              {role === "parent" && isParentSignup ? "Signup" : "Login"}
+              {accountExists ? "Sign In" : "Sign Up"}
             </button>
-
-            {/* Parent signup toggle */}
-            {role === "parent" && (
-              <p className="text-center text-sm text-gray-600">
-                {isParentSignup ? (
-                  <>
-                    Already have an account?{" "}
-                    <button
-                      className="text-blue-600 hover:underline"
-                      onClick={() => setIsParentSignup(false)}
-                    >
-                      Login here
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    New parent?{" "}
-                    <button
-                      className="text-blue-600 hover:underline"
-                      onClick={() => setIsParentSignup(true)}
-                    >
-                      Create account
-                    </button>
-                  </>
-                )}
-              </p>
-            )}
-
-            <div className="flex items-center gap-2 my-2">
-              <div className="flex-1 h-px bg-gray-300"></div>
-              <span className="text-sm text-gray-500">or</span>
-              <div className="flex-1 h-px bg-gray-300"></div>
-            </div>
-
-            <button
-              onClick={handleGoogleLogin}
-              className="w-full bg-red-500 text-white py-3 rounded-lg font-medium hover:bg-red-600 transition flex items-center justify-center gap-2"
-            >
-              <img
-                src="https://www.svgrepo.com/show/355037/google.svg"
-                alt="Google"
-                className="w-5 h-5"
-              />
-              Sign in with Google
-            </button>
-          </CardContent>
-        </Card>
+          )}
+        </>
       )}
+
+      {/* PHONE */}
+      {method === "phone" && (
+        <>
+          <input
+            type="tel"
+            placeholder="+27831234567"
+            className="w-full border p-2 mb-2"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+          />
+
+          {!confirmation ? (
+            <button
+              onClick={sendOtp}
+              className="w-full bg-blue-600 text-white py-2"
+            >
+              Continue
+            </button>
+          ) : (
+            <>
+              <input
+                placeholder="OTP"
+                className="w-full border p-2 mb-2"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+              />
+              <button
+                onClick={verifyOtp}
+                className="w-full bg-green-600 text-white py-2"
+              >
+                Verify
+              </button>
+            </>
+          )}
+        </>
+      )}
+
+      {/* GOOGLE */}
+      <div className="mt-4">
+        <button
+          onClick={handleGoogle}
+          className="w-full bg-red-500 text-white py-2"
+        >
+          Continue with Google
+        </button>
+      </div>
     </div>
   );
 }
