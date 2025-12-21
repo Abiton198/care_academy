@@ -13,6 +13,7 @@ import {
   orderBy,
   getDocs,
   getDoc,
+  where
 } from "firebase/firestore";
 import { getStorage, ref, listAll, getDownloadURL } from "firebase/storage";
 
@@ -25,16 +26,51 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useNavigate } from "react-router-dom";
 import TimetableManager from "@/lib/TimetableManager";
 import ChatWidget from "../chat/ChatWidget";
-import { Search, Clock, Users, DollarSign, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronUp, Download, Eye } from "lucide-react";
+import { LogOut } from "lucide-react";
+
+import {
+  Search,
+  Clock,
+  Users,
+  DollarSign,
+  CheckCircle,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  Eye,
+} from "lucide-react";
 
 /* ---------------- Types ---------------- */
+interface ParentProfile {
+  id: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  occupation?: string;
+}
+
 interface Student {
   id: string;
   firstName?: string;
@@ -70,14 +106,6 @@ interface Teacher {
   references?: { name: string; contact: string }[];
 }
 
-interface ParentAgg {
-  id: string;
-  name: string;
-  email: string;
-  photoURL?: string | null;
-  children: { id: string; name: string; grade: string; status: string; paid: boolean }[];
-}
-
 interface Payment {
   id: string;
   amount?: string;
@@ -85,223 +113,183 @@ interface Payment {
   processedAt?: any;
 }
 
-/* ---------------- Main Component ---------------- */
+/* ---------------- Component ---------------- */
 const PrincipalDashboard: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [parents, setParents] = useState<ParentAgg[]>([]);
   const [payments, setPayments] = useState<Record<string, Payment[]>>({});
+  const [documents, setDocuments] = useState<
+    Record<string, { name: string; url: string }[]>
+  >({});
+
   const [searchTerm, setSearchTerm] = useState("");
-  const [gradeFilter, setGradeFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [curriculumFilter, setCurriculumFilter] = useState<"all" | "CAPS" | "Cambridge">("all");
+  const [gradeFilter, setGradeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [curriculumFilter, setCurriculumFilter] =
+    useState<"all" | "CAPS" | "Cambridge">("all");
+
   const [time, setTime] = useState(new Date());
   const [timetableExpanded, setTimetableExpanded] = useState(false);
 
+  const [selectedItem, setSelectedItem] = useState<Student | Teacher | null>(
+    null
+  );
+  const [selectedType, setSelectedType] =
+    useState<"student" | "teacher" | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [activeTab, setActiveTab] =
+    useState<"Details" | "Documents" | "Payments">("Details");
+
+  const [parentProfile, setParentProfile] =
+    useState<ParentProfile | null>(null);
+
   const principalName = auth.currentUser?.displayName || "Principal";
-  const schoolName = "Nextgen Online Support School";
+  const schoolName = "Care Academy";
+
   const { logout } = useAuth();
   const navigate = useNavigate();
 
-  /* ---------------- Modal State ---------------- */
-  const [selectedItem, setSelectedItem] = useState<any>(null);
-  const [selectedType, setSelectedType] = useState<"teacher" | "student" | "parent" | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [documents, setDocuments] = useState<Record<string, { name: string; url: string }[]>>({});
-  const [activeTab, setActiveTab] = useState<"Details" | "Documents" | "Payments">("Details");
-
-  /* ---------------- Chat State ---------------- */
-  const [chatRecipient, setChatRecipient] = useState<string | null>(null);
-
-  /* ---------------- Live Clock ---------------- */
+  /* ---------------- Clock ---------------- */
   useEffect(() => {
-    const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
+    const t = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(t);
   }, []);
 
-  /* ---------------- Firestore Listeners ---------------- */
-  useEffect(() => {
-    const unsubStudents = onSnapshot(collection(db, "students"), async (snap) => {
-      const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Student) }));
-      setStudents(list);
+  /* ---------------- Firestore listeners ---------------- */
+useEffect(() => {
+  // ---------------- Students ----------------
+  let studentsQuery: any = collection(db, "students");
 
-      const parentMap: Record<string, ParentAgg> = {};
-      const paymentMap: Record<string, Payment[]> = {};
+  if (auth.currentUser) {
+    studentsQuery = fsQuery(
+      collection(db, "students"),
+      where("status", "==", "pending")
+    );
+  }
 
-      for (const s of list) {
-        const parentId = s.parentId;
-        if (!parentId) continue;
+  const unsubStudents = onSnapshot(studentsQuery, async (snap) => {
+    const list: Student[] = snap.docs.map((d) => ({
+      id: d.id,
+      ...(d.data() as Student),
+    }));
+    setStudents(list);
 
-        if (!parentMap[parentId]) {
-          const pDoc = await getDoc(doc(db, "parents", parentId));
-          const pData = pDoc.exists() ? pDoc.data() : {};
-          parentMap[parentId] = {
-            id: parentId,
-            name: pData.name || "(Unknown)",
-            email: pData.email || s.parentEmail || "",
-            photoURL: pData.photoURL || null,
-            children: [],
-          };
-        }
-
-        const childName = `${s.firstName || ""} ${s.lastName || ""}`.trim() || "(Unnamed)";
-        const childStatus = s.status || "pending";
-        const hasPaid = payments[s.id]?.some(p => p.paymentStatus === "paid") || false;
-
-        parentMap[parentId].children.push({
-          id: s.id,
-          name: childName,
-          grade: s.grade || "-",
-          status: childStatus,
-          paid: hasPaid,
-        });
-
-        const payRef = collection(db, "registrations", s.id, "payments");
-        const paySnap = await getDocs(fsQuery(payRef, orderBy("processedAt", "desc")));
-        paymentMap[s.id] = paySnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-      }
-
-      setPayments(paymentMap);
-      setParents(Object.values(parentMap));
-    });
-
-    const unsubTeachers = onSnapshot(collection(db, "teacherApplications"), (snap) => {
-      setTeachers(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Teacher) })));
-    });
-
-    return () => {
-      unsubStudents();
-      unsubTeachers();
-    };
-  }, []);
-
-  /* ---------------- Firestore Actions ---------------- */
-  const updateStatus = async (
-    col: "students" | "teacherApplications",
-    id: string,
-    updates: Record<string, any>
-  ) => updateDoc(doc(db, col, id), updates);
-
-  const approve = async (col: "students" | "teacherApplications", item: any) => {
-    const id = item.id;
-
-    if (col === "students") {
-      await updateStatus(col, id, {
-        status: "enrolled",
-        principalReviewed: true,
-        reviewedAt: serverTimestamp(),
-      });
+    // Fetch payments for each student
+    const paymentMap: Record<string, Payment[]> = {};
+    for (const s of list) {
+      const paymentsRef = collection(db, "registrations", s.id, "payments");
+      const ps = await getDocs(fsQuery(paymentsRef, orderBy("processedAt", "desc")));
+      paymentMap[s.id] = ps.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Payment),
+      }));
     }
+    setPayments(paymentMap);
+  });
 
-    if (col === "teacherApplications") {
-      const uid = item.uid || id;
-      await updateStatus(col, id, {
-        status: "approved",
-        principalReviewed: true,
-        reviewedAt: serverTimestamp(),
-        classActivated: true,
-      });
-
-      await setDoc(doc(db, "teachers", uid), { ...item, uid, status: "approved" }, { merge: true });
-      await setDoc(doc(db, "users", uid), { uid, role: "teacher" }, { merge: true });
+  // ---------------- Teachers ----------------
+  const unsubTeachers = onSnapshot(
+    collection(db, "teacherApplications"),
+    (snap) => {
+      setTeachers(
+        snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Teacher),
+        }))
+      );
     }
+  );
 
-    closeModal();
+  // Cleanup function for both listeners
+  return () => {
+    unsubStudents();
+    unsubTeachers();
   };
+}, []);
 
-  const reject = async (col: "students" | "teacherApplications", id: string) => {
-    await updateStatus(col, id, { status: "rejected", principalReviewed: true, reviewedAt: serverTimestamp() });
-    closeModal();
-  };
 
-  const suspend = (col: "students" | "teacherApplications", id: string) =>
-    updateStatus(col, id, { status: "suspended", suspendedAt: serverTimestamp() });
+/* ---------------- Approve / Reject ---------------- */
 
-  const toggleClassActivation = async (item: any, col: "students" | "teacherApplications") => {
-    const next = !item.classActivated;
-    await updateStatus(col, item.id, { classActivated: next });
-  };
+const approveStudent = async (student: Student) => {
+  await updateDoc(doc(db, "students", student.id), {
+    status: "enrolled",
+    principalReviewed: true,
+    reviewedAt: serverTimestamp(),
+  });
+  closeModal();
+};
 
-  /* ---------------- Fetch Documents ---------------- */
-  const fetchDocuments = async (col: "registrations" | "teacherApplications", id: string, uid?: string) => {
+const reject = async (col: "students" | "teacherApplications", id: string) => {
+  await updateDoc(doc(db, col, id), {
+    status: "rejected",
+    principalReviewed: true,
+    reviewedAt: serverTimestamp(),
+  });
+  closeModal();
+};
+
+ 
+  /* ---------------- Documents ---------------- */
+  const fetchDocuments = async (
+  col: "registrations" | "teacherApplications",
+  id: string,
+  uid?: string
+) => {
+  try {
     const storage = getStorage();
-    const rootRef = col === "teacherApplications" && uid
-      ? ref(storage, `teacherApplications/${id}/${uid}/documents`)
-      : ref(storage, `${col}/${id}/documents`);
+    const path =
+      col === "teacherApplications" && uid
+        ? `teacherApplications/${id}/${uid}/documents`
+        : `${col}/${id}/documents`;
 
-    const result = await listAll(rootRef);
-    const files: { name: string; url: string }[] = [];
+    const result = await listAll(ref(storage, path));
 
-    for (const item of result.items) {
-      const url = await getDownloadURL(item);
-      files.push({ name: item.name, url });
-    }
+    const files = await Promise.all(
+      result.items.map(async (item) => ({
+        name: item.name,
+        url: await getDownloadURL(item),
+      }))
+    );
 
-    return { "Documents": files };
-  };
-
-  /* ---------------- Filters & Stats ---------------- */
-  const filteredStudents = students.filter(s => {
-    const name = `${s.firstName} ${s.lastName}`.toLowerCase();
-    const email = (s.parentEmail || "").toLowerCase();
-    const matchesSearch = name.includes(searchTerm.toLowerCase()) || email.includes(searchTerm.toLowerCase());
-    const matchesGrade = gradeFilter === "all" || s.grade === gradeFilter;
-    const matchesStatus = statusFilter === "all" || s.status === statusFilter;
-    const matchesCurriculum = curriculumFilter === "all" || s.curriculum === curriculumFilter;
-    return matchesSearch && matchesGrade && matchesStatus && matchesCurriculum;
-  });
-
-  const filteredTeachers = teachers.filter(t => {
-    const name = `${t.firstName} ${t.lastName}`.toLowerCase();
-    const email = (t.email || "").toLowerCase();
-    return name.includes(searchTerm.toLowerCase()) || email.includes(searchTerm.toLowerCase());
-  });
-
-  const capsCount = students.filter(s => s.curriculum === "CAPS").length;
-  const cambridgeCount = students.filter(s => s.curriculum === "Cambridge").length;
-
-  const subjectCount = students.reduce((acc, s) => {
-    s.subjects?.forEach(sub => {
-      acc[sub] = (acc[sub] || 0) + 1;
-    });
-    return acc;
-  }, {} as Record<string, number>);
-
-  /* ---------------- UI Helpers ---------------- */
-  const getStatusBadge = (status?: string, paid?: boolean) => {
-    if (paid) return <Badge className="bg-green-100 text-green-800">Paid</Badge>;
-    switch (status) {
-      case "enrolled": return <Badge className="bg-green-100 text-green-800">Enrolled</Badge>;
-      case "pending": return <Badge className="bg-yellow-100 text-yellow-800">Pending</Badge>;
-      case "rejected": return <Badge className="bg-red-100 text-red-800">Rejected</Badge>;
-      case "suspended": return <Badge className="bg-orange-100 text-orange-800">Suspended</Badge>;
-      default: return <Badge className="bg-gray-100 text-gray-800">Unknown</Badge>;
-    }
-  };
+    setDocuments({ Documents: files });
+  } catch (err) {
+    console.error("Document fetch failed:", err);
+    setDocuments({ Documents: [] }); // ✅ prevents crash
+  }
+};
 
   /* ---------------- Modal ---------------- */
-  const openModal = async (item: any, type: "teacher" | "student" | "parent") => {
-    setSelectedItem(item);
-    setSelectedType(type);
-    setShowModal(true);
-    setActiveTab("Details");
+ const openModal = (item: Student | Teacher, type: "student" | "teacher") => {
+  setSelectedItem(item);
+  setSelectedType(type);
+  setShowModal(true);
+  setActiveTab("Details");
+  setDocuments({}); // reset documents
+  setParentProfile(null); // reset parent profile
 
-    if (type === "teacher") {
-      const docs = await fetchDocuments("teacherApplications", item.id, item.uid);
-      setDocuments(docs);
-    } else if (type === "student") {
-      const docs = await fetchDocuments("registrations", item.id);
-      setDocuments(docs);
-    } else {
-      setDocuments({});
+  if (type === "student") {
+    fetchDocuments("registrations", item.id);
+
+    if ((item as Student).parentId) {
+      getDoc(doc(db, "parents", (item as Student).parentId!)).then(snap => {
+        if (snap.exists()) {
+          setParentProfile({ id: snap.id, ...(snap.data() as ParentProfile) });
+        }
+      });
     }
-  };
+  }
+
+  if (type === "teacher") {
+    fetchDocuments("teacherApplications", item.id, item.uid);
+  }
+};
 
   const closeModal = () => {
     setSelectedItem(null);
     setSelectedType(null);
-    setShowModal(false);
+    setParentProfile(null);
     setDocuments({});
+    setShowModal(false);
   };
 
   const handleLogout = async () => {
@@ -309,22 +297,123 @@ const PrincipalDashboard: React.FC = () => {
     navigate("/");
   };
 
+  /* ---------------- Stats ---------------- */
+const capsCount = students.filter(
+  (s) => s.curriculum === "CAPS"
+).length;
+
+const cambridgeCount = students.filter(
+  (s) => s.curriculum === "Cambridge"
+).length;
+
+/* ---------------- Subject Breakdown ---------------- */
+const subjectCount = students.reduce<Record<string, number>>((acc, s) => {
+  if (!s.subjects) return acc;
+
+  s.subjects.forEach((subject) => {
+    acc[subject] = (acc[subject] || 0) + 1;
+  });
+
+  return acc;
+}, {});
+
+/* ---------------- Filters ---------------- */
+const filteredStudents = students.filter((s) => {
+  const name = `${s.firstName ?? ""} ${s.lastName ?? ""}`.toLowerCase();
+  const email = (s.parentEmail ?? "").toLowerCase();
+
+  const matchesSearch =
+    name.includes(searchTerm.toLowerCase()) ||
+    email.includes(searchTerm.toLowerCase());
+
+  const matchesGrade =
+    gradeFilter === "all" || s.grade === gradeFilter;
+
+  const matchesStatus =
+    statusFilter === "all" || s.status === statusFilter;
+
+  const matchesCurriculum =
+    curriculumFilter === "all" ||
+    s.curriculum === curriculumFilter;
+
+  return (
+    matchesSearch &&
+    matchesGrade &&
+    matchesStatus &&
+    matchesCurriculum
+  );
+});
+
+/* ---------------- Filtered Teachers ---------------- */
+const filteredTeachers = teachers.filter((t) => {
+  const name = `${t.firstName ?? ""} ${t.lastName ?? ""}`.toLowerCase();
+  const email = (t.email ?? "").toLowerCase();
+
+  return (
+    name.includes(searchTerm.toLowerCase()) ||
+    email.includes(searchTerm.toLowerCase())
+  );
+});
+
+/* ---------------- Status Badge Helper ---------------- */
+const getStatusBadge = (
+  status?: Student["status"],
+  paid?: boolean
+) => {
+  if (paid) {
+    return (
+      <Badge className="bg-green-100 text-green-800">
+        Paid
+      </Badge>
+    );
+  }
+
+  switch (status) {
+    case "enrolled":
+      return (
+        <Badge className="bg-green-100 text-green-800">
+          Enrolled
+        </Badge>
+      );
+    case "pending":
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800">
+          Pending
+        </Badge>
+      );
+    case "rejected":
+      return (
+        <Badge className="bg-red-100 text-red-800">
+          Rejected
+        </Badge>
+      );
+    case "suspended":
+      return (
+        <Badge className="bg-orange-100 text-orange-800">
+          Suspended
+        </Badge>
+      );
+    default:
+      return (
+        <Badge className="bg-gray-100 text-gray-800">
+          Unknown
+        </Badge>
+      );
+  }
+};
+
+
+
   /* ---------------- Render ---------------- */
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-indigo-900">Welcome, {principalName}</h1>
-          <p className="text-indigo-600 flex items-center gap-2 mt-1">
-            <Clock className="w-4 h-4" />
-            {schoolName} | {time.toLocaleDateString("en-ZA")} {time.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })}
-          </p>
-        </div>
-        <Button variant="destructive" size="sm" onClick={handleLogout}>
-          Logout
-        </Button>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+      <h1 className="text-3xl font-bold mb-4">
+        Welcome, {principalName}
+      </h1>
+
+      <Button variant="destructive" onClick={handleLogout}>
+        Logout
+      </Button>
 
       {/* Search & Filters */}
       <Card className="bg-white shadow-md">
@@ -464,6 +553,8 @@ const PrincipalDashboard: React.FC = () => {
                           ))}
                         </div>
                       </div>
+
+                      {/* student reg details view */}
                       <Button size="sm" variant="ghost" onClick={() => openModal(s, "student")}>
                         <Eye className="w-4 h-4" />
                       </Button>
@@ -558,122 +649,99 @@ const PrincipalDashboard: React.FC = () => {
       </Card>
 
       {/* Review Modal */}
-      <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-4xl max-h-screen overflow-y-auto">
+
+ <Dialog open={showModal} onOpenChange={setShowModal}>
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>
-              {selectedType === "teacher" && `${selectedItem?.firstName} ${selectedItem?.lastName} - Application Review`}
-              {selectedType === "student" && `${selectedItem?.firstName} ${selectedItem?.lastName} - Student Details`}
+              {selectedType === "teacher"
+                ? "Teacher Application"
+                : "Student Details"}
             </DialogTitle>
           </DialogHeader>
 
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid grid-cols-3">
               <TabsTrigger value="Details">Details</TabsTrigger>
               <TabsTrigger value="Documents">Documents</TabsTrigger>
-              <TabsTrigger value="Payments" disabled={selectedType !== "student"}>Payments</TabsTrigger>
+              <TabsTrigger value="Payments" disabled={selectedType !== "student"}>
+                Payments
+              </TabsTrigger>
             </TabsList>
 
-            {/* Details Tab */}
-            <TabsContent value="Details" className="space-y-4">
-              {selectedType === "teacher" && selectedItem && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div><strong>Email:</strong> {selectedItem.email}</div>
-                  <div><strong>Contact:</strong> {selectedItem.contact}</div>
-                  <div><strong>Address:</strong> {selectedItem.address}</div>
-                  <div><strong>Province:</strong> {selectedItem.province}</div>
-                  <div><strong>Country:</strong> {selectedItem.country}</div>
-                  <div><strong>Postal Code:</strong> {selectedItem.postalCode}</div>
-                  <div><strong>Experience:</strong> {selectedItem.experience || "N/A"}</div>
-                  <div><strong>Previous School:</strong> {selectedItem.previousSchool || "N/A"}</div>
-
-                  <div className="md:col-span-2">
-                    <strong>Subjects:</strong>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {selectedItem.subjects?.map((sub: any, i: number) => (
-                        <Badge
-                          key={i}
-                          variant="secondary"
-                          className={sub.curriculum === "CAPS" ? "bg-green-100 text-green-800" : "bg-purple-100 text-purple-800"}
-                        >
-                          {sub.name} ({sub.curriculum})
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <strong>References:</strong>
-                    <ul className="list-disc pl-5 mt-1 space-y-1">
-                      {selectedItem.references?.map((ref: any, i: number) => (
-                        <li key={i}>{ref.name} - {ref.contact}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              )}
-            </TabsContent>
-
-            {/* Documents Tab */}
             <TabsContent value="Documents">
-              {documents["Documents"]?.length ? (
-                <div className="space-y-3">
-                  {documents["Documents"].map((file, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
-                      <span className="text-sm font-medium">{file.name}</span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => window.open(file.url, "_blank")}
-                      >
-                        <Download className="w-4 h-4 mr-1" /> Download
-                      </Button>
-                    </div>
-                  ))}
-                </div>
+                          {documents?.Documents?.length ? (
+                documents.Documents.map((file, i) => (
+                  <div key={i}>
+                    {file.name}
+                  </div>
+                ))
               ) : (
                 <p className="text-gray-500">No documents uploaded.</p>
               )}
-            </TabsContent>
 
-            {/* Payments Tab */}
-            <TabsContent value="Payments">
-              {/* Add payment logic if needed */}
             </TabsContent>
-          </Tabs>
+         
 
-          {/* Action Buttons */}
-          {selectedType === "teacher" && selectedItem?.status === "pending" && (
-            <DialogFooter className="flex gap-2">
+                  {selectedType === "teacher" &&
+          selectedItem &&
+          selectedItem.status === "pending" && (
+            <DialogFooter>
               <Button
-                className="bg-green-600 hover:bg-green-700 text-white"
-                onClick={() => approve("teacherApplications", selectedItem)}
+                onClick={() => approveTeacher(selectedItem as Teacher)}
               >
                 Approve
               </Button>
+
               <Button
                 variant="destructive"
-                onClick={() => reject("teacherApplications", selectedItem.id)}
+                onClick={() =>
+                  reject("teacherApplications", selectedItem.id)
+                }
               >
                 Reject
               </Button>
             </DialogFooter>
-          )}
+        )}
+
+
+{/* Student Approval Section */}
+        {selectedType === "student" && selectedItem?.status === "pending" && (
+  <DialogFooter>
+    <Button onClick={() => approveStudent(selectedItem as Student)}>
+      Approve
+    </Button>
+    <Button
+      variant="destructive"
+      onClick={() => reject("students", selectedItem.id)}
+    >
+      Reject
+    </Button>
+  </DialogFooter>
+)}
+
+<TabsContent value="Details">
+  {selectedItem ? (
+    <div className="space-y-2">
+      <p><strong>Name:</strong> {selectedItem.firstName} {selectedItem.lastName}</p>
+      <p><strong>Grade:</strong> {selectedItem.grade}</p>
+      <p><strong>Status:</strong> {selectedItem.status}</p>
+      {parentProfile ? (
+        <p><strong>Parent:</strong> {parentProfile.name} ({parentProfile.email})</p>
+      ) : (
+        <p>Loading parent info...</p>
+      )}
+    </div>
+  ) : (
+    <p>Loading student info...</p>
+  )}
+</TabsContent>
+ </Tabs>
+
+
+
         </DialogContent>
       </Dialog>
-
-      {/* Chat Widget */}
-      {auth.currentUser && chatRecipient && (
-        <div className="fixed bottom-6 right-6 z-50">
-          <ChatWidget
-            uid={auth.currentUser.uid}
-            role="principal"
-            initialRecipient={chatRecipient}
-            forceOpen={true}
-            onClose={() => setChatRecipient(null)}
-          />
-        </div>
-      )}
     </div>
   );
 };

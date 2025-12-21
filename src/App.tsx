@@ -46,6 +46,28 @@ import TeachingStaff from "./components/about/TeachingStaff";
 import Accreditation from "./components/about/Accreditation";
 
 const queryClient = new QueryClient();
+class DashboardErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any) {
+    console.error("Dashboard error:", error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <p className="p-4 text-red-600">Dashboard failed to load.</p>;
+    }
+    return this.props.children;
+  }
+}
+
 
 const App: React.FC = () => {
   return (
@@ -115,7 +137,9 @@ const App: React.FC = () => {
                   path="/principal-dashboard"
                   element={
                     <ProtectedRoute allowedRoles={["principal"]}>
-                      <PrincipalDashboard />
+                      <DashboardErrorBoundary>
+                        <PrincipalDashboard />
+                      </DashboardErrorBoundary>
                     </ProtectedRoute>
                   }
                 />

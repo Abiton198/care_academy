@@ -1,6 +1,6 @@
 "use client";
 
-import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/lib/firebaseConfig";
 import {
   doc,
@@ -10,99 +10,83 @@ import {
 } from "firebase/firestore";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-/* ======================================================
-   Types
-   ====================================================== */
-
 interface AppUser {
   uid: string;
   email: string | null;
   role: "parent" | "teacher" | "principal" | "admin";
 }
 
-interface AuthContextType {
-  user: AppUser | null;
-  loading: boolean;
-}
-
-/* ======================================================
-   Context
-   ====================================================== */
-
-const AuthContext = createContext<AuthContextType>({
+const AuthContext = createContext<{ user: AppUser | null; loading: boolean }>({
   user: null,
   loading: true,
 });
 
-/* ======================================================
-   Provider
-   ====================================================== */
-
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+    return onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
-        // User signed out
         setUser(null);
         setLoading(false);
         return;
       }
 
       try {
+        const email = firebaseUser.email?.toLowerCase() || null;
         const userRef = doc(db, "users", firebaseUser.uid);
         const userSnap = await getDoc(userRef);
 
-        /* ======================================================
-           CASE 1: Existing user → normal sign-in
-           ====================================================== */
+        // =============================
+        // Existing user → normal login
+        // =============================
         if (userSnap.exists()) {
           const data = userSnap.data();
-          const role = data.role;
+          setUser({
+            uid: firebaseUser.uid,
+            email,
+            role: data.role,
+          });
+          return;
+        }
 
-          if (["parent", "teacher", "principal", "admin"].includes(role)) {
-            setUser({
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              role,
-            });
-          } else {
-            console.warn("Unauthorized role detected:", role);
-            setUser(null);
+        // =============================
+        // New user → check principal allowlist
+        // =============================
+        let role: AppUser["role"] = "parent";
+
+        if (email) {
+          const principalRef = doc(db, "principal_emails", email);
+          const principalSnap = await getDoc(principalRef);
+
+          if (principalSnap.exists() && principalSnap.data().active === true) {
+            role = "principal";
           }
         }
 
-        /* ======================================================
-           CASE 2: New user → auto-provision (SIGN-UP)
-           ====================================================== */
-        else {
-          console.info("No user doc found. Creating default parent profile…");
+        // =============================
+        // Create user document
+        // =============================
+        await setDoc(userRef, {
+          uid: firebaseUser.uid,
+          email,
+          role,
+          createdAt: serverTimestamp(),
+        });
 
-          // Create base user record
-          await setDoc(userRef, {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            role: "parent",              // ✅ default role
-            createdAt: serverTimestamp(),
-          });
-
-          setUser({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            role: "parent",
-          });
-        }
+        setUser({
+          uid: firebaseUser.uid,
+          email,
+          role,
+        });
       } catch (err) {
-        console.error("Auth provider error:", err);
+        console.error("Auth error:", err);
         setUser(null);
       } finally {
         setLoading(false);
       }
     });
-
-    return () => unsubscribe();
   }, []);
 
   return (
@@ -111,9 +95,5 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     </AuthContext.Provider>
   );
 };
-
-/* ======================================================
-   Hook
-   ====================================================== */
 
 export const useAuth = () => useContext(AuthContext);

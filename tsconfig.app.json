@@ -26,5 +26,5 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "functions/src/index.ts", "functions/deleteUser.ts", "functions/createUserProfile.ts", "vite.config.ts"]
+  "include": ["src", "functions/src/index.ts", "functions/deleteUser.ts", "functions/createUserProfile.ts", "vite.config.ts", "addPrincipal.js"]
 }
