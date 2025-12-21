@@ -1,0 +1,14 @@
+# Build output / compiled files
+lib/**/*.js
+lib/**/*.js.map
+dist/
+
+# TypeScript declaration files
+typings/
+
+# Node.js dependencies
+node_modules/
+
+# Local environment configs (never commit secrets!)
+.env
+.env.local

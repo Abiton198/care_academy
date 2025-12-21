@@ -1,0 +1,20 @@
+[build]
+  command = "npm run build"
+  functions = "functions"
+  publish = "dist"
+
+[functions]
+  node_bundler = "esbuild"
+  included_files = ["!functions/.eslintrc*", "!functions/*.log"]
+
+[build.environment]
+  NODE_VERSION = "22"
+  SECRETS_SCAN_ENABLED = "false"
+
+[[plugins]]
+  package = "@netlify/plugin-functions-install-core"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
