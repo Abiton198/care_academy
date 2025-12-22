@@ -1,5 +1,11 @@
 "use client";
 
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/lib/firebaseConfig";
 import {
@@ -8,85 +14,123 @@ import {
   setDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import React, { createContext, useContext, useEffect, useState } from "react";
 
-interface AppUser {
+/* ============================================================
+   Types
+   ============================================================ */
+export type UserRole = "parent" | "teacher" | "principal" | "admin";
+
+export interface AppUser {
   uid: string;
   email: string | null;
-  role: "parent" | "teacher" | "principal" | "admin";
+  role: UserRole;
 }
 
-const AuthContext = createContext<{ user: AppUser | null; loading: boolean }>({
+/* ============================================================
+   Context
+   ============================================================ */
+const AuthContext = createContext<{
+  user: AppUser | null;
+  loading: boolean;
+}>({
   user: null,
   loading: true,
 });
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+/* ============================================================
+   Provider
+   ============================================================ */
+export const AuthProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    return onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
         setUser(null);
         setLoading(false);
         return;
       }
 
+      const uid = firebaseUser.uid;
+      const email = firebaseUser.email?.toLowerCase() || null;
+
       try {
-        const email = firebaseUser.email?.toLowerCase() || null;
-        const userRef = doc(db, "users", firebaseUser.uid);
+        /* ====================================================
+           1. Check existing user document
+           ==================================================== */
+        const userRef = doc(db, "users", uid);
         const userSnap = await getDoc(userRef);
 
-        // =============================
-        // Existing user → normal login
-        // =============================
         if (userSnap.exists()) {
           const data = userSnap.data();
+
           setUser({
-            uid: firebaseUser.uid,
+            uid,
             email,
             role: data.role,
           });
+
+          setLoading(false);
           return;
         }
 
-        // =============================
-        // New user → check principal allowlist
-        // =============================
-        let role: AppUser["role"] = "parent";
+        /* ====================================================
+           2. New user → determine role
+           ==================================================== */
+        let role: UserRole = "parent";
 
         if (email) {
-          const principalRef = doc(db, "principal_emails", email);
-          const principalSnap = await getDoc(principalRef);
+          const principalAllowRef = doc(db, "principal_emails", email);
+          const principalAllowSnap = await getDoc(principalAllowRef);
 
-          if (principalSnap.exists() && principalSnap.data().active === true) {
+          if (
+            principalAllowSnap.exists() &&
+            principalAllowSnap.data().active === true
+          ) {
             role = "principal";
+
+            // 🔐 REQUIRED FOR SECURITY RULES
+            await setDoc(
+              doc(db, "principals", uid),
+              {
+                uid,
+                email,
+                createdAt: serverTimestamp(),
+              },
+              { merge: true }
+            );
           }
         }
 
-        // =============================
-        // Create user document
-        // =============================
+        /* ====================================================
+           3. Create user document
+           ==================================================== */
         await setDoc(userRef, {
-          uid: firebaseUser.uid,
+          uid,
           email,
           role,
           createdAt: serverTimestamp(),
         });
 
         setUser({
-          uid: firebaseUser.uid,
+          uid,
           email,
           role,
         });
-      } catch (err) {
-        console.error("Auth error:", err);
+      } catch (error) {
+        console.error("AuthProvider error:", error);
         setUser(null);
       } finally {
         setLoading(false);
       }
     });
+
+    return () => unsub();
   }, []);
 
   return (
@@ -96,4 +140,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+/* ============================================================
+   Hook
+   ============================================================ */
 export const useAuth = () => useContext(AuthContext);

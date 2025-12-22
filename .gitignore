@@ -1,12 +1,26 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Environment variables
 .env
-dist
-coverage
+
+# Build outputs
+dist/
+coverage/
+
+# OS / Editor files
 .DS_Store
-.vscode
-.idea
+.vscode/
+.idea/
+
+# Logs
 npm-debug.log
 yarn-error.log
 *.log
-*.tsbuildinfo   
+
+# TypeScript
+*.tsbuildinfo
+
+# 🔐 Firebase / Service Account 
 serviceAccountKey.json
+*.key.json

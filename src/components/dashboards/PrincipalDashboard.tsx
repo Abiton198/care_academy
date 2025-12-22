@@ -157,15 +157,8 @@ const PrincipalDashboard: React.FC = () => {
 
   /* ---------------- Firestore listeners ---------------- */
 useEffect(() => {
-  // ---------------- Students ----------------
-  let studentsQuery: any = collection(db, "students");
-
-  if (auth.currentUser) {
-    studentsQuery = fsQuery(
-      collection(db, "students"),
-      where("status", "==", "pending")
-    );
-  }
+  // Listen to ALL students (not just pending)
+  const studentsQuery = collection(db, "students");
 
   const unsubStudents = onSnapshot(studentsQuery, async (snap) => {
     const list: Student[] = snap.docs.map((d) => ({
@@ -174,9 +167,11 @@ useEffect(() => {
     }));
     setStudents(list);
 
-    // Fetch payments for each student
+    // Fetch payments — note: your current code uses /registrations/{id}/payments
+    // If payments are actually under /students/{id}/payments, change accordingly
     const paymentMap: Record<string, Payment[]> = {};
     for (const s of list) {
+      // Change this path if payments are in /students subcollection instead
       const paymentsRef = collection(db, "registrations", s.id, "payments");
       const ps = await getDocs(fsQuery(paymentsRef, orderBy("processedAt", "desc")));
       paymentMap[s.id] = ps.docs.map((d) => ({
@@ -187,7 +182,7 @@ useEffect(() => {
     setPayments(paymentMap);
   });
 
-  // ---------------- Teachers ----------------
+  // Teachers unchanged
   const unsubTeachers = onSnapshot(
     collection(db, "teacherApplications"),
     (snap) => {
@@ -200,7 +195,6 @@ useEffect(() => {
     }
   );
 
-  // Cleanup function for both listeners
   return () => {
     unsubStudents();
     unsubTeachers();
@@ -214,6 +208,14 @@ const approveStudent = async (student: Student) => {
   await updateDoc(doc(db, "students", student.id), {
     status: "enrolled",
     principalReviewed: true,
+    reviewedAt: serverTimestamp(),
+  });
+  closeModal();
+};
+
+const approveTeacher = async (teacher: Teacher) => {
+  await updateDoc(doc(db, "teacherApplications", teacher.id), {
+    status: "approved",
     reviewedAt: serverTimestamp(),
   });
   closeModal();
@@ -428,17 +430,23 @@ const getStatusBadge = (
                 className="pl-10"
               />
             </div>
-            <Select value={gradeFilter} onValueChange={setGradeFilter}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Grade" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Grades</SelectItem>
-                {["Form 3","Form 4", "Form 5","Form 6","Grade 10", "Grade 11", "Grade 12"].map(g => (
-                  <SelectItem key={g} value={g}>{g}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+
+           <Select value={gradeFilter} onValueChange={setGradeFilter}>
+  <SelectTrigger className="w-40">
+    <SelectValue placeholder="Grade" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="all">All Grades</SelectItem>
+    {[
+      "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5",
+      "Grade 6", "Grade 7", "Grade 8", "Grade 9",
+      "Grade 10", "Grade 11", "Grade 12",
+    ].map(g => (
+      <SelectItem key={g} value={g}>{g}</SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Status" />
@@ -451,6 +459,8 @@ const getStatusBadge = (
                 <SelectItem value="suspended">Suspended</SelectItem>
               </SelectContent>
             </Select>
+
+
             <Select value={curriculumFilter} onValueChange={(v) => setCurriculumFilter(v as any)}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Curriculum" />
@@ -465,45 +475,59 @@ const getStatusBadge = (
         </CardContent>
       </Card>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-r from-green-500 to-emerald-600 text-white">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm opacity-90">Total Students</p>
-              <p className="text-2xl font-bold">{students.length}</p>
-            </div>
-            <Users className="w-8 h-8 opacity-70" />
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm opacity-90">CAPS Students</p>
-              <p className="text-2xl font-bold">{capsCount}</p>
-            </div>
-            <CheckCircle className="w-8 h-8 opacity-70" />
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-r from-purple-500 to-pink-600 text-white">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm opacity-90">Cambridge Students</p>
-              <p className="text-2xl font-bold">{cambridgeCount}</p>
-            </div>
-            <AlertCircle className="w-8 h-8 opacity-70" />
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-r from-yellow-500 to-amber-600 text-white">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm opacity-90">Active Teachers</p>
-              <p className="text-2xl font-bold">{teachers.filter(t => t.status === "approved").length}</p>
-            </div>
-            <DollarSign className="w-8 h-8 opacity-70" />
-          </CardContent>
-        </Card>
+     {/* Stats */}
+<div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+  {/* Pending Approvals - Highlighted */}
+  <Card className="bg-gradient-to-r from-orange-500 to-red-600 text-white">
+    <CardContent className="p-4 flex items-center justify-between">
+      <div>
+        <p className="text-sm opacity-90">Pending Approvals</p>
+        <p className="text-2xl font-bold">{students.filter(s => s.status === "pending").length}</p>
       </div>
+      <AlertCircle className="w-8 h-8 opacity-70" />
+    </CardContent>
+  </Card>
+
+  <Card className="bg-gradient-to-r from-green-500 to-emerald-600 text-white">
+    <CardContent className="p-4 flex items-center justify-between">
+      <div>
+        <p className="text-sm opacity-90">Total Students</p>
+        <p className="text-2xl font-bold">{students.length}</p>
+      </div>
+      <Users className="w-8 h-8 opacity-70" />
+    </CardContent>
+  </Card>
+
+  <Card className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
+    <CardContent className="p-4 flex items-center justify-between">
+      <div>
+        <p className="text-sm opacity-90">CAPS Students</p>
+        <p className="text-2xl font-bold">{capsCount}</p>
+      </div>
+      <CheckCircle className="w-8 h-8 opacity-70" />
+    </CardContent>
+  </Card>
+
+  <Card className="bg-gradient-to-r from-purple-500 to-pink-600 text-white">
+    <CardContent className="p-4 flex items-center justify-between">
+      <div>
+        <p className="text-sm opacity-90">Cambridge Students</p>
+        <p className="text-2xl font-bold">{cambridgeCount}</p>
+      </div>
+      <AlertCircle className="w-8 h-8 opacity-70" />
+    </CardContent>
+  </Card>
+
+  <Card className="bg-gradient-to-r from-yellow-500 to-amber-600 text-white">
+    <CardContent className="p-4 flex items-center justify-between">
+      <div>
+        <p className="text-sm opacity-90">Active Teachers</p>
+        <p className="text-2xl font-bold">{teachers.filter(t => t.status === "approved").length}</p>
+      </div>
+      <DollarSign className="w-8 h-8 opacity-70" />
+    </CardContent>
+  </Card>
+</div>
 
       {/* Subject Breakdown */}
       <Card className="bg-white shadow-md">
@@ -525,46 +549,62 @@ const getStatusBadge = (
       </Card>
 
       {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Students */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              Students
-              <Badge variant="secondary">{filteredStudents.length}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3 max-h-96 overflow-y-auto">
-              {filteredStudents.map(s => {
-                const paid = payments[s.id]?.some(p => p.paymentStatus === "paid") || false;
-                return (
-                  <div key={s.id} className="p-3 border rounded-lg bg-gray-50 hover:bg-gray-100 transition">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-medium">{s.firstName} {s.lastName}</p>
-                        <p className="text-sm text-gray-600">
-                          Grade {s.grade} • {s.curriculum || "N/A"}
-                        </p>
-                        <div className="flex gap-2 mt-1">
-                          {getStatusBadge(s.status, paid)}
-                          {s.subjects && s.subjects.map(sub => (
-                            <Badge key={sub} variant="outline" className="text-xs">{sub}</Badge>
-                          ))}
+     <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                All Students
+                <Badge variant="secondary">{filteredStudents.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {filteredStudents.length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">No students match the current filters.</p>
+                ) : (
+                  filteredStudents.map(s => {
+                    const paid = payments[s.id]?.some(p => p.paymentStatus === "paid") || false;
+                    const isPending = s.status === "pending";
+
+                    return (
+                      <div
+                        key={s.id}
+                        className={`p-3 border rounded-lg transition relative ${
+                          isPending 
+                            ? 'bg-yellow-50 border-yellow-300 hover:bg-yellow-100' 
+                            : 'bg-gray-50 hover:bg-gray-100'
+                        }`}
+                      >
+                        {isPending && (
+                          <Badge className="absolute top-2 right-2 bg-orange-500 text-white">
+                            Needs Approval
+                          </Badge>
+                        )}
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-medium">{s.firstName} {s.lastName}</p>
+                            <p className="text-sm text-gray-600">
+                              Grade {s.grade} • {s.curriculum || "N/A"}
+                            </p>
+                            <div className="flex gap-2 mt-1">
+                              {getStatusBadge(s.status, paid)}
+                              {s.subjects && s.subjects.map(sub => (
+                                <Badge key={sub} variant="outline" className="text-xs">{sub}</Badge>
+                              ))}
+                            </div>
+                          </div>
+
+                          <Button size="sm" variant="ghost" onClick={() => openModal(s, "student")}>
+                            <Eye className="w-4 h-4" />
+                          </Button>
                         </div>
                       </div>
+                    );
+                  })
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-                      {/* student reg details view */}
-                      <Button size="sm" variant="ghost" onClick={() => openModal(s, "student")}>
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
         {/* Teachers */}
         <Card>
           <CardHeader>
@@ -628,9 +668,9 @@ const getStatusBadge = (
             </div>
           </CardContent>
         </Card>
-      </div>
 
-      {/* Collapsible Timetable */}
+        {/* Collapsible Timetable */}
+
       <Card className="bg-white shadow-md">
         <CardHeader
           className="cursor-pointer flex items-center justify-between"
@@ -651,97 +691,123 @@ const getStatusBadge = (
       {/* Review Modal */}
 
  <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>
-              {selectedType === "teacher"
-                ? "Teacher Application"
-                : "Student Details"}
-            </DialogTitle>
-          </DialogHeader>
+  <DialogContent className="max-w-4xl">
+    <DialogHeader>
+      <DialogTitle>
+        {selectedType === "teacher" ? "Teacher Application" : "Student Registration Details"}
+      </DialogTitle>
+    </DialogHeader>
 
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-            <TabsList className="grid grid-cols-3">
-              <TabsTrigger value="Details">Details</TabsTrigger>
-              <TabsTrigger value="Documents">Documents</TabsTrigger>
-              <TabsTrigger value="Payments" disabled={selectedType !== "student"}>
-                Payments
-              </TabsTrigger>
-            </TabsList>
+    <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+      <TabsList className="grid grid-cols-3">
+        <TabsTrigger value="Details">Details</TabsTrigger>
+        <TabsTrigger value="Documents">Documents</TabsTrigger>
+        <TabsTrigger value="Payments" disabled={selectedType !== "student"}>
+          Payments
+        </TabsTrigger>
+      </TabsList>
 
-            <TabsContent value="Documents">
-                          {documents?.Documents?.length ? (
-                documents.Documents.map((file, i) => (
-                  <div key={i}>
-                    {file.name}
-                  </div>
-                ))
-              ) : (
-                <p className="text-gray-500">No documents uploaded.</p>
+      {/* DETAILS TAB */}
+      <TabsContent value="Details" className="mt-4">
+        {selectedItem ? (
+          <div className="space-y-4">
+            <div>
+              <h4 className="font-semibold mb-2">Student Information</h4>
+              <p><strong>Name:</strong> {selectedItem.firstName} {selectedItem.lastName}</p>
+              <p><strong>Grade:</strong> {selectedItem.grade}</p>
+              <p><strong>Curriculum:</strong> {selectedItem.curriculum || "N/A"}</p>
+              <p><strong>Status:</strong> {selectedItem.status}</p>
+              {selectedItem.subjects && selectedItem.subjects.length > 0 && (
+                <p><strong>Subjects:</strong> {selectedItem.subjects.join(", ")}</p>
               )}
+            </div>
 
-            </TabsContent>
-         
-
-                  {selectedType === "teacher" &&
-          selectedItem &&
-          selectedItem.status === "pending" && (
-            <DialogFooter>
-              <Button
-                onClick={() => approveTeacher(selectedItem as Teacher)}
-              >
-                Approve
-              </Button>
-
-              <Button
-                variant="destructive"
-                onClick={() =>
-                  reject("teacherApplications", selectedItem.id)
-                }
-              >
-                Reject
-              </Button>
-            </DialogFooter>
+            <div>
+              <h4 className="font-semibold mb-2">Parent Information</h4>
+              {parentProfile ? (
+                <>
+                  <p><strong>Name:</strong> {parentProfile.name || "Not provided"}</p>
+                  <p><strong>Email:</strong> {parentProfile.email || "Not provided"}</p>
+                  <p><strong>Phone:</strong> {parentProfile.phone || "Not provided"}</p>
+                  <p><strong>Address:</strong> {parentProfile.address || "Not provided"}</p>
+                  <p><strong>Occupation:</strong> {parentProfile.occupation || "Not provided"}</p>
+                </>
+              ) : (
+                <p className="text-gray-500">No parent profile found or loading...</p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p>Loading...</p>
         )}
+      </TabsContent>
 
+      {/* DOCUMENTS TAB */}
+      <TabsContent value="Documents" className="mt-4">
+        {documents.Documents && documents.Documents.length > 0 ? (
+          <div className="space-y-2">
+            {documents.Documents.map((file, i) => (
+              <div key={i} className="flex items-center justify-between p-3 border rounded bg-gray-50">
+                <span>{file.name}</span>
+                <Button size="sm" variant="outline" asChild>
+                  <a href={file.url} target="_blank" rel="noopener noreferrer">
+                    <Download className="w-4 h-4 mr-1" /> Download
+                  </a>
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-500">No documents uploaded.</p>
+        )}
+      </TabsContent>
 
-{/* Student Approval Section */}
-        {selectedType === "student" && selectedItem?.status === "pending" && (
-  <DialogFooter>
-    <Button onClick={() => approveStudent(selectedItem as Student)}>
-      Approve
-    </Button>
-    <Button
-      variant="destructive"
-      onClick={() => reject("students", selectedItem.id)}
-    >
-      Reject
-    </Button>
-  </DialogFooter>
-)}
+      {/* PAYMENTS TAB */}
+      <TabsContent value="Payments" className="mt-4">
+        {selectedType === "student" && payments[(selectedItem as Student)?.id]?.length > 0 ? (
+          <div className="space-y-2">
+            {payments[(selectedItem as Student).id].map((p) => (
+              <div key={p.id} className="p-3 border rounded bg-gray-50">
+                <p><strong>Amount:</strong> {p.amount}</p>
+                <p><strong>Status:</strong> 
+                  <Badge className={p.paymentStatus === "paid" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>
+                    {p.paymentStatus}
+                  </Badge>
+                </p>
+                {p.processedAt && <p><strong>Date:</strong> {new Date(p.processedAt.toDate()).toLocaleDateString()}</p>}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-500">No payments recorded.</p>
+        )}
+      </TabsContent>
+    </Tabs>
 
-<TabsContent value="Details">
-  {selectedItem ? (
-    <div className="space-y-2">
-      <p><strong>Name:</strong> {selectedItem.firstName} {selectedItem.lastName}</p>
-      <p><strong>Grade:</strong> {selectedItem.grade}</p>
-      <p><strong>Status:</strong> {selectedItem.status}</p>
-      {parentProfile ? (
-        <p><strong>Parent:</strong> {parentProfile.name} ({parentProfile.email})</p>
-      ) : (
-        <p>Loading parent info...</p>
-      )}
-    </div>
-  ) : (
-    <p>Loading student info...</p>
-  )}
-</TabsContent>
- </Tabs>
-
-
-
-        </DialogContent>
-      </Dialog>
+    {/* Approval/Reject Buttons - Place them below Tabs */}
+    {selectedItem?.status === "pending" && (
+      <DialogFooter className="mt-6">
+        <Button
+          variant="destructive"
+          onClick={() => reject(selectedType === "teacher" ? "teacherApplications" : "students", selectedItem.id)}
+        >
+          Reject
+        </Button>
+        <Button
+          onClick={() => {
+            if (selectedType === "student") {
+              approveStudent(selectedItem as Student);
+            } else {
+              approveTeacher(selectedItem as Teacher);
+            }
+          }}
+        >
+          Approve
+        </Button>
+      </DialogFooter>
+    )}
+  </DialogContent>
+</Dialog>
     </div>
   );
 };
