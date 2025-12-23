@@ -7,6 +7,7 @@ import { getFirestore } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 
+
 // ✅ Firebase config from Vite environment variables
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -43,4 +44,4 @@ const storage = getStorage(app);
 
 // ✅ Export
 export const googleProvider = new GoogleAuthProvider();
-export { app, analytics, db, auth, storage };
+export { app, analytics, db, auth, storage, getAuth };

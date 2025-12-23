@@ -111,7 +111,12 @@ const PrincipalDashboard: React.FC = () => {
   
   const { logout } = useAuth();
   const navigate = useNavigate();
-  auth.currentUser?.getIdToken(true); // Forces refresh
+
+
+// Force token refresh to load custom claims (principal role)
+useEffect(() => {
+  auth.currentUser?.getIdToken(true);
+}, []);
   
   /* ---------------- Firestore Listeners ---------------- */
   useEffect(() => {
@@ -367,6 +372,8 @@ const PrincipalDashboard: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          
+          
           {/* Students List */}
           <Card>
             <CardHeader>
