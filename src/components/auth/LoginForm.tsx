@@ -55,13 +55,12 @@ export default function LoginForm() {
   ===================================================== */
   const checkEmail = async (email: string) => {
     if (!email) return;
-
     const methods = await fetchSignInMethodsForEmail(auth, email);
     setAccountExists(methods.length > 0);
   };
 
   /* =====================================================
-     📧 EMAIL AUTH (STRICT MODE)
+     📧 EMAIL AUTH
   ===================================================== */
   const handleEmail = async () => {
     if (!role) return alert("Select role");
@@ -73,23 +72,25 @@ export default function LoginForm() {
 
       await postAuth(userCred.user);
     } catch (err) {
+      console.error(err);
       alert("Authentication failed");
     }
   };
 
   /* =====================================================
-     📱 PHONE AUTH (STRICT MODE)
+     📱 PHONE AUTH
   ===================================================== */
   const sendOtp = async () => {
     if (!phone) return alert("Enter phone");
 
     const appVerifier = (window as any).recaptchaVerifier;
     const result = await signInWithPhoneNumber(auth, phone, appVerifier);
-
     setConfirmation(result);
   };
 
   const verifyOtp = async () => {
+    if (!confirmation) return;
+
     const credential = PhoneAuthProvider.credential(
       confirmation.verificationId,
       otp
@@ -100,7 +101,7 @@ export default function LoginForm() {
   };
 
   /* =====================================================
-     🌐 GOOGLE AUTH (AUTO MODE)
+     🌐 GOOGLE AUTH
   ===================================================== */
   const handleGoogle = async () => {
     if (!role) return alert("Select role");
@@ -111,23 +112,29 @@ export default function LoginForm() {
   };
 
   /* =====================================================
-     🔁 POST AUTH ROUTING + ROLE SETUP
+     🔁 POST AUTH LOGIC (IMPORTANT PART)
   ===================================================== */
   const postAuth = async (user: any) => {
     const userRef = doc(db, "users", user.uid);
     const snap = await getDoc(userRef);
 
+    // CREATE USER DOC ON FIRST SIGNUP ONLY
     if (!snap.exists()) {
-      // New user → Sign Up
       await setDoc(userRef, {
         uid: user.uid,
         role,
         email: user.email ?? null,
         phone: user.phoneNumber ?? null,
+
+        // 🔑 Teacher application control
+        applicationStatus:
+          role === "teacher" ? "not_submitted" : null,
+
         createdAt: serverTimestamp(),
       });
     }
 
+    // ALWAYS route by selected role
     navigate(`/${role}-dashboard`);
   };
 

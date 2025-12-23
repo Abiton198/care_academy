@@ -1,19 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { db, auth } from "@/lib/firebaseConfig";
+import { db, auth, getAuth } from "@/lib/firebaseConfig";
 import {
   collection,
   onSnapshot,
   doc,
-  setDoc,
   updateDoc,
   serverTimestamp,
-  query as fsQuery,
-  orderBy,
-  getDocs,
   getDoc,
-  where
 } from "firebase/firestore";
 import { getStorage, ref, listAll, getDownloadURL } from "firebase/storage";
 
@@ -45,21 +40,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useNavigate } from "react-router-dom";
 import TimetableManager from "@/lib/TimetableManager";
-import ChatWidget from "../chat/ChatWidget";
-import { LogOut } from "lucide-react";
-
-import {
-  Search,
-  Clock,
-  Users,
-  DollarSign,
-  CheckCircle,
-  AlertCircle,
-  ChevronDown,
-  ChevronUp,
-  Download,
-  Eye,
-} from "lucide-react";
+import { LogOut, Search, Eye, Download, AlertCircle, Users, CheckCircle, DollarSign, ChevronDown, ChevronUp } from "lucide-react";
 
 /* ---------------- Types ---------------- */
 interface ParentProfile {
@@ -80,218 +61,199 @@ interface Student {
   parentId?: string;
   subjects?: string[];
   status?: "pending" | "enrolled" | "rejected" | "suspended";
-  principalReviewed?: boolean;
-  createdAt?: any;
-  reviewedAt?: any;
-  classActivated?: boolean;
   curriculum?: "CAPS" | "Cambridge";
 }
 
 interface Teacher {
   id: string;
   uid?: string;
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  contact?: string;
+  personalInfo?: {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    yearsOfExperience?: number;
+    gradePhase?: "Primary" | "Secondary";
+  };
   subjects?: { name: string; curriculum: "CAPS" | "Cambridge" }[];
   status?: "pending" | "approved" | "rejected";
-  classActivated?: boolean;
-  address?: string;
-  province?: string;
-  country?: string;
-  postalCode?: string;
-  experience?: string;
-  previousSchool?: string;
-  references?: { name: string; contact: string }[];
+  documents?: Record<string, string[]>;
 }
 
-interface Payment {
-  id: string;
-  amount?: string;
-  paymentStatus?: "paid" | "pending" | "failed";
-  processedAt?: any;
+interface DocumentFile {
+  name: string;
+  url: string;
+  type: string; // e.g., "idDoc", "cv", etc.
 }
 
 /* ---------------- Component ---------------- */
 const PrincipalDashboard: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [payments, setPayments] = useState<Record<string, Payment[]>>({});
-  const [documents, setDocuments] = useState<
-    Record<string, { name: string; url: string }[]>
-  >({});
+  const [documents, setDocuments] = useState<DocumentFile[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [gradeFilter, setGradeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [curriculumFilter, setCurriculumFilter] =
-    useState<"all" | "CAPS" | "Cambridge">("all");
+  const [curriculumFilter, setCurriculumFilter] = useState<"all" | "CAPS" | "Cambridge">("all");
 
-  const [time, setTime] = useState(new Date());
   const [timetableExpanded, setTimetableExpanded] = useState(false);
 
-  const [selectedItem, setSelectedItem] = useState<Student | Teacher | null>(
-    null
-  );
-  const [selectedType, setSelectedType] =
-    useState<"student" | "teacher" | null>(null);
+  const [selectedItem, setSelectedItem] = useState<Student | Teacher | null>(null);
+  const [selectedType, setSelectedType] = useState<"student" | "teacher" | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [activeTab, setActiveTab] =
-    useState<"Details" | "Documents" | "Payments">("Details");
+  const [activeTab, setActiveTab] = useState<"Details" | "Documents">("Details");
 
-  const [parentProfile, setParentProfile] =
-    useState<ParentProfile | null>(null);
-
+  const [parentProfile, setParentProfile] = useState<ParentProfile | null>(null);
+  
+  const auth = getAuth();
   const principalName = auth.currentUser?.displayName || "Principal";
-  const schoolName = "Care Academy";
-
+  
   const { logout } = useAuth();
   const navigate = useNavigate();
-
-  /* ---------------- Clock ---------------- */
+  auth.currentUser?.getIdToken(true); // Forces refresh
+  
+  /* ---------------- Firestore Listeners ---------------- */
   useEffect(() => {
-    const t = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  /* ---------------- Firestore listeners ---------------- */
-useEffect(() => {
-  // Listen to ALL students (not just pending)
-  const studentsQuery = collection(db, "students");
-
-  const unsubStudents = onSnapshot(studentsQuery, async (snap) => {
-    const list: Student[] = snap.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Student),
-    }));
-    setStudents(list);
-
-    // Fetch payments — note: your current code uses /registrations/{id}/payments
-    // If payments are actually under /students/{id}/payments, change accordingly
-    const paymentMap: Record<string, Payment[]> = {};
-    for (const s of list) {
-      // Change this path if payments are in /students subcollection instead
-      const paymentsRef = collection(db, "registrations", s.id, "payments");
-      const ps = await getDocs(fsQuery(paymentsRef, orderBy("processedAt", "desc")));
-      paymentMap[s.id] = ps.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Payment),
-      }));
-    }
-    setPayments(paymentMap);
-  });
-
-  // Teachers unchanged
-  const unsubTeachers = onSnapshot(
-    collection(db, "teacherApplications"),
-    (snap) => {
+    // Students
+    const unsubStudents = onSnapshot(collection(db, "students"), (snap) => {
+      setStudents(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Student) })));
+    });
+    
+    // Teacher Applications
+    const unsubTeachers = onSnapshot(collection(db, "teacherApplications"), (snap) => {
       setTeachers(
         snap.docs.map((d) => ({
           id: d.id,
           ...(d.data() as Teacher),
         }))
       );
-    }
-  );
+    });
+    
+    return () => {
+      unsubStudents();
+      unsubTeachers();
+    };
+  }, []);
 
-  return () => {
-    unsubStudents();
-    unsubTeachers();
+  /* ---------------- Approve / Reject ---------------- */
+  const approveStudent = async (studentId: string) => {
+    await updateDoc(doc(db, "students", studentId), {
+      status: "enrolled",
+      reviewedAt: serverTimestamp(),
+    });
+    closeModal();
   };
-}, []);
 
+  const approveTeacher = async (teacherId: string) => {
+    await updateDoc(doc(db, "teacherApplications", teacherId), {
+      status: "approved",
+      reviewedAt: serverTimestamp(),
+    });
+    closeModal();
+  };
 
-/* ---------------- Approve / Reject ---------------- */
+  const reject = async (collectionName: "students" | "teacherApplications", id: string) => {
+    await updateDoc(doc(db, collectionName, id), {
+      status: "rejected",
+      reviewedAt: serverTimestamp(),
+    });
+    closeModal();
+  };
 
-const approveStudent = async (student: Student) => {
-  await updateDoc(doc(db, "students", student.id), {
-    status: "enrolled",
-    principalReviewed: true,
-    reviewedAt: serverTimestamp(),
-  });
-  closeModal();
-};
+  /* ---------------- Fetch Documents (Fixed for Teachers) ---------------- */
+  const fetchDocuments = async (type: "student" | "teacher", item: Student | Teacher) => {
+  setLoadingDocs(true);
+  setDocuments([]);
 
-const approveTeacher = async (teacher: Teacher) => {
-  await updateDoc(doc(db, "teacherApplications", teacher.id), {
-    status: "approved",
-    reviewedAt: serverTimestamp(),
-  });
-  closeModal();
-};
-
-const reject = async (col: "students" | "teacherApplications", id: string) => {
-  await updateDoc(doc(db, col, id), {
-    status: "rejected",
-    principalReviewed: true,
-    reviewedAt: serverTimestamp(),
-  });
-  closeModal();
-};
-
- 
-  /* ---------------- Documents ---------------- */
-  const fetchDocuments = async (
-  col: "registrations" | "teacherApplications",
-  id: string,
-  uid?: string
-) => {
   try {
     const storage = getStorage();
-    const path =
-      col === "teacherApplications" && uid
-        ? `teacherApplications/${id}/${uid}/documents`
-        : `${col}/${id}/documents`;
 
-    const result = await listAll(ref(storage, path));
-
-    const files = await Promise.all(
-      result.items.map(async (item) => ({
-        name: item.name,
-        url: await getDownloadURL(item),
-      }))
-    );
-
-    setDocuments({ Documents: files });
-  } catch (err) {
-    console.error("Document fetch failed:", err);
-    setDocuments({ Documents: [] }); // ✅ prevents crash
-  }
-};
-
-  /* ---------------- Modal ---------------- */
- const openModal = (item: Student | Teacher, type: "student" | "teacher") => {
-  setSelectedItem(item);
-  setSelectedType(type);
-  setShowModal(true);
-  setActiveTab("Details");
-  setDocuments({}); // reset documents
-  setParentProfile(null); // reset parent profile
-
-  if (type === "student") {
-    fetchDocuments("registrations", item.id);
-
-    if ((item as Student).parentId) {
-      getDoc(doc(db, "parents", (item as Student).parentId!)).then(snap => {
-        if (snap.exists()) {
-          setParentProfile({ id: snap.id, ...(snap.data() as ParentProfile) });
-        }
-      });
+    if (type === "student") {
+      // Existing student path
+      const pathRef = ref(storage, `registrations/${item.id}/documents`);
+      const result = await listAll(pathRef);
+      const files = await Promise.all(
+        result.items.map(async (itemRef) => ({
+          name: itemRef.name,
+          url: await getDownloadURL(itemRef),
+          type: "general",
+        }))
+      );
+      setDocuments(files);
     }
-  }
 
-  if (type === "teacher") {
-    fetchDocuments("teacherApplications", item.id, item.uid);
+    if (type === "teacher" && "uid" in item && item.uid) {
+      const teacher = item as Teacher;
+      const basePath = `teacherApplications/${teacher.uid}/${teacher.id}`; // uid first, then appId
+
+      // Known document types from your form
+      const docTypes = ["idDoc", "qualification", "cv", "ceta", "proofOfAddress", "policeClearance"];
+
+      const allFiles: DocumentFile[] = [];
+
+      for (const docType of docTypes) {
+        try {
+          const folderRef = ref(storage, `${basePath}/${docType}`);
+          const listResult = await listAll(folderRef);
+
+          if (listResult.items.length === 0) continue;
+
+          for (const fileRef of listResult.items) {
+            allFiles.push({
+              name: fileRef.name,
+              url: await getDownloadURL(fileRef),
+              type: docType,
+            });
+          }
+        } catch (err: any) {
+          // Folder empty or doesn't exist (optional doc) — safe to ignore
+          if (err.code !== 'storage/object-not-found') {
+            console.warn(`No files in ${docType} or access issue:`, err);
+          }
+        }
+      }
+
+      setDocuments(allFiles);
+    }
+  } catch (err) {
+    console.error("Failed to load documents:", err);
+    setDocuments([]);
+  } finally {
+    setLoadingDocs(false);
   }
 };
+
+  /* ---------------- Open Modal ---------------- */
+  const openModal = async (item: Student | Teacher, type: "student" | "teacher") => {
+    setSelectedItem(item);
+    setSelectedType(type);
+    setShowModal(true);
+    setActiveTab("Details");
+    setDocuments([]);
+    setParentProfile(null);
+
+    if (type === "student") {
+      await fetchDocuments("student", item);
+      if ((item as Student).parentId) {
+        const parentSnap = await getDoc(doc(db, "parents", (item as Student).parentId!));
+        if (parentSnap.exists()) {
+          setParentProfile({ id: parentSnap.id, ...(parentSnap.data() as ParentProfile) });
+        }
+      }
+    }
+
+    if (type === "teacher") {
+      await fetchDocuments("teacher", item);
+    }
+  };
 
   const closeModal = () => {
+    setShowModal(false);
     setSelectedItem(null);
     setSelectedType(null);
+    setDocuments([]);
     setParentProfile(null);
-    setDocuments({});
-    setShowModal(false);
   };
 
   const handleLogout = async () => {
@@ -299,515 +261,306 @@ const reject = async (col: "students" | "teacherApplications", id: string) => {
     navigate("/");
   };
 
-  /* ---------------- Stats ---------------- */
-const capsCount = students.filter(
-  (s) => s.curriculum === "CAPS"
-).length;
-
-const cambridgeCount = students.filter(
-  (s) => s.curriculum === "Cambridge"
-).length;
-
-/* ---------------- Subject Breakdown ---------------- */
-const subjectCount = students.reduce<Record<string, number>>((acc, s) => {
-  if (!s.subjects) return acc;
-
-  s.subjects.forEach((subject) => {
-    acc[subject] = (acc[subject] || 0) + 1;
+  /* ---------------- Filters ---------------- */
+  const filteredStudents = students.filter((s) => {
+    const name = `${s.firstName ?? ""} ${s.lastName ?? ""}`.toLowerCase();
+    const matchesSearch = name.includes(searchTerm.toLowerCase());
+    const matchesGrade = gradeFilter === "all" || s.grade === gradeFilter;
+    const matchesStatus = statusFilter === "all" || s.status === statusFilter;
+    const matchesCurriculum = curriculumFilter === "all" || s.curriculum === curriculumFilter;
+    return matchesSearch && matchesGrade && matchesStatus && matchesCurriculum;
   });
 
-  return acc;
-}, {});
-
-/* ---------------- Filters ---------------- */
-const filteredStudents = students.filter((s) => {
-  const name = `${s.firstName ?? ""} ${s.lastName ?? ""}`.toLowerCase();
-  const email = (s.parentEmail ?? "").toLowerCase();
-
-  const matchesSearch =
-    name.includes(searchTerm.toLowerCase()) ||
-    email.includes(searchTerm.toLowerCase());
-
-  const matchesGrade =
-    gradeFilter === "all" || s.grade === gradeFilter;
-
-  const matchesStatus =
-    statusFilter === "all" || s.status === statusFilter;
-
-  const matchesCurriculum =
-    curriculumFilter === "all" ||
-    s.curriculum === curriculumFilter;
-
-  return (
-    matchesSearch &&
-    matchesGrade &&
-    matchesStatus &&
-    matchesCurriculum
-  );
-});
-
-/* ---------------- Filtered Teachers ---------------- */
-const filteredTeachers = teachers.filter((t) => {
-  const name = `${t.firstName ?? ""} ${t.lastName ?? ""}`.toLowerCase();
-  const email = (t.email ?? "").toLowerCase();
-
-  return (
-    name.includes(searchTerm.toLowerCase()) ||
-    email.includes(searchTerm.toLowerCase())
-  );
-});
-
-/* ---------------- Status Badge Helper ---------------- */
-const getStatusBadge = (
-  status?: Student["status"],
-  paid?: boolean
-) => {
-  if (paid) {
-    return (
-      <Badge className="bg-green-100 text-green-800">
-        Paid
-      </Badge>
-    );
-  }
-
-  switch (status) {
-    case "enrolled":
-      return (
-        <Badge className="bg-green-100 text-green-800">
-          Enrolled
-        </Badge>
-      );
-    case "pending":
-      return (
-        <Badge className="bg-yellow-100 text-yellow-800">
-          Pending
-        </Badge>
-      );
-    case "rejected":
-      return (
-        <Badge className="bg-red-100 text-red-800">
-          Rejected
-        </Badge>
-      );
-    case "suspended":
-      return (
-        <Badge className="bg-orange-100 text-orange-800">
-          Suspended
-        </Badge>
-      );
-    default:
-      return (
-        <Badge className="bg-gray-100 text-gray-800">
-          Unknown
-        </Badge>
-      );
-  }
-};
-
-
+  const filteredTeachers = teachers.filter((t) => {
+    const name = `${t.personalInfo?.firstName ?? ""} ${t.personalInfo?.lastName ?? ""}`.toLowerCase();
+    const email = (t.personalInfo?.email ?? "").toLowerCase();
+    return name.includes(searchTerm.toLowerCase()) || email.includes(searchTerm.toLowerCase());
+  });
 
   /* ---------------- Render ---------------- */
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
-      <h1 className="text-3xl font-bold mb-4">
-        Welcome, {principalName}
-      </h1>
+      <div className="max-w-7xl mx-auto">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-4xl font-bold text-indigo-800">Principal Dashboard</h1>
+          <Button variant="destructive" onClick={handleLogout}>
+            <LogOut className="w-4 h-4 mr-2" /> Logout
+          </Button>
+        </div>
 
-      <Button variant="destructive" onClick={handleLogout}>
-        Logout
-      </Button>
-
-      {/* Search & Filters */}
-      <Card className="bg-white shadow-md">
-        <CardContent className="p-4">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-              <Input
-                placeholder="Search students, teachers, parents..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-
-           <Select value={gradeFilter} onValueChange={setGradeFilter}>
-  <SelectTrigger className="w-40">
-    <SelectValue placeholder="Grade" />
-  </SelectTrigger>
-  <SelectContent>
-    <SelectItem value="all">All Grades</SelectItem>
-    {[
-      "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5",
-      "Grade 6", "Grade 7", "Grade 8", "Grade 9",
-      "Grade 10", "Grade 11", "Grade 12",
-    ].map(g => (
-      <SelectItem key={g} value={g}>{g}</SelectItem>
-    ))}
-  </SelectContent>
-</Select>
-
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="enrolled">Enrolled</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-                <SelectItem value="suspended">Suspended</SelectItem>
-              </SelectContent>
-            </Select>
-
-
-            <Select value={curriculumFilter} onValueChange={(v) => setCurriculumFilter(v as any)}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Curriculum" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Curricula</SelectItem>
-                <SelectItem value="CAPS">CAPS</SelectItem>
-                <SelectItem value="Cambridge">Cambridge</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-     {/* Stats */}
-<div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-  {/* Pending Approvals - Highlighted */}
-  <Card className="bg-gradient-to-r from-orange-500 to-red-600 text-white">
-    <CardContent className="p-4 flex items-center justify-between">
-      <div>
-        <p className="text-sm opacity-90">Pending Approvals</p>
-        <p className="text-2xl font-bold">{students.filter(s => s.status === "pending").length}</p>
-      </div>
-      <AlertCircle className="w-8 h-8 opacity-70" />
-    </CardContent>
-  </Card>
-
-  <Card className="bg-gradient-to-r from-green-500 to-emerald-600 text-white">
-    <CardContent className="p-4 flex items-center justify-between">
-      <div>
-        <p className="text-sm opacity-90">Total Students</p>
-        <p className="text-2xl font-bold">{students.length}</p>
-      </div>
-      <Users className="w-8 h-8 opacity-70" />
-    </CardContent>
-  </Card>
-
-  <Card className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
-    <CardContent className="p-4 flex items-center justify-between">
-      <div>
-        <p className="text-sm opacity-90">CAPS Students</p>
-        <p className="text-2xl font-bold">{capsCount}</p>
-      </div>
-      <CheckCircle className="w-8 h-8 opacity-70" />
-    </CardContent>
-  </Card>
-
-  <Card className="bg-gradient-to-r from-purple-500 to-pink-600 text-white">
-    <CardContent className="p-4 flex items-center justify-between">
-      <div>
-        <p className="text-sm opacity-90">Cambridge Students</p>
-        <p className="text-2xl font-bold">{cambridgeCount}</p>
-      </div>
-      <AlertCircle className="w-8 h-8 opacity-70" />
-    </CardContent>
-  </Card>
-
-  <Card className="bg-gradient-to-r from-yellow-500 to-amber-600 text-white">
-    <CardContent className="p-4 flex items-center justify-between">
-      <div>
-        <p className="text-sm opacity-90">Active Teachers</p>
-        <p className="text-2xl font-bold">{teachers.filter(t => t.status === "approved").length}</p>
-      </div>
-      <DollarSign className="w-8 h-8 opacity-70" />
-    </CardContent>
-  </Card>
-</div>
-
-      {/* Subject Breakdown */}
-      <Card className="bg-white shadow-md">
-        <CardHeader>
-          <CardTitle>Subjects Enrolled (Count)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(subjectCount).map(([subject, count]) => (
-              <Badge key={subject} variant="secondary" className="text-sm px-3 py-1">
-                {subject} ({count})
-              </Badge>
-            ))}
-            {Object.keys(subjectCount).length === 0 && (
-              <p className="text-gray-500 text-sm">No subjects enrolled yet.</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Main Grid */}
-     <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                All Students
-                <Badge variant="secondary">{filteredStudents.length}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {filteredStudents.length === 0 ? (
-                  <p className="text-center text-gray-500 py-8">No students match the current filters.</p>
-                ) : (
-                  filteredStudents.map(s => {
-                    const paid = payments[s.id]?.some(p => p.paymentStatus === "paid") || false;
-                    const isPending = s.status === "pending";
-
-                    return (
-                      <div
-                        key={s.id}
-                        className={`p-3 border rounded-lg transition relative ${
-                          isPending 
-                            ? 'bg-yellow-50 border-yellow-300 hover:bg-yellow-100' 
-                            : 'bg-gray-50 hover:bg-gray-100'
-                        }`}
-                      >
-                        {isPending && (
-                          <Badge className="absolute top-2 right-2 bg-orange-500 text-white">
-                            Needs Approval
-                          </Badge>
-                        )}
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <p className="font-medium">{s.firstName} {s.lastName}</p>
-                            <p className="text-sm text-gray-600">
-                              Grade {s.grade} • {s.curriculum || "N/A"}
-                            </p>
-                            <div className="flex gap-2 mt-1">
-                              {getStatusBadge(s.status, paid)}
-                              {s.subjects && s.subjects.map(sub => (
-                                <Badge key={sub} variant="outline" className="text-xs">{sub}</Badge>
-                              ))}
-                            </div>
-                          </div>
-
-                          <Button size="sm" variant="ghost" onClick={() => openModal(s, "student")}>
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
+        {/* Search & Filters */}
+        <Card className="mb-6">
+          <CardContent className="p-6">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                <Input
+                  placeholder="Search students or teachers..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
               </div>
-            </CardContent>
-          </Card>
-
-        {/* Teachers */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Teachers</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3 max-h-96 overflow-y-auto">
-              {filteredTeachers.map(t => (
-                <div key={t.id} className="p-3 border rounded-lg bg-blue-50 hover:bg-blue-100 transition">
-                  {/* Name + Subject Count */}
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium">{t.firstName} {t.lastName}</p>
-                    <span className="text-xs text-gray-500">
-                      {t.subjects?.length || 0} subject{t.subjects?.length !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-
-                  {/* Email & Contact */}
-                  <p className="text-sm text-gray-600">{t.email}</p>
-                  {t.contact && (
-                    <p className="text-sm text-gray-500">{t.contact}</p>
-                  )}
-
-                  {/* Subjects Badges */}
-                  <div className="flex gap-1 mt-2 flex-wrap">
-                    {t.subjects?.map((sub, i) => (
-                      <Badge
-                        key={i}
-                        variant="secondary"
-                        className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                          sub.curriculum === "CAPS"
-                            ? "bg-green-100 text-green-800 border border-green-300"
-                            : "bg-purple-100 text-purple-800 border border-purple-300"
-                        }`}
-                      >
-                        {sub.name}
-                        <span className="ml-1 opacity-75">({sub.curriculum})</span>
-                      </Badge>
-                    ))}
-                    {(!t.subjects || t.subjects.length === 0) && (
-                      <span className="text-xs text-gray-400">No subjects assigned</span>
-                    )}
-                  </div>
-
-                  {/* Action Button */}
-                  <div className="flex gap-2 mt-3">
-                    {t.status === "pending" && (
-                      <Button size="sm" variant="outline" onClick={() => openModal(t, "teacher")}>
-                        <Eye className="w-4 h-4 mr-1" /> Review
-                      </Button>
-                    )}
-                    {t.status === "approved" && (
-                      <Badge className="bg-green-100 text-green-800 text-xs">Approved</Badge>
-                    )}
-                    {t.status === "rejected" && (
-                      <Badge className="bg-red-100 text-red-800 text-xs">Rejected</Badge>
-                    )}
-                  </div>
-                </div>
-              ))}
+              <Select value={gradeFilter} onValueChange={setGradeFilter}>
+                <SelectTrigger className="w-48"><SelectValue placeholder="Grade" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Grades</SelectItem>
+                  {["Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6","Grade 7","Grade 8","Grade 9","Grade 10","Grade 11","Grade 12"].map(g => (
+                    <SelectItem key={g} value={g}>{g}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-48"><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="enrolled">Enrolled</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>
 
-        {/* Collapsible Timetable */}
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <Card className="bg-orange-500 text-white">
+            <CardContent className="p-6 flex items-center justify-between">
+              <div>
+                <p className="text-lg">Pending Reviews</p>
+                <p className="text-3xl font-bold">
+                  {students.filter(s => s.status === "pending").length + teachers.filter(t => t.status === "pending").length}
+                </p>
+              </div>
+              <AlertCircle className="w-10 h-10 opacity-80" />
+            </CardContent>
+          </Card>
+          <Card className="bg-green-600 text-white">
+            <CardContent className="p-6 flex items-center justify-between">
+              <div>
+                <p className="text-lg">Total Students</p>
+                <p className="text-3xl font-bold">{students.length}</p>
+              </div>
+              <Users className="w-10 h-10 opacity-80" />
+            </CardContent>
+          </Card>
+          <Card className="bg-blue-600 text-white">
+            <CardContent className="p-6 flex items-center justify-between">
+              <div>
+                <p className="text-lg">Active Teachers</p>
+                <p className="text-3xl font-bold">{teachers.filter(t => t.status === "approved").length}</p>
+              </div>
+              <CheckCircle className="w-10 h-10 opacity-80" />
+            </CardContent>
+          </Card>
+          <Card className="bg-purple-600 text-white">
+            <CardContent className="p-6 flex items-center justify-between">
+              <div>
+                <p className="text-lg">Total Applications</p>
+                <p className="text-3xl font-bold">{teachers.length}</p>
+              </div>
+              <DollarSign className="w-10 h-10 opacity-80" />
+            </CardContent>
+          </Card>
+        </div>
 
-      <Card className="bg-white shadow-md">
-        <CardHeader
-          className="cursor-pointer flex items-center justify-between"
-          onClick={() => setTimetableExpanded(!timetableExpanded)}
-        >
-          <CardTitle className="flex items-center gap-2">
-            Weekly Timetable
-            {timetableExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-          </CardTitle>
-        </CardHeader>
-        {timetableExpanded && (
-          <CardContent>
-            <TimetableManager />
-          </CardContent>
-        )}
-      </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Students List */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Student Registrations</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {filteredStudents.map((s) => (
+                  <div key={s.id} className={`p-4 rounded-lg border ${s.status === "pending" ? "bg-yellow-50 border-yellow-400" : "bg-white"}`}>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-semibold text-lg">{s.firstName} {s.lastName}</p>
+                        <p className="text-sm text-gray-600">Grade {s.grade} • {s.curriculum}</p>
+                        <div className="mt-2 flex gap-2 flex-wrap">
+                          <Badge variant={s.status === "enrolled" ? "default" : s.status === "pending" ? "secondary" : "destructive"}>
+                            {s.status}
+                          </Badge>
+                        </div>
+                      </div>
+                      <Button size="sm" variant="ghost" onClick={() => openModal(s, "student")}>
+                        <Eye className="w-5 h-5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Teachers List */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Teacher Applications</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {filteredTeachers.map((t) => (
+                  <div key={t.id} className={`p-4 rounded-lg border ${t.status === "pending" ? "bg-yellow-50 border-yellow-400" : "bg-white"}`}>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-semibold text-lg">
+                          {t.personalInfo?.firstName} {t.personalInfo?.lastName}
+                        </p>
+                        <p className="text-sm text-gray-600">{t.personalInfo?.email}</p>
+                        <p className="text-sm text-gray-500">
+                          {t.subjects?.length || 0} subject{t.subjects?.length !== 1 ? "s" : ""} • {t.personalInfo?.yearsOfExperience} years exp.
+                        </p>
+                        <div className="mt-2 flex gap-2 flex-wrap">
+                          <Badge variant={t.status === "approved" ? "default" : t.status === "pending" ? "secondary" : "destructive"}>
+                            {t.status || "pending"}
+                          </Badge>
+                        </div>
+                      </div>
+                      <Button size="sm" variant="ghost" onClick={() => openModal(t, "teacher")}>
+                        <Eye className="w-5 h-5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Timetable */}
+        <Card className="mt-8">
+          <CardHeader className="cursor-pointer" onClick={() => setTimetableExpanded(!timetableExpanded)}>
+            <CardTitle className="flex justify-between items-center">
+              School Timetable
+              {timetableExpanded ? <ChevronUp /> : <ChevronDown />}
+            </CardTitle>
+          </CardHeader>
+          {timetableExpanded && (
+            <CardContent>
+              <TimetableManager />
+            </CardContent>
+          )}
+        </Card>
+      </div>
 
       {/* Review Modal */}
+      <Dialog open={showModal} onOpenChange={setShowModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedType === "teacher" ? "Teacher Application Review" : "Student Registration Review"}
+            </DialogTitle>
+          </DialogHeader>
 
- <Dialog open={showModal} onOpenChange={setShowModal}>
-  <DialogContent className="max-w-4xl">
-    <DialogHeader>
-      <DialogTitle>
-        {selectedType === "teacher" ? "Teacher Application" : "Student Registration Details"}
-      </DialogTitle>
-    </DialogHeader>
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+            <TabsList className="grid grid-cols-2">
+              <TabsTrigger value="Details">Details</TabsTrigger>
+              <TabsTrigger value="Documents">Documents ({documents.length})</TabsTrigger>
+            </TabsList>
 
-    <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-      <TabsList className="grid grid-cols-3">
-        <TabsTrigger value="Details">Details</TabsTrigger>
-        <TabsTrigger value="Documents">Documents</TabsTrigger>
-        <TabsTrigger value="Payments" disabled={selectedType !== "student"}>
-          Payments
-        </TabsTrigger>
-      </TabsList>
-
-      {/* DETAILS TAB */}
-      <TabsContent value="Details" className="mt-4">
-        {selectedItem ? (
-          <div className="space-y-4">
-            <div>
-              <h4 className="font-semibold mb-2">Student Information</h4>
-              <p><strong>Name:</strong> {selectedItem.firstName} {selectedItem.lastName}</p>
-              <p><strong>Grade:</strong> {selectedItem.grade}</p>
-              <p><strong>Curriculum:</strong> {selectedItem.curriculum || "N/A"}</p>
-              <p><strong>Status:</strong> {selectedItem.status}</p>
-              {selectedItem.subjects && selectedItem.subjects.length > 0 && (
-                <p><strong>Subjects:</strong> {selectedItem.subjects.join(", ")}</p>
-              )}
-            </div>
-
-            <div>
-              <h4 className="font-semibold mb-2">Parent Information</h4>
-              {parentProfile ? (
+            <TabsContent value="Details" className="mt-6 space-y-6">
+              {selectedType === "student" && selectedItem && (
                 <>
-                  <p><strong>Name:</strong> {parentProfile.name || "Not provided"}</p>
-                  <p><strong>Email:</strong> {parentProfile.email || "Not provided"}</p>
-                  <p><strong>Phone:</strong> {parentProfile.phone || "Not provided"}</p>
-                  <p><strong>Address:</strong> {parentProfile.address || "Not provided"}</p>
-                  <p><strong>Occupation:</strong> {parentProfile.occupation || "Not provided"}</p>
+                  <div>
+                    <h3 className="font-bold text-lg mb-3">Student Information</h3>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <p><strong>Name:</strong> {(selectedItem as Student).firstName} {(selectedItem as Student).lastName}</p>
+                      <p><strong>Grade:</strong> {(selectedItem as Student).grade}</p>
+                      <p><strong>Curriculum:</strong> {(selectedItem as Student).curriculum || "N/A"}</p>
+                      <p><strong>Status:</strong> <Badge>{(selectedItem as Student).status}</Badge></p>
+                    </div>
+                  </div>
+
+                  {parentProfile && (
+                    <div>
+                      <h3 className="font-bold text-lg mb-3">Parent/Guardian</h3>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <p><strong>Name:</strong> {parentProfile.name}</p>
+                        <p><strong>Email:</strong> {parentProfile.email}</p>
+                        <p><strong>Phone:</strong> {parentProfile.phone}</p>
+                        <p><strong>Occupation:</strong> {parentProfile.occupation}</p>
+                      </div>
+                    </div>
+                  )}
                 </>
-              ) : (
-                <p className="text-gray-500">No parent profile found or loading...</p>
               )}
-            </div>
-          </div>
-        ) : (
-          <p>Loading...</p>
-        )}
-      </TabsContent>
 
-      {/* DOCUMENTS TAB */}
-      <TabsContent value="Documents" className="mt-4">
-        {documents.Documents && documents.Documents.length > 0 ? (
-          <div className="space-y-2">
-            {documents.Documents.map((file, i) => (
-              <div key={i} className="flex items-center justify-between p-3 border rounded bg-gray-50">
-                <span>{file.name}</span>
-                <Button size="sm" variant="outline" asChild>
-                  <a href={file.url} target="_blank" rel="noopener noreferrer">
-                    <Download className="w-4 h-4 mr-1" /> Download
-                  </a>
-                </Button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-gray-500">No documents uploaded.</p>
-        )}
-      </TabsContent>
+              {selectedType === "teacher" && selectedItem && (
+                <div>
+                  <h3 className="font-bold text-lg mb-4">Teacher Application Details</h3>
+                  <div className="space-y-4 text-sm">
+                    <div className="grid grid-cols-2 gap-4">
+                      <p><strong>Name:</strong> {selectedItem.personalInfo?.firstName} {selectedItem.personalInfo?.lastName}</p>
+                      <p><strong>Email:</strong> {selectedItem.personalInfo?.email}</p>
+                      <p><strong>Experience:</strong> {selectedItem.personalInfo?.yearsOfExperience} years</p>
+                      <p><strong>Phase:</strong> {selectedItem.personalInfo?.gradePhase}</p>
+                      <p><strong>Status:</strong> <Badge>{selectedItem.status || "pending"}</Badge></p>
+                    </div>
 
-      {/* PAYMENTS TAB */}
-      <TabsContent value="Payments" className="mt-4">
-        {selectedType === "student" && payments[(selectedItem as Student)?.id]?.length > 0 ? (
-          <div className="space-y-2">
-            {payments[(selectedItem as Student).id].map((p) => (
-              <div key={p.id} className="p-3 border rounded bg-gray-50">
-                <p><strong>Amount:</strong> {p.amount}</p>
-                <p><strong>Status:</strong> 
-                  <Badge className={p.paymentStatus === "paid" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>
-                    {p.paymentStatus}
-                  </Badge>
-                </p>
-                {p.processedAt && <p><strong>Date:</strong> {new Date(p.processedAt.toDate()).toLocaleDateString()}</p>}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-gray-500">No payments recorded.</p>
-        )}
-      </TabsContent>
-    </Tabs>
+                    <div>
+                      <strong>Subjects Taught:</strong>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {selectedItem.subjects?.map((sub, i) => (
+                          <Badge key={i} variant="secondary">
+                            {sub.name} ({sub.curriculum})
+                          </Badge>
+                        )) || <span className="text-gray-500">None listed</span>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </TabsContent>
 
-    {/* Approval/Reject Buttons - Place them below Tabs */}
-    {selectedItem?.status === "pending" && (
-      <DialogFooter className="mt-6">
-        <Button
-          variant="destructive"
-          onClick={() => reject(selectedType === "teacher" ? "teacherApplications" : "students", selectedItem.id)}
-        >
-          Reject
-        </Button>
-        <Button
-          onClick={() => {
-            if (selectedType === "student") {
-              approveStudent(selectedItem as Student);
-            } else {
-              approveTeacher(selectedItem as Teacher);
-            }
-          }}
-        >
-          Approve
-        </Button>
-      </DialogFooter>
-    )}
-  </DialogContent>
-</Dialog>
+            <TabsContent value="Documents" className="mt-6">
+              {loadingDocs ? (
+                <p className="text-center text-gray-500">Loading documents...</p>
+              ) : documents.length > 0 ? (
+                <div className="space-y-3">
+                  {documents.map((file, i) => (
+                    <div key={i} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
+                      <div>
+                        <p className="font-medium">{file.name}</p>
+                        <p className="text-xs text-gray-500 capitalize">{file.type.replace(/([A-Z])/g, ' $1').trim()}</p>
+                      </div>
+                      <Button size="sm" variant="outline" asChild>
+                        <a href={file.url} target="_blank" rel="noopener noreferrer">
+                          <Download className="w-4 h-4 mr-2" /> Open
+                        </a>
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-gray-500 py-8">No documents uploaded yet.</p>
+              )}
+            </TabsContent>
+          </Tabs>
+
+          {(selectedItem?.status === "pending") && (
+            <DialogFooter className="mt-8">
+              <Button
+                variant="destructive"
+                onClick={() => reject(selectedType === "teacher" ? "teacherApplications" : "students", selectedItem.id)}
+              >
+                Reject
+              </Button>
+              <Button
+                onClick={() => {
+                  if (selectedType === "student") approveStudent(selectedItem.id);
+                  else approveTeacher(selectedItem.id);
+                }}
+              >
+                Approve
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
