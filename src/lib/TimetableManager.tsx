@@ -1,5 +1,8 @@
 "use client";
 
+/* =========================================================
+   IMPORTS
+========================================================= */
 import React, { useEffect, useState } from "react";
 import { db } from "@/lib/firebaseConfig";
 import {
@@ -9,523 +12,354 @@ import {
   doc,
   onSnapshot,
   updateDoc,
+  query,
+  where,
 } from "firebase/firestore";
+
+/* UI Components */
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { ChevronDown, ChevronUp, Lock, Unlock } from "lucide-react";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
 
-const ALL_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const DEFAULT_TIME_SLOTS = ["03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM", "07:00 PM", "08:00 PM"];
+/* =========================================================
+   CONSTANTS
+========================================================= */
+const DAYS = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+];
 
+const TIMES = [
+  "08:00",
+  "09:00",
+  "10:00",
+  "11:00",
+  "12:00",
+  "13:00",
+  "14:00",
+  "15:00",
+  "16:00",
+];
+
+const CAPS_GRADES = Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`);
+const CAMBRIDGE_GRADES = Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`);
+
+/* =========================================================
+   TYPES
+========================================================= */
 interface Teacher {
   id: string;
-  firstName?: string;
-  lastName?: string;
-  subjects?: string[];
+  name: string;
+  subjects: string[];
 }
 
 interface TimetableEntry {
   id: string;
-  grade: string;
-  subject: string;
   day: string;
   time: string;
-  duration: number;
-  teacherId: string;
+  grade: string;
+  subject: string;
   teacherName: string;
+  teacherUid: string;
   curriculum: "CAPS" | "Cambridge";
 }
 
+/* =========================================================
+   COMPONENT
+========================================================= */
 const TimetableManager: React.FC = () => {
-  const [entries, setEntries] = useState<TimetableEntry[]>([]);
+  /* ---------------- STATE ---------------- */
   const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set(ALL_DAYS));
-  const [lockedDays, setLockedDays] = useState<Set<string>>(new Set());
-  const [editingCell, setEditingCell] = useState<string | null>(null);
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [entries, setEntries] = useState<TimetableEntry[]>([]);
 
-  // Custom weekend times
-  const [satSlots, setSatSlots] = useState<string[]>(DEFAULT_TIME_SLOTS);
-  const [sunSlots, setSunSlots] = useState<string[]>([]);
-  const [newSatTime, setNewSatTime] = useState("");
-  const [newSunTime, setNewSunTime] = useState("");
+  // Create slot form
+  const [day, setDay] = useState("");
+  const [time, setTime] = useState("");
+  const [curriculum, setCurriculum] = useState<"CAPS" | "Cambridge">("CAPS");
+  const [grade, setGrade] = useState("");
+  const [subject, setSubject] = useState("");
+  const [teacher, setTeacher] = useState<Teacher | null>(null);
 
-  // Editing state
-  const [editCurriculum, setEditCurriculum] = useState<"CAPS" | "Cambridge">("CAPS");
-  const [editGrade, setEditGrade] = useState("");
-  const [editSubject, setEditSubject] = useState("");
-  const [editTeacherId, setEditTeacherId] = useState("");
+  // Editing slot (principal)
+  const [editing, setEditing] = useState<TimetableEntry | null>(null);
 
-  /* ============================================================
-     Fetch Teachers
-     ============================================================ */
- useEffect(() => {
-  const unsub = onSnapshot(collection(db, "teachers"), (snap) => {
-    const fetched = snap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        firstName: data.firstName || "",
-        lastName: data.lastName || "",
-        // ←it's always an array
-        subjects: Array.isArray(data.subjects)
-          ? data.subjects
-          : data.subject // fallback if old field name
-          ? [data.subject]
-          : [],
-      };
+  /* =========================================================
+     FETCH APPROVED TEACHERS
+     (Used to assign teachers to timetable slots)
+========================================================= */
+  useEffect(() => {
+    const q = query(
+      collection(db, "teacherApplications"),
+      where("status", "==", "approved")
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      const fetched: Teacher[] = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: data.uid, // teacher UID (important for security rules)
+          name: `${data.personalInfo?.firstName || ""} ${data.personalInfo?.lastName || ""}`.trim(),
+          subjects: data.subjects?.map((s: any) => s.name) || [],
+        };
+      });
+
+      setTeachers(fetched);
+      setSubjects([...new Set(fetched.flatMap((t) => t.subjects))]);
     });
-    setTeachers(fetched);
-  });
-  return () => unsub();
-}, []);
 
-  /* ============================================================
-     Fetch Timetable
-     ============================================================ */
+    return () => unsub();
+  }, []);
+
+  /* =========================================================
+     FETCH TIMETABLE (REALTIME)
+========================================================= */
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "timetable"), (snap) => {
       setEntries(
         snap.docs.map((d) => ({
           id: d.id,
-          ...(d.data() as TimetableEntry),
+          ...(d.data() as Omit<TimetableEntry, "id">),
         }))
       );
     });
+
     return () => unsub();
   }, []);
 
-  /* ============================================================
-     Reset & Initialize Edit State
-     ============================================================ */
-  useEffect(() => {
-    if (!editingCell) {
-      setEditCurriculum("CAPS");
-      setEditGrade("");
-      setEditSubject("");
-      setEditTeacherId("");
+  /* =========================================================
+     CREATE TIMETABLE SLOT
+========================================================= */
+  const createSlot = async () => {
+    if (!day || !time || !grade || !subject || !teacher) {
+      alert("Please fill in all fields");
       return;
     }
 
-    const [day, time] = editingCell.split("-");
-    const entry = entries.find((e) => e.day === day && e.time === time);
-
-    if (entry) {
-      setEditCurriculum(entry.curriculum);
-      setEditGrade(entry.grade);
-      setEditSubject(entry.subject);
-      setEditTeacherId(entry.teacherId);
-    } else {
-      setEditCurriculum("CAPS");
-      setEditGrade("");
-      setEditSubject("");
-      setEditTeacherId("");
-    }
-  }, [editingCell, entries]);
-
-  /* ============================================================
-     Grade Options
-     ============================================================ */
-  const getGradeOptions = () => {
-    if (editCurriculum === "CAPS") {
-      return Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`);
-    }
-    return ["Form 1", "Form 2", "Form 3", "Form 4", "Form 5", "Form 6"];
-  };
-
-  /* ============================================================
-     Available Teachers for Subject
-     ============================================================ */
-  const getTeachersForSubject = () => {
-    if (!editSubject) return teachers;
-    return teachers.filter((t) => t.subjects?.includes(editSubject));
-  };
-
-  /* ============================================================
-     Time Slots
-     ============================================================ */
-  const getTimeSlots = (day: string): string[] => {
-    if (day === "Saturday") return satSlots;
-    if (day === "Sunday") return sunSlots;
-    return DEFAULT_TIME_SLOTS;
-  };
-
-  const addTime = (day: "Saturday" | "Sunday", time: string, setTime: React.Dispatch<React.SetStateAction<string>>) => {
-    if (time && !getTimeSlots(day).includes(time)) {
-      const sorted = [...getTimeSlots(day), time].sort();
-      if (day === "Saturday") setSatSlots(sorted);
-      else setSunSlots(sorted);
-      setTime("");
-    }
-  };
-
-  const removeTime = (day: "Saturday" | "Sunday", time: string) => {
-    if (day === "Saturday") setSatSlots((prev) => prev.filter((t) => t !== time));
-    else setSunSlots((prev) => prev.filter((t) => t !== time));
-  };
-
-  /* ============================================================
-     Toggle Day & Lock
-     ============================================================ */
-  const toggleDay = (day: string) => {
-    setExpandedDays((prev) => {
-      const next = new Set(prev);
-      next.has(day) ? next.delete(day) : next.add(day);
-      return next;
-    });
-  };
-
-  const toggleLock = (day: string) => {
-    setLockedDays((prev) => {
-      const next = new Set(prev);
-      next.has(day) ? next.delete(day) : next.add(day);
-      return next;
-    });
-  };
-
-  /* ============================================================
-     Get Entry
-     ============================================================ */
-  const getEntry = (day: string, time: string) => {
-    return entries.find((e) => e.day === day && e.time === time);
-  };
-
-  /* ============================================================
-     Save/Update Entry
-     ============================================================ */
-  const saveEntry = async (day: string, time: string) => {
-    if (!editGrade || !editSubject || !editTeacherId) {
-      alert("Please select grade, subject, and teacher");
-      return;
-    }
-
-    const teacher = teachers.find((t) => t.id === editTeacherId);
-    if (!teacher) return;
-
-    const existing = getEntry(day, time);
-
-    // Conflict check: same teacher or same grade at same time
-    const conflict = entries.some(
-      (e) =>
-        e.id !== existing?.id &&
-        e.day === day &&
-        e.time === time &&
-        (e.teacherId === editTeacherId || e.grade === editGrade)
-    );
-
-    if (conflict) {
-      alert("Conflict: This teacher or grade is already booked at this time");
-      return;
-    }
-
-    const newData = {
-      grade: editGrade,
-      subject: editSubject,
+    await addDoc(collection(db, "timetable"), {
       day,
       time,
-      duration: 60,
-      teacherId: editTeacherId,
-      teacherName: `${teacher.firstName || ""} ${teacher.lastName || ""}`.trim(),
-      curriculum: editCurriculum,
-    };
+      grade,
+      subject,
+      curriculum,
+      teacherName: teacher.name,
+      teacherUid: teacher.id,
+      createdAt: new Date(),
+    });
 
-    try {
-      if (existing) {
-        await updateDoc(doc(db, "timetable", existing.id), newData);
-      } else {
-        await addDoc(collection(db, "timetable"), newData);
-      }
-      setEditingCell(null);
-    } catch (err) {
-      console.error("Save failed:", err);
-      alert("Failed to save timetable entry");
-    }
+    // Reset form
+    setDay("");
+    setTime("");
+    setGrade("");
+    setSubject("");
+    setTeacher(null);
   };
 
-  /* ============================================================
-     Remove Entry
-     ============================================================ */
-  const removeEntry = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, "timetable", id));
-      setEditingCell(null);
-    } catch (err) {
-      console.error(err);
-    }
+  /* =========================================================
+     UPDATE SLOT (PRINCIPAL ONLY)
+========================================================= */
+  const updateSlot = async () => {
+    if (!editing) return;
+
+    await updateDoc(doc(db, "timetable", editing.id), {
+      day: editing.day,
+      time: editing.time,
+      grade: editing.grade,
+      subject: editing.subject,
+      curriculum: editing.curriculum,
+      teacherName: editing.teacherName,
+    });
+
+    setEditing(null);
   };
 
-  /* ============================================================
-     Render Cell
-     ============================================================ */
-  const renderCell = (day: string, time: string) => {
-    const entry = getEntry(day, time);
-    const isLocked = lockedDays.has(day);
-    const cellKey = `${day}-${time}`;
-    const isEditing = editingCell === cellKey;
+  /* =========================================================
+     DELETE SLOT (PRINCIPAL ONLY)
+========================================================= */
+  const deleteSlot = async (id: string) => {
+    await deleteDoc(doc(db, "timetable", id));
+    setEditing(null);
+  };
 
-    return (
-      <Popover open={isEditing} onOpenChange={(open) => !open && setEditingCell(null)}>
-        <PopoverTrigger asChild>
-          <div
-            className={`
-              min-h-24 p-3 border-2 rounded-lg cursor-pointer transition-all text-sm relative shadow-sm
-              ${isLocked ? "opacity-60 cursor-not-allowed" : "hover:shadow-md"}
-              ${entry
-                ? entry.curriculum === "CAPS"
-                  ? "bg-gradient-to-br from-green-100 to-emerald-100 border-green-500"
-                  : "bg-gradient-to-br from-blue-100 to-indigo-100 border-blue-500"
-                : "bg-gray-50 border-dashed border-gray-300 hover:bg-gray-100"
-              }
-            `}
-            onClick={(e) => {
-              if (isLocked) return;
-              e.stopPropagation();
-              setEditingCell(cellKey);
-            }}
+  /* =========================================================
+     RENDER
+========================================================= */
+  return (
+    <Card className="mt-6 shadow-lg">
+      <CardHeader>
+        <CardTitle>School Timetable (CAPS & Cambridge)</CardTitle>
+      </CardHeader>
+
+      <CardContent className="space-y-6">
+        {/* ================= CREATE SLOT ================= */}
+        <div className="grid md:grid-cols-6 gap-3 bg-gray-50 p-4 rounded-lg">
+          {/* Day */}
+          <Select value={day} onValueChange={setDay}>
+            <SelectTrigger>
+              <SelectValue placeholder="Day" />
+            </SelectTrigger>
+            <SelectContent>
+              {DAYS.map((d) => (
+                <SelectItem key={d} value={d}>
+                  {d}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Time */}
+          <Select value={time} onValueChange={setTime}>
+            <SelectTrigger>
+              <SelectValue placeholder="Time" />
+            </SelectTrigger>
+            <SelectContent>
+              {TIMES.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {t}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Curriculum */}
+          <Select
+            value={curriculum}
+            onValueChange={(v) => setCurriculum(v as "CAPS" | "Cambridge")}
           >
-            {isLocked && <Lock className="absolute top-2 right-2 w-4 h-4 text-gray-500" />}
-            {entry ? (
-              <div className="space-y-1">
-                <p className="font-bold text-base">{entry.subject}</p>
-                <p className="text-sm text-gray-700">{entry.teacherName}</p>
-                <p className="text-xs text-gray-600">{entry.grade}</p>
-                <Badge
-                  variant={entry.curriculum === "CAPS" ? "success" : "info"}
-                  className="text-xs"
-                >
-                  {entry.curriculum}
-                </Badge>
-              </div>
-            ) : (
-              <p className="text-center text-gray-400 text-2xl">+</p>
-            )}
-          </div>
-        </PopoverTrigger>
+            <SelectTrigger>
+              <SelectValue placeholder="Curriculum" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="CAPS">CAPS</SelectItem>
+              <SelectItem value="Cambridge">Cambridge</SelectItem>
+            </SelectContent>
+          </Select>
 
-        {!isLocked && (
-          <PopoverContent className="w-96 p-5 space-y-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h4 className="font-bold text-lg text-indigo-800">{day} • {time}</h4>
-
-            {/* Curriculum */}
-            <div className="flex gap-3">
-              <Button
-                variant={editCurriculum === "CAPS" ? "default" : "outline"}
-                className="flex-1"
-                onClick={() => setEditCurriculum("CAPS")}
-              >
-                CAPS
-              </Button>
-              <Button
-                variant={editCurriculum === "Cambridge" ? "default" : "outline"}
-                className="flex-1"
-                onClick={() => setEditCurriculum("Cambridge")}
-              >
-                Cambridge
-              </Button>
-            </div>
-
-            {/* Grade */}
-            <Select value={editGrade} onValueChange={setEditGrade}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select Grade/Level" />
-              </SelectTrigger>
-              <SelectContent>
-                {getGradeOptions().map((g) => (
+          {/* Grade */}
+          <Select value={grade} onValueChange={setGrade}>
+            <SelectTrigger>
+              <SelectValue placeholder="Grade" />
+            </SelectTrigger>
+            <SelectContent>
+              {(curriculum === "CAPS" ? CAPS_GRADES : CAMBRIDGE_GRADES).map(
+                (g) => (
                   <SelectItem key={g} value={g}>
                     {g}
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                )
+              )}
+            </SelectContent>
+          </Select>
 
-            {/* Subject */}
-            <Select value={editSubject} onValueChange={setEditSubject}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select Subject" />
-              </SelectTrigger>
-              <SelectContent>
-                {[...new Set(teachers.flatMap((t) => t.subjects || []))].map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Subject */}
+          <Select value={subject} onValueChange={setSubject}>
+            <SelectTrigger>
+              <SelectValue placeholder="Subject" />
+            </SelectTrigger>
+            <SelectContent>
+              {subjects.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            {/* Teacher - filtered by subject */}
-            <Select value={editTeacherId} onValueChange={setEditTeacherId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select Teacher" />
-              </SelectTrigger>
-              <SelectContent>
-                {getTeachersForSubject().map((t) => (
+          {/* Teacher */}
+          <Select
+            value={teacher?.id}
+            onValueChange={(id) =>
+              setTeacher(teachers.find((t) => t.id === id) || null)
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Teacher" />
+            </SelectTrigger>
+            <SelectContent>
+              {teachers
+                .filter((t) => t.subjects.includes(subject))
+                .map((t) => (
                   <SelectItem key={t.id} value={t.id}>
-                    {t.firstName} {t.lastName}
+                    {t.name}
                   </SelectItem>
                 ))}
-              </SelectContent>
-            </Select>
+            </SelectContent>
+          </Select>
 
-            <Button
-              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
-              onClick={() => saveEntry(day, time)}
-            >
-              {entry ? "Update Class" : "Schedule Class"}
-            </Button>
-
-            {entry && (
-              <Button
-                variant="destructive"
-                className="w-full"
-                onClick={() => removeEntry(entry.id)}
-              >
-                Remove Class
-              </Button>
-            )}
-          </PopoverContent>
-        )}
-      </Popover>
-    );
-  };
-
-  return (
-    <Card className="bg-white shadow-2xl rounded-2xl overflow-hidden">
-      <CardHeader className="bg-gradient-to-r from-indigo-600 to-purple-700 text-white">
-        <CardTitle className="text-3xl font-bold flex items-center gap-4">
-          School Timetable Manager
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-8">
-        {/* Custom Weekend Slots */}
-        <div className="grid md:grid-cols-2 gap-6 mb-8 p-6 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl">
-          <div>
-            <h4 className="font-bold text-lg mb-3 text-indigo-800">Saturday Slots</h4>
-            <div className="flex gap-3 mb-4">
-              <Input
-                placeholder="e.g. 09:00 AM"
-                value={newSatTime}
-                onChange={(e) => setNewSatTime(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addTime("Saturday", newSatTime, setNewSatTime)}
-              />
-              <Button onClick={() => addTime("Saturday", newSatTime, setNewSatTime)}>Add</Button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {satSlots.map((t) => (
-                <Badge key={t} variant="secondary" className="px-3 py-1">
-                  {t}
-                  <button
-                    onClick={() => removeTime("Saturday", t)}
-                    className="ml-2 text-red-600 hover:text-red-800"
-                  >
-                    ×
-                  </button>
-                </Badge>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <h4 className="font-bold text-lg mb-3 text-purple-800">Sunday Slots</h4>
-            <div className="flex gap-3 mb-4">
-              <Input
-                placeholder="e.g. 10:00 AM"
-                value={newSunTime}
-                onChange={(e) => setNewSunTime(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addTime("Sunday", newSunTime, setNewSunTime)}
-              />
-              <Button onClick={() => addTime("Sunday", newSunTime, setNewSunTime)}>Add</Button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {sunSlots.map((t) => (
-                <Badge key={t} variant="secondary" className="px-3 py-1">
-                  {t}
-                  <button
-                    onClick={() => removeTime("Sunday", t)}
-                    className="ml-2 text-red-600 hover:text-red-800"
-                  >
-                    ×
-                  </button>
-                </Badge>
-              ))}
-            </div>
-          </div>
+          <Button onClick={createSlot} className="md:col-span-6 bg-indigo-600">
+            Add Slot
+          </Button>
         </div>
 
-        {/* Timetable Grid */}
-        <div className="space-y-6">
-          {ALL_DAYS.map((day) => {
-            const timeSlots = getTimeSlots(day);
-            const hasSlots = timeSlots.length > 0;
+        {/* ================= TIMETABLE DISPLAY ================= */}
+        <div className="grid gap-4">
+          {DAYS.map((d) => (
+            <div key={d}>
+              <h3 className="font-semibold mb-2">{d}</h3>
 
-            return (
-              <div key={day} className="border-2 border-indigo-200 rounded-xl overflow-hidden shadow-md">
-                <div className="bg-gradient-to-r from-indigo-100 to-purple-100 p-4 flex justify-between items-center">
-                  <div className="flex items-center gap-4">
-                    <h3 className="text-2xl font-bold text-indigo-900">{day}</h3>
-                    {lockedDays.has(day) && <Lock className="w-6 h-6 text-gray-600" />}
-                    {!hasSlots && <span className="text-sm text-gray-600">(No time slots)</span>}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Button
-                      size="sm"
-                      variant={lockedDays.has(day) ? "default" : "outline"}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleLock(day);
-                      }}
-                    >
-                      {lockedDays.has(day) ? <Lock className="w-5 h-5" /> : <Unlock className="w-5 h-5" />}
-                    </Button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleDay(day);
-                      }}
-                      className="p-2 rounded-lg hover:bg-white/50 transition"
-                    >
-                      {expandedDays.has(day) ? <ChevronUp className="w-6 h-6" /> : <ChevronDown className="w-6 h-6" />}
-                    </button>
-                  </div>
-                </div>
+              <div className="grid grid-cols-5 gap-2">
+                {entries
+                  .filter((e) => e.day === d)
+                  .map((e) => (
+                    <Popover key={e.id}>
+                      <PopoverTrigger asChild>
+                        <div
+                          className={`p-2 rounded cursor-pointer text-xs
+                          ${
+                            e.curriculum === "CAPS"
+                              ? "bg-green-100 border border-green-400"
+                              : "bg-blue-100 border border-blue-400"
+                          }`}
+                        >
+                          <p className="font-semibold">{e.subject}</p>
+                          <p>{e.grade}</p>
+                          <Badge className="mt-1">{e.time}</Badge>
+                        </div>
+                      </PopoverTrigger>
 
-                {expandedDays.has(day) && hasSlots && (
-                  <div className="p-6 bg-gray-50">
-                    <div className="grid grid-cols-8 gap-4 text-center font-medium text-gray-700 mb-4">
-                      <div>Time</div>
-                      {timeSlots.map((t) => (
-                        <div key={t}>{t}</div>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-8 gap-4">
-                      <div className="text-right font-medium text-gray-600 pr-4">Classes →</div>
-                      {timeSlots.map((time) => (
-                        <div key={time}>{renderCell(day, time)}</div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                      <PopoverContent className="w-64 space-y-2">
+                        <p className="font-bold">{e.subject}</p>
+                        <p>{e.teacherName}</p>
+                        <p>{e.grade}</p>
+
+                        <Button size="sm" onClick={() => setEditing(e)}>
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => deleteSlot(e.id)}
+                        >
+                          Delete
+                        </Button>
+                      </PopoverContent>
+                    </Popover>
+                  ))}
               </div>
-            );
-          })}
-        </div>
-
-        {/* Legend */}
-        <div className="mt-10 flex flex-wrap justify-center gap-8 text-lg">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-green-100 to-emerald-100 border-2 border-green-500"></div>
-            <span className="font-medium">CAPS (Grade 1–12)</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-100 to-indigo-100 border-2 border-blue-500"></div>
-            <span className="font-medium">Cambridge (Form 1–6)</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <Lock className="w-6 h-6 text-gray-600" />
-            <span className="font-medium">Locked Day</span>
-          </div>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>
