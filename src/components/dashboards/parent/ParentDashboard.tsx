@@ -1,12 +1,20 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import RegistrationSection from "./sections/RegistrationSection";
 import PaymentsSection from "./sections/PaymentSection";
 import SettingsSection from "./sections/SettingsSection";
@@ -31,28 +39,19 @@ import {
   Calendar,
   Clock,
   BookOpen,
-  User,
   GraduationCap,
   ExternalLink,
+  Sparkles,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
-/* ===========================================================
-   HELPERS
-   =========================================================== */
-const normalizeGrade = (grade?: string): string =>
-  grade ? grade.replace(/^grade\s*/i, "").trim().toLowerCase() : "";
+/* ======================================================
+   CONSTANTS
+====================================================== */
+const SCHOOL_NAME = "Care Academy"; // ← Change this to your school name
 
-/* ===========================================================
+/* ======================================================
    TYPES
-   =========================================================== */
+====================================================== */
 interface Student {
   id: string;
   firstName: string;
@@ -68,48 +67,44 @@ interface TimetableEntry {
   subject: string;
   day: string;
   time: string;
-  duration: number;
   teacherName: string;
   curriculum: "CAPS" | "Cambridge";
 }
 
-const sections = [
-  "Overview",
-  "Registration",
-  "Payments",
-  "Communications",
-  "Status",
-  "Settings",
-];
-
-/* ===========================================================
+/* ======================================================
    MAIN COMPONENT
-   =========================================================== */
+====================================================== */
 export default function ParentDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  /* ---------------- Core Dashboard State ---------------- */
   const [activeTab, setActiveTab] = useState("Overview");
   const [students, setStudents] = useState<Student[]>([]);
   const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  /* ---------------- Parent Profile State ---------------- */
+  // Parent profile
   const [title, setTitle] = useState("");
   const [fullName, setFullName] = useState("");
   const [contact, setContact] = useState("");
   const [address, setAddress] = useState("");
-
-  /* ---------------- Wizard Enforcement ---------------- */
-  const [showWizard, setShowWizard] = useState(false);
   const [profileCompleted, setProfileCompleted] = useState(true);
-  const [wizardStep, setWizardStep] = useState<1 | 2>(1);
 
-  /* ===========================================================
+  const [showWizard, setShowWizard] = useState(false);
+  const [wizardStep, setWizardStep] = useState<1 | 2>(1);
+  const sections = [
+    "Overview",
+    "Registration",
+    "Payments",
+    "Communications",
+    "Status",
+    "Settings",
+  ];
+
+  /* ======================================================
      DATA FETCH
-     =========================================================== */
+  ===================================================== */
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -118,27 +113,23 @@ export default function ParentDashboard() {
 
     const fetchData = async () => {
       try {
-        /* -------- Parent Profile -------- */
+        /* Parent Profile */
         const parentSnap = await getDoc(doc(db, "parents", user.uid));
         if (parentSnap.exists()) {
           const data = parentSnap.data();
-
           setTitle(data.title || "");
           setFullName(data.fullName || "");
           setContact(data.contact || "");
           setAddress(data.address || "");
-
           const completed = data.profileCompleted === true;
           setProfileCompleted(completed);
-
-          // 🔁 Enforce wizard
           if (!completed) {
             setShowWizard(true);
             setWizardStep(1);
           }
         }
 
-        /* -------- Students -------- */
+        /* Students */
         const qStudents = query(
           collection(db, "students"),
           where("parentId", "==", user.uid)
@@ -154,7 +145,7 @@ export default function ParentDashboard() {
           }
         });
 
-        /* -------- Timetable -------- */
+        /* Full Timetable (real-time) */
         const qTimetable = query(
           collection(db, "timetable"),
           orderBy("day"),
@@ -177,23 +168,24 @@ export default function ParentDashboard() {
     };
 
     fetchData();
+
     return () => {
       unsubStudents?.();
       unsubTimetable?.();
     };
   }, [user?.uid]);
 
-  /* ===========================================================
+  /* ======================================================
      LOGOUT
-     =========================================================== */
+  ===================================================== */
   const handleLogout = async () => {
     await signOut(auth);
     navigate("/login");
   };
 
-  /* ===========================================================
-     SAVE PROFILE (WIZARD STEP 1)
-     =========================================================== */
+  /* ======================================================
+     SAVE PROFILE
+  ===================================================== */
   const saveProfileAndContinue = async () => {
     if (!fullName || !contact || !address) {
       alert("Please complete all required fields.");
@@ -218,13 +210,20 @@ export default function ParentDashboard() {
     setActiveTab("Registration");
   };
 
-  /* ===========================================================
-     SECTION RENDER
-     =========================================================== */
+  /* ======================================================
+     RENDER SECTION
+  ===================================================== */
   const renderSection = () => {
     switch (activeTab) {
       case "Overview":
-        return <OverviewSection {...{ students, selectedChildId, setSelectedChildId, timetable }} />;
+        return (
+          <OverviewSection
+            students={students}
+            selectedChildId={selectedChildId}
+            setSelectedChildId={setSelectedChildId}
+            timetable={timetable}
+          />
+        );
       case "Registration":
         return <RegistrationSection />;
       case "Payments":
@@ -242,7 +241,7 @@ export default function ParentDashboard() {
                 setShowWizard(true);
                 setWizardStep(1);
               }}
-              className="mt-4 bg-indigo-600 text-white"
+              className="mt-6 bg-indigo-600"
             >
               Edit Parent Profile
             </Button>
@@ -253,114 +252,113 @@ export default function ParentDashboard() {
     }
   };
 
-  /* ===========================================================
-     LOADING
-     =========================================================== */
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin h-10 w-10 border-b-2 border-indigo-600 rounded-full" />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="animate-spin h-12 w-12 border-4 border-indigo-600 rounded-full border-t-transparent"></div>
       </div>
     );
   }
 
-  /* ===========================================================
-     UI
-     =========================================================== */
+  /* ======================================================
+     PERSONALIZED WELCOME
+  ===================================================== */
+  const welcomeName = profileCompleted
+    ? `${title ? title + " " : ""}${fullName}`
+    : user?.email?.split("@")[0] || "Parent";
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
+      <div className="max-w-7xl mx-auto p-6 space-y-8">
 
-        {/* HEADER */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 flex justify-between">
+        {/* Header with School Name */}
+        <div className="bg-white rounded-3xl shadow-2xl p-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div>
-
-            {/* personalized welcome updated after profile update */}
-            <h1 className="text-3xl font-bold text-indigo-800">
-              {profileCompleted ? (
-                <>Welcome {title && `${title} `}{fullName} 👋</>
-              ) : (
-                <>Welcome 👋</>
-              )}
+            <h1 className="text-5xl font-extrabold text-indigo-900 flex items-center gap-4">
+              <Sparkles className="w-12 h-12 text-yellow-500" />
+              Welcome back, {welcomeName}!
             </h1>
-
-            <p className="text-gray-600">Parent Dashboard</p>
+            <p className="text-2xl text-indigo-700 mt-3">
+              {SCHOOL_NAME} Parent Portal
+            </p>
+            <p className="text-lg text-gray-600 mt-2">
+              Stay connected with your child's learning journey
+            </p>
           </div>
-          <Button onClick={handleLogout} className="bg-red-600 text-white">
-            <LogOut size={18} /> Logout
+          <Button onClick={handleLogout} size="lg" className="bg-red-600 hover:bg-red-700">
+            <LogOut className="w-6 h-6 mr-3" /> Logout
           </Button>
         </div>
 
-        {/* TABS */}
-        <div className="flex gap-2 bg-white p-2 rounded-xl shadow">
-          {sections.map((s) => (
-            <button
-              key={s}
-              onClick={() => setActiveTab(s)}
-              className={`px-4 py-2 rounded-lg ${
-                activeTab === s
-                  ? "bg-indigo-600 text-white"
-                  : "hover:bg-gray-100"
-              }`}
-            >
-              {s}
-            </button>
-          ))}
+        {/* Tabs */}
+        <div className="bg-white rounded-2xl shadow-lg p-3">
+          <div className="flex flex-wrap gap-3">
+            {sections.map((s) => (
+              <button
+                key={s}
+                onClick={() => setActiveTab(s)}
+                className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all ${
+                  activeTab === s
+                    ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md"
+                    : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* CONTENT */}
-        <div className="bg-white rounded-2xl shadow-lg p-6">
+        {/* Content */}
+        <div className="bg-white rounded-3xl shadow-2xl p-8">
           {renderSection()}
         </div>
       </div>
 
-      {/* ===================================================
-         ONBOARDING WIZARD MODAL
-         =================================================== */}
+      {/* Wizard Modal */}
       {showWizard && !profileCompleted && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-xl max-w-xl w-full p-6">
-
-            {/* STEP 1 */}
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-10">
             {wizardStep === 1 && (
               <>
-                <h2 className="text-2xl font-bold text-indigo-700 mb-4">
-                  Complete Parent Profile
+                <h2 className="text-3xl font-bold text-indigo-800 mb-6">
+                  Complete Your Profile
                 </h2>
-
-                <div className="space-y-3">
-                  <input className="w-full border p-3 rounded" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-                  <input className="w-full border p-3 rounded" placeholder="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-                  <input className="w-full border p-3 rounded" placeholder="Contact Number" value={contact} onChange={(e) => setContact(e.target.value)} />
-                  <textarea className="w-full border p-3 rounded" placeholder="Home Address" rows={3} value={address} onChange={(e) => setAddress(e.target.value)} />
+                <div className="space-y-5">
+                  <input
+                    className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg"
+                    placeholder="Title (Mr/Mrs/Ms)"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                  />
+                  <input
+                    className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg"
+                    placeholder="Full Name *"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                  />
+                  <input
+                    className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg"
+                    placeholder="Contact Number *"
+                    value={contact}
+                    onChange={(e) => setContact(e.target.value)}
+                  />
+                  <textarea
+                    className="w-full border-2 border-gray-300 rounded-xl p-4 text-lg"
+                    placeholder="Home Address *"
+                    rows={4}
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                  />
                 </div>
-
-                <div className="flex justify-between mt-6">
-                  <button onClick={() => setShowWizard(false)} className="text-gray-500">
+                <div className="flex justify-end gap-4 mt-8">
+                  <Button variant="outline" onClick={() => setShowWizard(false)}>
                     Later
-                  </button>
-                  <Button onClick={saveProfileAndContinue} className="bg-indigo-600 text-white">
-                    Continue to Child Enrolment
+                  </Button>
+                  <Button onClick={saveProfileAndContinue} className="bg-indigo-600 px-8">
+                    Continue
                   </Button>
                 </div>
-              </>
-            )}
-
-            {/* STEP 2 */}
-            {wizardStep === 2 && (
-              <>
-                <h2 className="text-2xl font-bold text-indigo-700 mb-4">
-                  Enrol Your Child
-                </h2>
-                <p className="text-gray-600 mb-6">
-                  Please complete your child’s registration to continue.
-                </p>
-                <Button
-                  onClick={() => setShowWizard(false)}
-                  className="bg-green-600 text-white w-full"
-                >
-                  Go to Registration
-                </Button>
               </>
             )}
           </div>
@@ -369,125 +367,70 @@ export default function ParentDashboard() {
     </div>
   );
 }
-/* ===========================================================
-   OVERVIEW SECTION (ADDED REAL-TIME STATS + COLLAPSIBLE VIEW)
-   =========================================================== */
+
+/* ======================================================
+   OVERVIEW SECTION – REAL-TIME STATS
+====================================================== */
 function OverviewSection({
   students,
   selectedChildId,
   setSelectedChildId,
   timetable,
-}: any) {
-
-  const [showTimetable, setShowTimetable] = useState(true);
-
+}: {
+  students: Student[];
+  selectedChildId: string | null;
+  setSelectedChildId: (id: string) => void;
+  timetable: TimetableEntry[];
+}) {
   const selectedChild = students.find((s) => s.id === selectedChildId);
 
-  const childGradeNorm = useMemo(
-    () => normalizeGrade(selectedChild?.grade),
-    [selectedChild?.grade]
-  );
-
-  const childSubjects = useMemo(
-    () => selectedChild?.subjects || [],
-    [selectedChild?.subjects]
-  );
-
-  /* ===========================================================
-     FILTERED TIMETABLE (REAL-TIME)
-     =========================================================== */
+  // Filter timetable for selected child (flexible matching for IGCSE)
   const childTimetable = useMemo(() => {
-    if (!selectedChild || !childGradeNorm || childSubjects.length === 0) return [];
+    if (!selectedChild || !selectedChild.subjects || selectedChild.subjects.length === 0) return [];
 
-    return timetable
-      .filter((entry) => {
-        const entryGradeNorm = normalizeGrade(entry.grade);
-        return (
-          entryGradeNorm === childGradeNorm &&
-          childSubjects.includes(entry.subject)
-        );
-      })
-      .sort((a, b) => {
-        const dayOrder = [
-          "Sunday",
-          "Monday",
-          "Tuesday",
-          "Wednesday",
-          "Thursday",
-          "Friday",
-          "Saturday",
-        ];
-        const dayA = dayOrder.indexOf(a.day);
-        const dayB = dayOrder.indexOf(b.day);
-        if (dayA !== dayB) return dayA - dayB;
-        return a.time.localeCompare(b.time);
-      });
-  }, [timetable, childGradeNorm, childSubjects, selectedChild]);
-
-  /* ===========================================================
-     GROUP BY DAY (UNCHANGED)
-     =========================================================== */
-  const groupedTimetable = useMemo(() => {
-    const groups: Record<string, TimetableEntry[]> = {};
-    childTimetable.forEach((entry) => {
-      if (!groups[entry.day]) groups[entry.day] = [];
-      groups[entry.day].push(entry);
+    return timetable.filter((entry) => {
+      return (
+        entry.grade === selectedChild.grade &&
+        selectedChild.subjects!.some((sub) =>
+          entry.subject.toLowerCase().includes(sub.toLowerCase().replace(" (igcse)", ""))
+        )
+      );
     });
-    return Object.entries(groups);
-  }, [childTimetable]);
+  }, [timetable, selectedChild]);
 
-  /* ===========================================================
-     REAL-TIME STATS (NEW)
-     =========================================================== */
+  // Stats
+  const weeklyLessons = childTimetable.length;
 
-  // Total lessons this week
-  const weeklyLessonsCount = childTimetable.length;
+  const today = new Date().toLocaleString("en-us", { weekday: "long" });
+  const todayLessons = childTimetable.filter((slot) => slot.day === today);
+  const upcomingToday = todayLessons.length;
 
-  // Unique subjects this week
-  const weeklySubjects = useMemo(
-    () => [...new Set(childTimetable.map((t) => t.subject))],
-    [childTimetable]
-  );
+  const nextClassToday = todayLessons.sort((a, b) => a.time.localeCompare(b.time))[0];
 
-  // Next upcoming lesson (simple sorted assumption)
-  const nextLesson = childTimetable[0];
-
-  /* ===========================================================
-     EMPTY STATE
-     =========================================================== */
   if (students.length === 0) {
     return (
-      <div className="text-center py-16">
-        <div className="bg-gray-200 border-2 border-dashed rounded-xl w-24 h-24 mx-auto mb-4 flex items-center justify-center">
-          <GraduationCap className="w-12 h-12 text-gray-400" />
-        </div>
-        <h3 className="text-xl font-semibold text-gray-700">
-          No Students Registered
-        </h3>
-        <p className="text-gray-500 mt-2">
-          Register your first child to get started.
-        </p>
+      <div className="text-center py-20">
+        <GraduationCap className="w-24 h-24 text-gray-300 mx-auto mb-6" />
+        <h3 className="text-3xl font-bold text-gray-700 mb-4">No Students Registered</h3>
+        <p className="text-xl text-gray-600">Enroll your child to view their progress.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-
-      {/* ===================================================
-         CHILD SELECTOR + PORTAL ACCESS (UNCHANGED)
-         =================================================== */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <div className="flex items-center gap-3">
-          <label className="font-medium text-gray-700">Select Child:</label>
+    <div className="space-y-10">
+      {/* Child Selector */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-6">
+        <div>
+          <label className="text-lg font-semibold text-gray-700">Viewing:</label>
           <Select value={selectedChildId || ""} onValueChange={setSelectedChildId}>
-            <SelectTrigger className="w-64">
-              <SelectValue placeholder="Choose a child" />
+            <SelectTrigger className="w-80 mt-2">
+              <SelectValue placeholder="Select a child" />
             </SelectTrigger>
             <SelectContent>
               {students.map((s) => (
                 <SelectItem key={s.id} value={s.id}>
-                  {s.firstName} {s.lastName} – Grade {s.grade}
+                  {s.firstName} {s.lastName} — Grade {s.grade}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -496,135 +439,64 @@ function OverviewSection({
 
         {selectedChild && (
           <Button
-            onClick={() =>
-              window.open(`/student-dashboard/${selectedChild.id}`, "_blank")
-            }
-            className="bg-gradient-to-r from-green-500 to-emerald-600 text-white flex items-center gap-2"
+            size="lg"
+            onClick={() => window.open(`/student-dashboard/${selectedChild.id}`, "_blank")}
+            className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
           >
-            <ExternalLink size={18} />
-            Access Student Portal
+            <ExternalLink className="w-6 h-6 mr-3" /> Open Student Portal
           </Button>
         )}
       </div>
 
-      {/* ===================================================
-         📊 REAL-TIME STATS CARDS (NEW)
-         =================================================== */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard
-          title="Next Lesson"
-          value={
-            nextLesson
-              ? `${nextLesson.subject} • ${nextLesson.day} ${nextLesson.time}`
-              : "No upcoming lesson"
-          }
-          icon={<Clock className="w-6 h-6" />}
-          gradient="from-green-500 to-emerald-600"
-        />
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {/* Current Week Lessons */}
+        <Card className="bg-gradient-to-br from-teal-500 to-cyan-600 text-white shadow-2xl hover:scale-105 transition">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-4 text-2xl">
+              <BookOpen className="w-10 h-10" /> Current Week Lessons
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-6xl font-extrabold">{weeklyLessons}</p>
+            <p className="mt-3 text-teal-100 text-lg">Total scheduled classes</p>
+          </CardContent>
+        </Card>
 
-        <StatCard
-          title="Lessons This Week"
-          value={weeklyLessonsCount}
-          icon={<Calendar className="w-6 h-6" />}
-          gradient="from-indigo-500 to-purple-600"
-        />
+        {/* Upcoming Today */}
+        <Card className="bg-gradient-to-br from-orange-500 to-red-600 text-white shadow-2xl hover:scale-105 transition">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-4 text-2xl">
+              <Clock className="w-10 h-10" /> Upcoming Today
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-6xl font-extrabold">{upcomingToday}</p>
+            <p className="mt-3 text-orange-100 text-lg">Classes remaining</p>
+          </CardContent>
+        </Card>
 
-        <StatCard
-          title="Subjects This Week"
-          value={weeklySubjects.length > 0 ? weeklySubjects.join(", ") : "None"}
-          icon={<BookOpen className="w-6 h-6" />}
-          gradient="from-orange-500 to-pink-600"
-        />
-      </div>
-
-      {/* ===================================================
-         COLLAPSIBLE TIMETABLE (ADDED, DOES NOT BREAK UI)
-         =================================================== */}
-      <Card className="border-0 shadow-xl overflow-hidden">
-        <CardHeader
-          onClick={() => setShowTimetable(!showTimetable)}
-          className="cursor-pointer bg-gradient-to-r from-indigo-600 to-purple-600 text-white"
-        >
-          <CardTitle className="text-xl font-bold flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <Calendar className="w-6 h-6" />
-              Weekly Timetable
-            </span>
-            <span className="text-sm">
-              {showTimetable ? "Hide" : "Show"}
-            </span>
-          </CardTitle>
-        </CardHeader>
-
-        {showTimetable && (
-          <CardContent className="p-6 bg-gradient-to-b from-gray-50 to-white">
-            {childSubjects.length === 0 ? (
-              <p className="text-center text-gray-600">
-                No subjects selected.
-              </p>
-            ) : groupedTimetable.length === 0 ? (
-              <p className="text-center text-gray-600">
-                No classes scheduled yet.
-              </p>
+        {/* Next Class Today */}
+        <Card className="bg-gradient-to-br from-purple-500 to-pink-600 text-white shadow-2xl hover:scale-105 transition">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-4 text-2xl">
+              <Calendar className="w-10 h-10" /> Next Class Today
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {nextClassToday ? (
+              <>
+                <p className="text-4xl font-bold">{nextClassToday.time}</p>
+                <p className="mt-2 text-purple-100 text-xl">
+                  {nextClassToday.subject} • {nextClassToday.grade}
+                </p>
+              </>
             ) : (
-              <div className="space-y-6">
-                {groupedTimetable.map(([day, slots]) => (
-                  <div key={day} className="bg-white rounded-xl border p-5">
-                    <h3 className="font-bold text-indigo-800 mb-4">
-                      {day}
-                    </h3>
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {slots.map((slot) => (
-                        <div
-                          key={slot.id}
-                          className={`p-4 rounded-lg border-l-4 ${
-                            slot.curriculum === "CAPS"
-                              ? "bg-green-50 border-green-500"
-                              : "bg-blue-50 border-blue-500"
-                          }`}
-                        >
-                          <p className="font-semibold">{slot.subject}</p>
-                          <p className="text-sm">{slot.teacherName}</p>
-                          <p className="text-sm">
-                            {slot.time} ({slot.duration} min)
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <p className="text-3xl text-purple-100">No classes today</p>
             )}
           </CardContent>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-/* ===========================================================
-   STAT CARD (NEW – REUSABLE)
-   =========================================================== */
-function StatCard({
-  title,
-  value,
-  icon,
-  gradient,
-}: {
-  title: string;
-  value: any;
-  icon: React.ReactNode;
-  gradient: string;
-}) {
-  return (
-    <div
-      className={`rounded-2xl p-5 text-white shadow-lg bg-gradient-to-r ${gradient}`}
-    >
-      <div className="flex items-center gap-3">
-        {icon}
-        <h3 className="text-lg font-semibold">{title}</h3>
+        </Card>
       </div>
-      <p className="mt-3 text-xl font-bold">{value}</p>
     </div>
   );
 }

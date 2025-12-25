@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { db, auth, getAuth } from "@/lib/firebaseConfig";
+import React, { useEffect, useState, useMemo } from "react";
+import { db, auth } from "@/lib/firebaseConfig";
 import {
   collection,
   onSnapshot,
@@ -40,7 +40,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useNavigate } from "react-router-dom";
 import TimetableManager from "@/lib/TimetableManager";
-import { LogOut, Search, Eye, Download, AlertCircle, Users, CheckCircle, DollarSign, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  LogOut,
+  Search,
+  Eye,
+  Download,
+  AlertCircle,
+  Users,
+  CheckCircle,
+  DollarSign,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 
 /* ---------------- Types ---------------- */
 interface ParentProfile {
@@ -82,7 +93,7 @@ interface Teacher {
 interface DocumentFile {
   name: string;
   url: string;
-  type: string; // e.g., "idDoc", "cv", etc.
+  type: string;
 }
 
 /* ---------------- Component ---------------- */
@@ -92,8 +103,11 @@ const PrincipalDashboard: React.FC = () => {
   const [documents, setDocuments] = useState<DocumentFile[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
 
+  // Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [gradeFilter, setGradeFilter] = useState("all");
+  const [subjectFilter, setSubjectFilter] = useState("all");
+  const [teacherFilter, setTeacherFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [curriculumFilter, setCurriculumFilter] = useState<"all" | "CAPS" | "Cambridge">("all");
 
@@ -105,36 +119,48 @@ const PrincipalDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"Details" | "Documents">("Details");
 
   const [parentProfile, setParentProfile] = useState<ParentProfile | null>(null);
-  
-  const auth = getAuth();
+
   const principalName = auth.currentUser?.displayName || "Principal";
-  
+  const principalEmail = auth.currentUser?.email || "";
+
   const { logout } = useAuth();
   const navigate = useNavigate();
 
+  /* ---------------- Unique Filter Values ---------------- */
+  const uniqueGrades = useMemo(() => {
+    return Array.from(new Set(students.map((s) => s.grade).filter(Boolean))).sort();
+  }, [students]);
 
-// Force token refresh to load custom claims (principal role)
-useEffect(() => {
-  auth.currentUser?.getIdToken(true);
-}, []);
-  
+  const uniqueSubjects = useMemo(() => {
+    const fromStudents = students.flatMap((s) => s.subjects || []);
+    const fromTeachers = teachers.flatMap((t) => t.subjects?.map((s) => s.name) || []);
+    return Array.from(new Set([...fromStudents, ...fromTeachers])).sort();
+  }, [students, teachers]);
+
+  const uniqueTeachers = useMemo(() => {
+    return Array.from(
+      new Set(
+        teachers
+          .map((t) => {
+            const first = t.personalInfo?.firstName || "";
+            const last = t.personalInfo?.lastName || "";
+            return `${first} ${last}`.trim();
+          })
+          .filter(Boolean)
+      )
+    ).sort();
+  }, [teachers]);
+
   /* ---------------- Firestore Listeners ---------------- */
   useEffect(() => {
-    // Students
     const unsubStudents = onSnapshot(collection(db, "students"), (snap) => {
       setStudents(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Student) })));
     });
-    
-    // Teacher Applications
+
     const unsubTeachers = onSnapshot(collection(db, "teacherApplications"), (snap) => {
-      setTeachers(
-        snap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Teacher),
-        }))
-      );
+      setTeachers(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Teacher) })));
     });
-    
+
     return () => {
       unsubStudents();
       unsubTeachers();
@@ -166,70 +192,61 @@ useEffect(() => {
     closeModal();
   };
 
-  /* ---------------- Fetch Documents (Fixed for Teachers) ---------------- */
+  /* ---------------- Fetch Documents ---------------- */
   const fetchDocuments = async (type: "student" | "teacher", item: Student | Teacher) => {
-  setLoadingDocs(true);
-  setDocuments([]);
+    setLoadingDocs(true);
+    setDocuments([]);
 
-  try {
-    const storage = getStorage();
+    try {
+      const storage = getStorage();
 
-    if (type === "student") {
-      // Existing student path
-      const pathRef = ref(storage, `registrations/${item.id}/documents`);
-      const result = await listAll(pathRef);
-      const files = await Promise.all(
-        result.items.map(async (itemRef) => ({
-          name: itemRef.name,
-          url: await getDownloadURL(itemRef),
-          type: "general",
-        }))
-      );
-      setDocuments(files);
-    }
-
-    if (type === "teacher" && "uid" in item && item.uid) {
-      const teacher = item as Teacher;
-      const basePath = `teacherApplications/${teacher.uid}/${teacher.id}`; // uid first, then appId
-
-      // Known document types from your form
-      const docTypes = ["idDoc", "qualification", "cv", "ceta", "proofOfAddress", "policeClearance"];
-
-      const allFiles: DocumentFile[] = [];
-
-      for (const docType of docTypes) {
-        try {
-          const folderRef = ref(storage, `${basePath}/${docType}`);
-          const listResult = await listAll(folderRef);
-
-          if (listResult.items.length === 0) continue;
-
-          for (const fileRef of listResult.items) {
-            allFiles.push({
-              name: fileRef.name,
-              url: await getDownloadURL(fileRef),
-              type: docType,
-            });
-          }
-        } catch (err: any) {
-          // Folder empty or doesn't exist (optional doc) — safe to ignore
-          if (err.code !== 'storage/object-not-found') {
-            console.warn(`No files in ${docType} or access issue:`, err);
-          }
-        }
+      if (type === "student") {
+        const pathRef = ref(storage, `registrations/${item.id}/documents`);
+        const result = await listAll(pathRef);
+        const files = await Promise.all(
+          result.items.map(async (itemRef) => ({
+            name: itemRef.name,
+            url: await getDownloadURL(itemRef),
+            type: "general",
+          }))
+        );
+        setDocuments(files);
       }
 
-      setDocuments(allFiles);
-    }
-  } catch (err) {
-    console.error("Failed to load documents:", err);
-    setDocuments([]);
-  } finally {
-    setLoadingDocs(false);
-  }
-};
+      if (type === "teacher" && "uid" in item && item.uid) {
+        const teacher = item as Teacher;
+        const basePath = `teacherApplications/${teacher.uid}/${teacher.id}`;
+        const docTypes = ["idDoc", "qualification", "cv", "ceta", "proofOfAddress", "policeClearance"];
 
-  /* ---------------- Open Modal ---------------- */
+        const allFiles: DocumentFile[] = [];
+
+        for (const docType of docTypes) {
+          try {
+            const folderRef = ref(storage, `${basePath}/${docType}`);
+            const listResult = await listAll(folderRef);
+            for (const fileRef of listResult.items) {
+              allFiles.push({
+                name: fileRef.name,
+                url: await getDownloadURL(fileRef),
+                type: docType,
+              });
+            }
+          } catch (err: any) {
+            if (err.code !== "storage/object-not-found") {
+              console.warn(`Error loading ${docType}:`, err);
+            }
+          }
+        }
+        setDocuments(allFiles);
+      }
+    } catch (err) {
+      console.error("Failed to load documents:", err);
+    } finally {
+      setLoadingDocs(false);
+    }
+  };
+
+  /* ---------------- Modal ---------------- */
   const openModal = async (item: Student | Teacher, type: "student" | "teacher") => {
     setSelectedItem(item);
     setSelectedType(type);
@@ -241,14 +258,10 @@ useEffect(() => {
     if (type === "student") {
       await fetchDocuments("student", item);
       if ((item as Student).parentId) {
-        const parentSnap = await getDoc(doc(db, "parents", (item as Student).parentId!));
-        if (parentSnap.exists()) {
-          setParentProfile({ id: parentSnap.id, ...(parentSnap.data() as ParentProfile) });
-        }
+        const snap = await getDoc(doc(db, "parents", (item as Student).parentId!));
+        if (snap.exists()) setParentProfile({ id: snap.id, ...(snap.data() as ParentProfile) });
       }
-    }
-
-    if (type === "teacher") {
+    } else if (type === "teacher") {
       await fetchDocuments("teacher", item);
     }
   };
@@ -266,21 +279,30 @@ useEffect(() => {
     navigate("/");
   };
 
-  /* ---------------- Filters ---------------- */
-  const filteredStudents = students.filter((s) => {
-    const name = `${s.firstName ?? ""} ${s.lastName ?? ""}`.toLowerCase();
-    const matchesSearch = name.includes(searchTerm.toLowerCase());
-    const matchesGrade = gradeFilter === "all" || s.grade === gradeFilter;
-    const matchesStatus = statusFilter === "all" || s.status === statusFilter;
-    const matchesCurriculum = curriculumFilter === "all" || s.curriculum === curriculumFilter;
-    return matchesSearch && matchesGrade && matchesStatus && matchesCurriculum;
-  });
+  /* ---------------- Combined Filtering ---------------- */
+  const filteredStudents = useMemo(() => {
+    return students.filter((s) => {
+      const fullName = `${s.firstName ?? ""} ${s.lastName ?? ""}`.toLowerCase();
+      const matchesSearch = searchTerm === "" || fullName.includes(searchTerm.toLowerCase());
+      const matchesGrade = gradeFilter === "all" || s.grade === gradeFilter;
+      const matchesSubject = subjectFilter === "all" || s.subjects?.includes(subjectFilter);
+      const matchesStatus = statusFilter === "all" || s.status === statusFilter;
+      const matchesCurriculum = curriculumFilter === "all" || s.curriculum === curriculumFilter;
+      return matchesSearch && matchesGrade && matchesSubject && matchesStatus && matchesCurriculum;
+    });
+  }, [students, searchTerm, gradeFilter, subjectFilter, statusFilter, curriculumFilter]);
 
-  const filteredTeachers = teachers.filter((t) => {
-    const name = `${t.personalInfo?.firstName ?? ""} ${t.personalInfo?.lastName ?? ""}`.toLowerCase();
-    const email = (t.personalInfo?.email ?? "").toLowerCase();
-    return name.includes(searchTerm.toLowerCase()) || email.includes(searchTerm.toLowerCase());
-  });
+  const filteredTeachers = useMemo(() => {
+    return teachers.filter((t) => {
+      const fullName = `${t.personalInfo?.firstName ?? ""} ${t.personalInfo?.lastName ?? ""}`.toLowerCase();
+      const email = (t.personalInfo?.email ?? "").toLowerCase();
+      const matchesSearch = searchTerm === "" || fullName.includes(searchTerm.toLowerCase()) || email.includes(searchTerm.toLowerCase());
+      const matchesTeacher = teacherFilter === "all" || `${t.personalInfo?.firstName} ${t.personalInfo?.lastName}`.trim() === teacherFilter;
+      const matchesSubject = subjectFilter === "all" || t.subjects?.some((sub) => sub.name === subjectFilter);
+      const matchesStatus = statusFilter === "all" || t.status === statusFilter;
+      return matchesSearch && matchesTeacher && matchesSubject && matchesStatus;
+    });
+  }, [teachers, searchTerm, teacherFilter, subjectFilter, statusFilter]);
 
   /* ---------------- Render ---------------- */
   return (
@@ -293,30 +315,60 @@ useEffect(() => {
           </Button>
         </div>
 
-        {/* Search & Filters */}
+        {/* Advanced Filters */}
         <Card className="mb-6">
           <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1 relative">
+            <div className="flex flex-col md:flex-row gap-4 flex-wrap">
+              <div className="flex-1 min-w-[300px] relative">
                 <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
                 <Input
-                  placeholder="Search students or teachers..."
+                  placeholder="Search by name, email, subject..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
+
               <Select value={gradeFilter} onValueChange={setGradeFilter}>
-                <SelectTrigger className="w-48"><SelectValue placeholder="Grade" /></SelectTrigger>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="All Grades" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Grades</SelectItem>
-                  {["Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6","Grade 7","Grade 8","Grade 9","Grade 10","Grade 11","Grade 12"].map(g => (
+                  {uniqueGrades.map((g) => (
                     <SelectItem key={g} value={g}>{g}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+
+              <Select value={subjectFilter} onValueChange={setSubjectFilter}>
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="All Subjects" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Subjects</SelectItem>
+                  {uniqueSubjects.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={teacherFilter} onValueChange={setTeacherFilter}>
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="All Teachers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Teachers</SelectItem>
+                  {uniqueTeachers.map((t) => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-48"><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
@@ -325,6 +377,21 @@ useEffect(() => {
                   <SelectItem value="rejected">Rejected</SelectItem>
                 </SelectContent>
               </Select>
+
+              {(searchTerm || gradeFilter !== "all" || subjectFilter !== "all" || teacherFilter !== "all" || statusFilter !== "all") && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSearchTerm("");
+                    setGradeFilter("all");
+                    setSubjectFilter("all");
+                    setTeacherFilter("all");
+                    setStatusFilter("all");
+                  }}
+                >
+                  Clear All
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -336,7 +403,8 @@ useEffect(() => {
               <div>
                 <p className="text-lg">Pending Reviews</p>
                 <p className="text-3xl font-bold">
-                  {students.filter(s => s.status === "pending").length + teachers.filter(t => t.status === "pending").length}
+                  {students.filter((s) => s.status === "pending").length +
+                    teachers.filter((t) => t.status === "pending").length}
                 </p>
               </div>
               <AlertCircle className="w-10 h-10 opacity-80" />
@@ -355,7 +423,7 @@ useEffect(() => {
             <CardContent className="p-6 flex items-center justify-between">
               <div>
                 <p className="text-lg">Active Teachers</p>
-                <p className="text-3xl font-bold">{teachers.filter(t => t.status === "approved").length}</p>
+                <p className="text-3xl font-bold">{teachers.filter((t) => t.status === "approved").length}</p>
               </div>
               <CheckCircle className="w-10 h-10 opacity-80" />
             </CardContent>
@@ -363,7 +431,7 @@ useEffect(() => {
           <Card className="bg-purple-600 text-white">
             <CardContent className="p-6 flex items-center justify-between">
               <div>
-                <p className="text-lg">Total Applications</p>
+                <p className="text-lg">Teacher Applications</p>
                 <p className="text-3xl font-bold">{teachers.length}</p>
               </div>
               <DollarSign className="w-10 h-10 opacity-80" />
@@ -372,67 +440,79 @@ useEffect(() => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          
-          
-          {/* Students List */}
+          {/* Students */}
           <Card>
             <CardHeader>
-              <CardTitle>Student Registrations</CardTitle>
+              <CardTitle>Student Registrations ({filteredStudents.length})</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4 max-h-96 overflow-y-auto">
-                {filteredStudents.map((s) => (
-                  <div key={s.id} className={`p-4 rounded-lg border ${s.status === "pending" ? "bg-yellow-50 border-yellow-400" : "bg-white"}`}>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-semibold text-lg">{s.firstName} {s.lastName}</p>
-                        <p className="text-sm text-gray-600">Grade {s.grade} • {s.curriculum}</p>
-                        <div className="mt-2 flex gap-2 flex-wrap">
-                          <Badge variant={s.status === "enrolled" ? "default" : s.status === "pending" ? "secondary" : "destructive"}>
-                            {s.status}
-                          </Badge>
+                {filteredStudents.length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">No students match filters</p>
+                ) : (
+                  filteredStudents.map((s) => (
+                    <div
+                      key={s.id}
+                      className={`p-4 rounded-lg border ${s.status === "pending" ? "bg-yellow-50 border-yellow-400" : "bg-white"}`}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-semibold text-lg">{s.firstName} {s.lastName}</p>
+                          <p className="text-sm text-gray-600">Grade {s.grade} • {s.curriculum}</p>
+                          <div className="mt-2 flex gap-2 flex-wrap">
+                            <Badge variant={s.status === "enrolled" ? "default" : s.status === "pending" ? "secondary" : "destructive"}>
+                              {s.status}
+                            </Badge>
+                          </div>
                         </div>
+                        <Button size="sm" variant="ghost" onClick={() => openModal(s, "student")}>
+                          <Eye className="w-5 h-5" />
+                        </Button>
                       </div>
-                      <Button size="sm" variant="ghost" onClick={() => openModal(s, "student")}>
-                        <Eye className="w-5 h-5" />
-                      </Button>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
 
-          {/* Teachers List */}
+          {/* Teachers */}
           <Card>
             <CardHeader>
-              <CardTitle>Teacher Applications</CardTitle>
+              <CardTitle>Teacher Applications ({filteredTeachers.length})</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4 max-h-96 overflow-y-auto">
-                {filteredTeachers.map((t) => (
-                  <div key={t.id} className={`p-4 rounded-lg border ${t.status === "pending" ? "bg-yellow-50 border-yellow-400" : "bg-white"}`}>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-semibold text-lg">
-                          {t.personalInfo?.firstName} {t.personalInfo?.lastName}
-                        </p>
-                        <p className="text-sm text-gray-600">{t.personalInfo?.email}</p>
-                        <p className="text-sm text-gray-500">
-                          {t.subjects?.length || 0} subject{t.subjects?.length !== 1 ? "s" : ""} • {t.personalInfo?.yearsOfExperience} years exp.
-                        </p>
-                        <div className="mt-2 flex gap-2 flex-wrap">
-                          <Badge variant={t.status === "approved" ? "default" : t.status === "pending" ? "secondary" : "destructive"}>
-                            {t.status || "pending"}
-                          </Badge>
+                {filteredTeachers.length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">No teachers match filters</p>
+                ) : (
+                  filteredTeachers.map((t) => (
+                    <div
+                      key={t.id}
+                      className={`p-4 rounded-lg border ${t.status === "pending" ? "bg-yellow-50 border-yellow-400" : "bg-white"}`}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-semibold text-lg">
+                            {t.personalInfo?.firstName} {t.personalInfo?.lastName}
+                          </p>
+                          <p className="text-sm text-gray-600">{t.personalInfo?.email}</p>
+                          <p className="text-sm text-gray-500">
+                            {t.subjects?.length || 0} subject{t.subjects?.length !== 1 ? "s" : ""} • {t.personalInfo?.yearsOfExperience} yrs exp
+                          </p>
+                          <div className="mt-2 flex gap-2 flex-wrap">
+                            <Badge variant={t.status === "approved" ? "default" : t.status === "pending" ? "secondary" : "destructive"}>
+                              {t.status || "pending"}
+                            </Badge>
+                          </div>
                         </div>
+                        <Button size="sm" variant="ghost" onClick={() => openModal(t, "teacher")}>
+                          <Eye className="w-5 h-5" />
+                        </Button>
                       </div>
-                      <Button size="sm" variant="ghost" onClick={() => openModal(t, "teacher")}>
-                        <Eye className="w-5 h-5" />
-                      </Button>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
@@ -548,7 +628,7 @@ useEffect(() => {
             </TabsContent>
           </Tabs>
 
-          {(selectedItem?.status === "pending") && (
+          {selectedItem?.status === "pending" && (
             <DialogFooter className="mt-8">
               <Button
                 variant="destructive"
