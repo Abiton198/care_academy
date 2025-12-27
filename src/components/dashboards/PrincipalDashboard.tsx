@@ -9,6 +9,7 @@ import {
   updateDoc,
   serverTimestamp,
   getDoc,
+  setDoc
 } from "firebase/firestore";
 import { getStorage, ref, listAll, getDownloadURL } from "firebase/storage";
 
@@ -36,6 +37,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useNavigate } from "react-router-dom";
@@ -126,6 +128,19 @@ const PrincipalDashboard: React.FC = () => {
   const { logout } = useAuth();
   const navigate = useNavigate();
 
+
+// announcement
+  const [announcementExpanded, setAnnouncementExpanded] = useState(false);
+const [announcementTitle, setAnnouncementTitle] = useState("");
+const [announcementSubject, setAnnouncementSubject] = useState("");
+const [savingAnnouncement, setSavingAnnouncement] = useState(false);
+const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
+const [clearAfterSave, setClearAfterSave] = useState(false);
+const [announcementDate, setAnnouncementDate] = useState<any>(null);
+
+
+
+
   /* ---------------- Unique Filter Values ---------------- */
   const uniqueGrades = useMemo(() => {
     return Array.from(new Set(students.map((s) => s.grade).filter(Boolean))).sort();
@@ -166,6 +181,67 @@ const PrincipalDashboard: React.FC = () => {
       unsubTeachers();
     };
   }, []);
+
+  // anouncements
+useEffect(() => {
+  const unsub = onSnapshot(
+    doc(db, "announcements", "active"),
+    (snap) => {
+      if (!snap.exists()) return;
+
+      // 🚫 Do not repopulate right after clearing
+      if (clearAfterSave) {
+        setClearAfterSave(false);
+        return;
+      }
+
+      // 🚫 Do not override while typing
+      if (isEditingAnnouncement) return;
+
+      const data = snap.data();
+      setAnnouncementTitle(data.title ?? "");
+      setAnnouncementSubject(data.subject ?? "");
+      setAnnouncementDate(data.updatedAt);
+    }
+  );
+
+  return () => unsub();
+}, [isEditingAnnouncement, clearAfterSave]);
+
+const saveAnnouncement = async () => {
+  if (announcementTitle.trim() === "" || announcementSubject.trim() === "") {
+    alert("Please fill in both the title and subject.");
+    return;
+  }
+
+  setSavingAnnouncement(true); // Set loading state to true
+  try {
+    await setDoc(
+      doc(db, "announcements", "active"),
+      {
+        title: announcementTitle.trim(),
+        subject: announcementSubject.trim(),
+        updatedAt: serverTimestamp(),
+        createdBy: auth.currentUser?.email ?? "principal",
+      },
+      { merge: true }
+    );
+
+    // ✅ Clear inputs AFTER publish
+    setAnnouncementTitle("");
+    setAnnouncementSubject("");
+
+    // 🚫 Prevent snapshot from restoring values
+    setClearAfterSave(true);
+    setIsEditingAnnouncement(false);
+  } catch (error) {
+    console.error("Error saving announcement:", error);
+    alert("Failed to save announcement. Check permissions.");
+  } finally {
+    setSavingAnnouncement(false); // Reset loading state
+  }
+};
+
 
   /* ---------------- Approve / Reject ---------------- */
   const approveStudent = async (studentId: string) => {
@@ -533,6 +609,101 @@ const PrincipalDashboard: React.FC = () => {
           )}
         </Card>
       </div>
+
+{/* Announcements */}
+<Card className="mt-6">
+  <CardHeader
+    className="cursor-pointer bg-slate-50"
+    onClick={() => setAnnouncementExpanded(!announcementExpanded)}
+  >
+    <CardTitle className="flex justify-between items-center text-indigo-900">
+      <div className="flex items-center gap-2">
+        <Users className="w-5 h-5" />
+        <span>Manage School Announcements</span>
+      </div>
+      {announcementExpanded ? <ChevronUp /> : <ChevronDown />}
+    </CardTitle>
+  </CardHeader>
+
+  {announcementExpanded && (
+    <CardContent className="p-6 space-y-6">
+      {/* SECTION HEADING */}
+      <div className="border-b pb-2">
+        <h2 className="text-xl font-bold text-gray-800">Announcements</h2>
+        <p className="text-sm text-gray-500">Create or edit the message seen by all parents and teachers.</p>
+      </div>
+
+      {/* COMPOSER */}
+      <div className="space-y-4 bg-gray-50 p-4 rounded-lg border border-dashed border-gray-300">
+        <div>
+          <label className="text-xs font-semibold uppercase text-gray-500 mb-1 block">Announcement Title</label>
+          <Input
+            placeholder="e.g. School Inter-house Athletics 2024"
+            value={announcementTitle}
+            onChange={(e) => {
+              setIsEditingAnnouncement(true);
+              setAnnouncementTitle(e.target.value);
+            }}
+            className="bg-white"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold uppercase text-gray-500 mb-1 block">Message Body</label>
+          <textarea
+            className="flex min-h-[100px] w-full rounded-md border border-input bg-white px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            placeholder="Type your message here..."
+            value={announcementSubject}
+            onChange={(e) => {
+              setIsEditingAnnouncement(true);
+              setAnnouncementSubject(e.target.value);
+            }}
+          />
+        </div>
+
+        <div className="flex justify-end">
+          <Button 
+            onClick={saveAnnouncement} 
+            disabled={savingAnnouncement}
+            className="bg-indigo-600 hover:bg-indigo-700"
+          >
+            {savingAnnouncement ? "Publishing..." : "Publish Announcement"}
+          </Button>
+        </div>
+      </div>
+
+      {/* LIVE PREVIEW / SEND MESSAGE DISPLAY */}
+      {!isEditingAnnouncement && announcementTitle && (
+        <div className="mt-8">
+          <h3 className="text-xs font-semibold uppercase text-green-600 mb-2 flex items-center gap-1">
+            <CheckCircle className="w-3 h-3" /> Currently Live on Dashboards
+          </h3>
+          
+          <div className="p-6 bg-white border-2 border-indigo-100 rounded-xl shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
+            
+            <h4 className="text-xl font-bold text-indigo-900 mb-2">{announcementTitle}</h4>
+            <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{announcementSubject}</p>
+            
+            {/* FINE PRINT FOOTER */}
+            <div className="mt-6 pt-4 border-t border-gray-100 flex justify-between items-center text-[10px] uppercase tracking-widest text-gray-400 italic">
+              <div>
+                DATE: {announcementDate?.seconds 
+                  ? new Date(announcementDate.seconds * 1000).toLocaleDateString('en-GB', {
+                      day: '2-digit', month: 'long', year: 'numeric'
+                    }) 
+                  : "Recently Updated"}
+              </div>
+              <div className="font-bold">
+                SENDER: THE PRINCIPAL
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </CardContent>
+  )}
+</Card>
 
       {/* Review Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>

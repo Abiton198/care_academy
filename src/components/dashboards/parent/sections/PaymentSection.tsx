@@ -35,7 +35,7 @@ const VAT_RATE = 0.15;
 /* ================= TYPES ================= */
 interface Student {
   id: string;
-  firstName: string;
+  firstName: string; 
   lastName: string;
   subjects: string[];
   regFeePaid?: boolean;

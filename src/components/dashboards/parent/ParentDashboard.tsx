@@ -77,7 +77,7 @@ interface TimetableEntry {
 export default function ParentDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-
+  
   const [activeTab, setActiveTab] = useState("Overview");
   const [students, setStudents] = useState<Student[]>([]);
   const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
@@ -90,7 +90,7 @@ export default function ParentDashboard() {
   const [contact, setContact] = useState("");
   const [address, setAddress] = useState("");
   const [profileCompleted, setProfileCompleted] = useState(true);
-
+  
   const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState<1 | 2>(1);
   const sections = [
@@ -101,6 +101,13 @@ export default function ParentDashboard() {
     "Status",
     "Settings",
   ];
+  
+  // announcements
+const [announcement, setAnnouncement] = useState<{
+title: string;
+subject: string;
+updatedAt?: any;
+} | null>(null);
 
   /* ======================================================
      DATA FETCH
@@ -175,6 +182,20 @@ export default function ParentDashboard() {
     };
   }, [user?.uid]);
 
+
+
+
+//  listener logic 
+useEffect(() => {
+  const unsub = onSnapshot(doc(db, "announcements", "active"), (snap) => {
+    if (snap.exists()) {
+      setAnnouncement({ id: snap.id, ...snap.data() });
+    }
+  });
+  return () => unsub();
+}, []);
+
+
   /* ======================================================
      LOGOUT
   ===================================================== */
@@ -215,15 +236,16 @@ export default function ParentDashboard() {
   ===================================================== */
   const renderSection = () => {
     switch (activeTab) {
-      case "Overview":
-        return (
-          <OverviewSection
-            students={students}
-            selectedChildId={selectedChildId}
-            setSelectedChildId={setSelectedChildId}
-            timetable={timetable}
-          />
-        );
+    case "Overview":
+  return (
+    <OverviewSection
+      students={students}
+      selectedChildId={selectedChildId}
+      setSelectedChildId={setSelectedChildId}
+      timetable={timetable}
+      announcement={announcement} 
+    />
+  );
       case "Registration":
         return <RegistrationSection />;
       case "Payments":
@@ -376,13 +398,21 @@ function OverviewSection({
   selectedChildId,
   setSelectedChildId,
   timetable,
+  announcement,
 }: {
   students: Student[];
   selectedChildId: string | null;
   setSelectedChildId: (id: string) => void;
   timetable: TimetableEntry[];
+  announcement: {
+    title: string;
+    subject: string;
+    updatedAt?: any;
+  } | null;
 }) {
-  const selectedChild = students.find((s) => s.id === selectedChildId);
+  const selectedChild = useMemo(() => {
+    return students.find((s) => s.id === selectedChildId) || null;
+  }, [students, selectedChildId]);
 
   // Filter timetable for selected child (flexible matching for IGCSE)
   const childTimetable = useMemo(() => {
@@ -496,7 +526,50 @@ function OverviewSection({
             )}
           </CardContent>
         </Card>
-      </div>
+
+{/* ANNOUNCEMENTS SECTION */}
+{announcement && (
+  <div className="mb-8">
+    {/* SECTION HEADING */}
+    <div className="flex items-center gap-2 mb-4 ml-1">
+      <h2 className="text-xl font-bold text-gray-800">Announcements</h2>
+      <div className="h-px flex-1 bg-indigo-100 ml-2"></div>
+    </div>
+
+    <Card className="border-2 border-indigo-100 shadow-sm relative overflow-hidden bg-white">
+      {/* Decorative side bar */}
+      <div className="absolute top-0 left-0 w-1.5 h-full bg-indigo-500"></div>
+      
+      <CardHeader className="pb-2">
+        <CardTitle className="text-2xl font-bold text-indigo-900 flex items-center gap-2">
+          <span>{announcement.title}</span>
+        </CardTitle>
+      </CardHeader>
+
+      <CardContent>
+        <p className="text-gray-700 leading-relaxed whitespace-pre-wrap text-lg">
+          {announcement.subject}
+        </p>
+
+        {/* FINE PRINT FOOTER */}
+        <div className="mt-8 pt-4 border-t border-gray-100 flex justify-between items-center text-[10px]  tracking-widest text-gray-400 italic">
+          <div>
+             {announcement.updatedAt?.seconds 
+              ? new Date(announcement.updatedAt.seconds * 1000).toLocaleDateString('en-GB', {
+                  day: '2-digit', month: 'long', year: 'numeric'
+                }) 
+              : "Recently Published"}
+          </div>
+          <div className="font-bold text-indigo-400">
+            The Principal
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  </div>
+)}
+
+</div>
     </div>
   );
 }
