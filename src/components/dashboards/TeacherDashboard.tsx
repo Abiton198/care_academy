@@ -1,9 +1,6 @@
 "use client";
 
-/* ======================================================
-   IMPORTS
-====================================================== */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { db } from "@/lib/firebaseConfig";
 import {
   collection,
@@ -13,13 +10,14 @@ import {
   doc,
   updateDoc,
   serverTimestamp,
+  getDocs,
+  orderBy,
+  addDoc,
+  setDoc,
+  arrayUnion,
+  getDoc,
 } from "firebase/firestore";
-import {
-  getAuth,
-  onAuthStateChanged,
-  signOut,
-  User,
-} from "firebase/auth";
+import { getAuth, onAuthStateChanged, signOut, User } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 
 /* UI Components */
@@ -33,20 +31,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 /* Icons */
 import {
-  Loader2,
-  LogOut,
-  Edit2,
-  Save,
-  ExternalLink,
-  Calendar,
-  Clock,
-  Video,
-  Link,
-  Check,
-  X,
-  Sparkles,
-  BookOpen,
-  Users,
+  Loader2, LogOut, Edit2, Save, ExternalLink, Calendar, Clock, Video,
+  Link, Check, X, Sparkles, BookOpen, Send, MessageCircle, Users
 } from "lucide-react";
 
 /* ======================================================
@@ -58,7 +44,7 @@ interface TeacherProfile {
   email?: string;
   phone?: string;
   bio?: string;
-  subjects?: { name: string; curriculum: "CAPS" | "Cambridge" }[];
+  subjects?: { name: string; curriculum: string }[];
   status?: "pending" | "approved" | "rejected";
 }
 
@@ -68,14 +54,39 @@ interface TimetableSlot {
   time: string;
   subject: string;
   grade: string;
-  curriculum: "CAPS" | "Cambridge";
+  curriculum: string;
   zoomLink?: string;
   classroomLink?: string;
 }
 
-/* ======================================================
-   COMPONENT
-====================================================== */
+interface Student {
+  id: string;
+  firstName: string;
+  lastName: string;
+  parentId: string;
+  linkedParentId?: string;
+  subjects: string[];
+  grade?: string;
+}
+
+interface Conversation {
+  id: string;
+  participants: string[];
+  subject: string;
+  lastMessage: string;
+  lastMessageTime: any;
+  studentId: string;
+}
+
+interface Message {
+  id: string;
+  text: string;
+  sender: string;
+  timestamp: any;
+  readBy: string[];
+  participants: string[];
+}
+
 const TeacherDashboard: React.FC = () => {
   const navigate = useNavigate();
   const auth = getAuth();
@@ -83,9 +94,19 @@ const TeacherDashboard: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<TeacherProfile | null>(null);
   const [timetable, setTimetable] = useState<TimetableSlot[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Editing
+  // Chat State
+  const [chatOpen, setChatOpen] = useState(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [totalUnread, setTotalUnread] = useState(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Editing State
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editProfile, setEditProfile] = useState<Partial<TeacherProfile>>({});
   const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
@@ -94,31 +115,17 @@ const TeacherDashboard: React.FC = () => {
   const teacherFullName = `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim();
 
   /* ======================================================
-     AUTH LISTENER
+     1. AUTH & PROFILE
   ===================================================== */
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (firebaseUser) => {
-      if (!firebaseUser) {
-        navigate("/login");
-      } else {
-        setUser(firebaseUser);
-      }
-    });
+    const unsub = onAuthStateChanged(auth, (u) => { u ? setUser(u) : navigate("/login"); });
     return () => unsub();
   }, [auth, navigate]);
 
-  /* ======================================================
-     PROFILE LISTENER
-  ===================================================== */
   useEffect(() => {
     if (!user) return;
-
-    const profileQuery = query(
-      collection(db, "teacherApplications"),
-      where("uid", "==", user.uid)
-    );
-
-    const unsub = onSnapshot(profileQuery, (snap) => {
+    const qProfile = query(collection(db, "teacherApplications"), where("uid", "==", user.uid));
+    const unsub = onSnapshot(qProfile, (snap) => {
       if (!snap.empty) {
         const data = snap.docs[0].data();
         setProfile({
@@ -130,41 +137,109 @@ const TeacherDashboard: React.FC = () => {
           subjects: data.subjects,
           status: data.status,
         });
-        setEditProfile({
-          phone: data.personalInfo?.phone || "",
-          bio: data.personalInfo?.bio || "",
-        });
+        setEditProfile({ phone: data.personalInfo?.phone || "", bio: data.personalInfo?.bio || "" });
       }
       setLoading(false);
     });
-
     return () => unsub();
   }, [user]);
 
   /* ======================================================
-     TIMETABLE LISTENER (with links)
+     2. FETCH DATA (TIMETABLE & STUDENTS)
   ===================================================== */
   useEffect(() => {
-    if (!teacherFullName) return;
+    if (!teacherFullName || !profile?.subjects) return;
 
-    const q = query(
-      collection(db, "timetable"),
-      where("teacherName", "==", teacherFullName)
-    );
-
-    const unsub = onSnapshot(q, (snap) => {
-      const slots = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as TimetableSlot),
-      }));
-      setTimetable(slots);
+    const qTime = query(collection(db, "timetable"), where("teacherName", "==", teacherFullName));
+    const unsubTime = onSnapshot(qTime, (snap) => {
+      setTimetable(snap.docs.map(d => ({ id: d.id, ...d.data() } as TimetableSlot)));
     });
 
-    return () => unsub();
-  }, [teacherFullName]);
+    const subjectNames = profile.subjects.map(s => s.name);
+    const qStud = query(collection(db, "students"), where("subjects", "array-contains-any", subjectNames));
+    const unsubStud = onSnapshot(qStud, (snap) => {
+      setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
+    });
+
+    return () => { unsubTime(); unsubStud(); };
+  }, [teacherFullName, profile?.subjects]);
 
   /* ======================================================
-     ACTIONS
+     3. CHAT LOGIC (TEACHER TO PARENT)
+  ===================================================== */
+  useEffect(() => {
+    if (!user) return;
+    const qConv = query(collection(db, "conversations"), where("participants", "array-contains", user.uid));
+    const unsubConv = onSnapshot(qConv, (snap) => {
+      setConversations(snap.docs.map(d => ({ id: d.id, ...d.data() } as Conversation)));
+      setTotalUnread(snap.docs.length); 
+    });
+    return () => unsubConv();
+  }, [user]);
+
+  useEffect(() => {
+    if (!activeConvId || !user) return;
+    const qMsgs = query(collection(db, "conversations", activeConvId, "messages"), orderBy("timestamp", "asc"));
+    return onSnapshot(qMsgs, (snap) => {
+      setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() } as Message)));
+    });
+  }, [activeConvId, user]);
+
+  const startConversation = async (student: Student, subject: string) => {
+    if (!user) return;
+    const parentId = student.parentId || student.linkedParentId;
+    if (!parentId) return alert("Parent not found for this student.");
+
+    const convId = `${parentId}_${user.uid}_${student.id}`;
+    
+    // Check if we already have this conversation in our local list to avoid permission errors on getDoc
+    const existing = conversations.find(c => c.id === convId);
+
+    if (!existing) {
+      try {
+        await setDoc(doc(db, "conversations", convId), {
+          participants: [parentId, user.uid],
+          subject,
+          studentId: student.id,
+          createdAt: serverTimestamp(),
+          lastMessage: "Conversation initiated",
+          lastMessageTime: serverTimestamp(),
+        }, { merge: true });
+      } catch (err) {
+        console.error("Error starting conversation:", err);
+      }
+    }
+
+    setActiveConvId(convId);
+    setChatOpen(true);
+  };
+
+  const sendChatMessage = async () => {
+    if (!newMessage.trim() || !activeConvId || !user) return;
+    const text = newMessage.trim();
+    setNewMessage("");
+
+    const activeConv = conversations.find(c => c.id === activeConvId);
+    if (!activeConv) return;
+
+    const convRef = doc(db, "conversations", activeConvId);
+    
+    await addDoc(collection(convRef, "messages"), {
+      text,
+      sender: user.uid,
+      participants: activeConv.participants, // Use participants from conversation doc
+      timestamp: serverTimestamp(),
+      readBy: [user.uid]
+    });
+
+    await updateDoc(convRef, { 
+        lastMessage: text, 
+        lastMessageTime: serverTimestamp() 
+    });
+  };
+
+  /* ======================================================
+     4. ACTIONS
   ===================================================== */
   const handleSaveProfile = async () => {
     if (!user) return;
@@ -180,19 +255,6 @@ const TeacherDashboard: React.FC = () => {
     }
   };
 
-  const startEditingLinks = (slot: TimetableSlot) => {
-    setEditingSlotId(slot.id);
-    setEditLinks({
-      zoomLink: slot.zoomLink || "",
-      classroomLink: slot.classroomLink || "",
-    });
-  };
-
-  const cancelEditingLinks = () => {
-    setEditingSlotId(null);
-    setEditLinks({});
-  };
-
   const saveLinks = async () => {
     if (!editingSlotId) return;
     await updateDoc(doc(db, "timetable", editingSlotId), {
@@ -200,373 +262,201 @@ const TeacherDashboard: React.FC = () => {
       classroomLink: editLinks.classroomLink?.trim() || null,
       updatedAt: serverTimestamp(),
     });
-    cancelEditingLinks();
+    setEditingSlotId(null);
   };
 
-  const handleLogout = async () => {
-    await signOut(auth);
-    navigate("/");
-  };
+  if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
 
-  /* ======================================================
-     OVERVIEW STATS
-  ===================================================== */
-  const today = new Date().toLocaleString("en-us", { weekday: "long" });
-  const todayLessons = timetable.filter((s) => s.day === today);
-  const upcomingClassToday = todayLessons.sort((a, b) => a.time.localeCompare(b.time))[0];
-
-  /* ======================================================
-     GUARDS
-  ===================================================== */
-  if (!user || loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-100 to-purple-100">
-        <Loader2 className="w-16 h-16 animate-spin text-indigo-600" />
-      </div>
-    );
-  }
-
-  if (profile?.status !== "approved") {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-100 via-pink-50 to-indigo-100 flex items-center justify-center p-6">
-        <Card className="max-w-2xl w-full p-12 text-center shadow-2xl bg-white/90 backdrop-blur">
-          <Sparkles className="w-16 h-16 text-yellow-500 mx-auto mb-6" />
-          <CardTitle className="text-4xl font-bold text-indigo-800 mb-6">
-            Application Under Review
-          </CardTitle>
-          <p className="text-xl text-gray-700 mb-8">
-            Your application is being reviewed. You'll get access once approved.
-          </p>
-          <Button size="lg" variant="outline" onClick={handleLogout}>
-            Logout
-          </Button>
-        </Card>
-      </div>
-    );
-  }
-
-  /* ======================================================
-     MAIN UI
-  ===================================================== */
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 pb-20">
       {/* Header */}
-      <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white shadow-2xl">
-        <div className="max-w-7xl mx-auto px-6 py-10 flex justify-between items-center">
+      <div className="bg-indigo-600 text-white shadow-xl">
+        <div className="max-w-7xl mx-auto px-6 py-8 flex justify-between items-center">
           <div>
-            <h1 className="text-5xl font-extrabold flex items-center gap-4">
-              <Sparkles className="w-12 h-12 text-yellow-300" />
-              Teacher Dashboard
-            </h1>
-            <p className="mt-3 text-2xl text-indigo-100">
-              Welcome back, <span className="font-bold text-white">{teacherFullName}</span>!
-            </p>
+            <h1 className="text-3xl font-bold flex items-center gap-2"><Sparkles /> Teacher Dashboard</h1>
+            <p className="opacity-80">Welcome back, {teacherFullName}</p>
           </div>
-          <Button variant="secondary" size="lg" onClick={handleLogout}>
-            <LogOut className="w-6 h-6 mr-3" /> Logout
-          </Button>
+          <Button variant="secondary" onClick={() => signOut(auth)}><LogOut className="mr-2" /> Logout</Button>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto p-8">
         <Tabs defaultValue="overview" className="space-y-8">
-          <TabsList className="grid grid-cols-4 w-full max-w-4xl mx-auto bg-white/80 backdrop-blur shadow-xl rounded-2xl p-3">
-            <TabsTrigger value="overview" className="text-lg font-semibold">Overview</TabsTrigger>
-            <TabsTrigger value="links" className="text-lg font-semibold">Manage Links</TabsTrigger>
-            <TabsTrigger value="timetable" className="text-lg font-semibold">Timetable</TabsTrigger>
-            <TabsTrigger value="profile" className="text-lg font-semibold">Profile</TabsTrigger>
+          <TabsList className="bg-white p-1 rounded-xl shadow-md inline-flex">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="students">Students</TabsTrigger>
+            <TabsTrigger value="links">Links</TabsTrigger>
+            <TabsTrigger value="timetable">Timetable</TabsTrigger>
+            <TabsTrigger value="profile">Profile</TabsTrigger>
           </TabsList>
 
-          {/* Overview */}
-          <TabsContent value="overview" className="space-y-8">
+          {/* OVERVIEW */}
+          <TabsContent value="overview">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {/* Current Week Lessons */}
-              <Card className="bg-gradient-to-br from-teal-500 to-cyan-600 text-white shadow-2xl hover:scale-105 transition">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-4 text-2xl">
-                    <BookOpen className="w-10 h-10" /> Current Week Lessons
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-6xl font-extrabold">{timetable.length}</p>
-                  <p className="mt-3 text-teal-100 text-lg">Total scheduled classes</p>
-                </CardContent>
+              <Card className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
+                <CardHeader><CardTitle>Classes This Week</CardTitle></CardHeader>
+                <CardContent><p className="text-5xl font-bold">{timetable.length}</p></CardContent>
               </Card>
-
-              {/* Upcoming Class Today */}
-              <Card className="bg-gradient-to-br from-orange-500 to-red-600 text-white shadow-2xl hover:scale-105 transition">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-4 text-2xl">
-                    <Clock className="w-10 h-10" /> Next Class Today
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {upcomingClassToday ? (
-                    <>
-                      <p className="text-4xl font-bold">{upcomingClassToday.time}</p>
-                      <p className="mt-2 text-orange-100">
-                        {upcomingClassToday.subject} • {upcomingClassToday.grade}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-2xl text-orange-100">No classes today</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Total Lessons Count */}
-              <Card className="bg-gradient-to-br from-purple-500 to-pink-600 text-white shadow-2xl hover:scale-105 transition">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-4 text-2xl">
-                    <Calendar className="w-10 h-10" /> Total Lessons This Week
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-6xl font-extrabold">{timetable.length}</p>
-                  <p className="mt-3 text-purple-100 text-lg">Across all days</p>
-                </CardContent>
+              <Card className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white">
+                <CardHeader><CardTitle>Total Students</CardTitle></CardHeader>
+                <CardContent><p className="text-5xl font-bold">{students.length}</p></CardContent>
               </Card>
             </div>
           </TabsContent>
 
-          {/* Manage Links */}
-          <TabsContent value="links">
-            <Card className="shadow-2xl border-0">
-              <CardHeader className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-t-2xl">
-                <CardTitle className="text-4xl font-bold flex items-center gap-4">
-                  <Link className="w-12 h-12" /> Manage Class Links
-                </CardTitle>
-                <p className="text-lg text-teal-100 mt-2">
-                  Set Zoom and Classroom links for your scheduled classes
-                </p>
-              </CardHeader>
-              <CardContent className="p-10">
-                {timetable.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {timetable.map((slot) => (
-                      <div
-                        key={slot.id}
-                        className="p-8 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl shadow-lg hover:shadow-2xl transition"
-                      >
-                        <div className="flex justify-between items-start mb-6">
-                          <div>
-                            <h3 className="text-2xl font-bold text-indigo-900">
-                              {slot.subject}
-                            </h3>
-                            <p className="text-lg text-purple-800">
-                              {slot.grade} • {slot.curriculum} • {slot.day} {slot.time}
-                            </p>
-                          </div>
-                          <Button
-                            onClick={() => startEditingLinks(slot)}
-                            variant="secondary"
-                            size="lg"
-                          >
-                            <Edit2 className="w-6 h-6 mr-2" /> Edit Links
-                          </Button>
-                        </div>
-
-                        {editingSlotId === slot.id ? (
-                          <div className="space-y-5 p-5 bg-white/70 rounded-xl">
-                            <div>
-                              <Label className="text-lg font-medium flex items-center gap-2">
-                                <Video className="w-6 h-6 text-indigo-600" /> Zoom Meeting Link
-                              </Label>
-                              <Input
-                                value={editLinks.zoomLink}
-                                onChange={(e) => setEditLinks({ ...editLinks, zoomLink: e.target.value })}
-                                placeholder="https://zoom.us/j/..."
-                                className="mt-2"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-lg font-medium flex items-center gap-2">
-                                <Link className="w-6 h-6 text-purple-600" /> Classroom / LMS Link
-                              </Label>
-                              <Input
-                                value={editLinks.classroomLink}
-                                onChange={(e) => setEditLinks({ ...editLinks, classroomLink: e.target.value })}
-                                placeholder="Google Classroom, Teams, Moodle..."
-                                className="mt-2"
-                              />
-                            </div>
-                            <div className="flex gap-4">
-                              <Button onClick={saveLinks} className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600">
-                                <Check className="w-5 h-5 mr-2" /> Save Links
-                              </Button>
-                              <Button variant="outline" onClick={cancelEditingLinks} className="flex-1">
-                                <X className="w-5 h-5 mr-2" /> Cancel
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-5">
-                            <div>
-                              <Label className="text-lg flex items-center gap-2">
-                                <Video className="w-5 h-5" /> Zoom Link
-                              </Label>
-                              {slot.zoomLink ? (
-                                <a
-                                  href={slot.zoomLink}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="block mt-2 text-blue-600 underline hover:text-blue-800 flex items-center gap-2"
-                                >
-                                  {slot.zoomLink} <ExternalLink className="w-4 h-4" />
-                                </a>
-                              ) : (
-                                <p className="mt-2 text-gray-500 italic">Not set</p>
-                              )}
-                            </div>
-                            <div>
-                              <Label className="text-lg flex items-center gap-2">
-                                <Link className="w-5 h-5" /> Classroom Link
-                              </Label>
-                              {slot.classroomLink ? (
-                                <a
-                                  href={slot.classroomLink}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="block mt-2 text-blue-600 underline hover:text-blue-800 flex items-center gap-2"
-                                >
-                                  {slot.classroomLink} <ExternalLink className="w-4 h-4" />
-                                </a>
-                              ) : (
-                                <p className="mt-2 text-gray-500 italic">Not set</p>
-                              )}
-                            </div>
-                          </div>
-                        )}
+          {/* STUDENTS */}
+          <TabsContent value="students">
+            <Card className="shadow-xl">
+              <CardHeader><CardTitle className="flex items-center gap-2"><Users /> My Students</CardTitle></CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {students.map(s => (
+                    <div key={s.id} className="p-5 border rounded-2xl bg-white shadow-sm flex justify-between items-center hover:shadow-md transition">
+                      <div>
+                        <p className="font-bold text-indigo-900">{s.firstName} {s.lastName}</p>
+                        <p className="text-xs text-gray-500">{s.grade} • {s.subjects.join(", ")}</p>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-20">
-                    <Calendar className="w-24 h-24 text-gray-300 mx-auto mb-8" />
-                    <h3 className="text-3xl font-bold text-gray-700 mb-4">No Classes Scheduled Yet</h3>
-                    <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-                      Your timetable is empty. Once the principal assigns your classes, 
-                      you'll be able to set Zoom and classroom links here.
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            
-          </TabsContent>
-
-          {/* Timetable */}
-          <TabsContent value="timetable">
-            <Card className="shadow-2xl overflow-hidden border-0">
-              <CardHeader className="bg-gradient-to-r from-rose-500 to-pink-600 text-white">
-                <CardTitle className="text-4xl font-bold flex items-center gap-5">
-                  <Calendar className="w-12 h-12" /> My Weekly Timetable
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-10">
-                {timetable.length > 0 ? (
-                  <div className="overflow-x-auto rounded-2xl shadow-inner bg-white">
-                    <table className="w-full">
-                      <thead className="bg-gradient-to-r from-indigo-100 to-purple-100">
-                        <tr>
-                          <th className="p-6 text-left text-indigo-900 font-bold text-lg">Day</th>
-                          <th className="p-6 text-left text-indigo-900 font-bold text-lg">Time</th>
-                          <th className="p-6 text-left text-indigo-900 font-bold text-lg">Subject</th>
-                          <th className="p-6 text-left text-indigo-900 font-bold text-lg">Grade</th>
-                          <th className="p-6 text-left text-indigo-900 font-bold text-lg">Curriculum</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {timetable.map((slot) => (
-                          <tr key={slot.id} className="hover:bg-gradient-to-r hover:from-indigo-50 hover:to-purple-50 transition">
-                            <td className="p-6 font-semibold text-indigo-800 text-lg">{slot.day}</td>
-                            <td className="p-6 text-gray-700">{slot.time}</td>
-                            <td className="p-6 font-medium text-indigo-900">{slot.subject}</td>
-                            <td className="p-6">{slot.grade}</td>
-                            <td className="p-6">
-                              <Badge variant={slot.curriculum === "CAPS" ? "default" : "secondary"}>
-                                {slot.curriculum}
-                              </Badge>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="text-center py-24">
-                    <Calendar className="w-28 h-28 text-gray-300 mx-auto mb-8" />
-                    <h3 className="text-3xl font-bold text-gray-700 mb-4">Timetable Not Set</h3>
-                    <p className="text-xl text-gray-600">Please contact the principal to schedule your classes.</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Profile */}
-          <TabsContent value="profile">
-            <Card className="shadow-2xl border-0">
-              <CardHeader className="bg-gradient-to-r from-indigo-600 to-purple-700 text-white rounded-t-2xl">
-                <CardTitle className="text-4xl font-bold flex justify-between items-center">
-                  My Profile
-                  {!isEditingProfile ? (
-                    <Button onClick={() => setIsEditingProfile(true)} variant="secondary" size="lg">
-                      <Edit2 className="w-6 h-6 mr-3" /> Edit Profile
-                    </Button>
-                  ) : (
-                    <div className="flex gap-4">
-                      <Button onClick={handleSaveProfile} size="lg">
-                        <Save className="w-6 h-6 mr-3" /> Save Changes
-                      </Button>
-                      <Button variant="secondary" size="lg" onClick={() => setIsEditingProfile(false)}>
-                        <X className="w-6 h-6 mr-3" /> Cancel
+                      <Button size="sm" className="rounded-full" onClick={() => startConversation(s, s.subjects[0])}>
+                        <MessageCircle size={16} className="mr-2" /> Message Parent
                       </Button>
                     </div>
-                  )}
-                </CardTitle>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* MANAGE LINKS */}
+          <TabsContent value="links">
+            <Card className="shadow-xl">
+              <CardHeader><CardTitle>Manage Class Links</CardTitle></CardHeader>
+              <CardContent className="grid gap-6">
+                {timetable.map(slot => (
+                  <div key={slot.id} className="p-6 border rounded-2xl bg-gray-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                      <h3 className="font-bold text-lg">{slot.subject}</h3>
+                      <p className="text-sm text-gray-600">{slot.day} {slot.time} • {slot.grade}</p>
+                      {slot.zoomLink && <a href={slot.zoomLink} target="_blank" className="text-xs text-blue-600 underline block mt-1">{slot.zoomLink}</a>}
+                    </div>
+                    {editingSlotId === slot.id ? (
+                      <div className="flex-1 w-full max-w-md space-y-2">
+                        <Input placeholder="Zoom Link" value={editLinks.zoomLink} onChange={e => setEditLinks({...editLinks, zoomLink: e.target.value})} />
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={saveLinks}>Save</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditingSlotId(null)}>Cancel</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button variant="outline" onClick={() => { setEditingSlotId(slot.id); setEditLinks({ zoomLink: slot.zoomLink || "" }); }}>Edit Link</Button>
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* TIMETABLE */}
+          <TabsContent value="timetable">
+            <Card className="shadow-xl overflow-hidden">
+              <table className="w-full text-left">
+                <thead className="bg-indigo-50">
+                  <tr><th className="p-4 font-bold text-indigo-900">Day</th><th className="p-4 font-bold text-indigo-900">Time</th><th className="p-4 font-bold text-indigo-900">Subject</th><th className="p-4 font-bold text-indigo-900">Grade</th></tr>
+                </thead>
+                <tbody>
+                  {timetable.map(t => (
+                    <tr key={t.id} className="border-t hover:bg-gray-50">
+                      <td className="p-4 font-medium">{t.day}</td>
+                      <td className="p-4 text-gray-600">{t.time}</td>
+                      <td className="p-4 text-indigo-700 font-bold">{t.subject}</td>
+                      <td className="p-4">{t.grade}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          </TabsContent>
+
+          {/* PROFILE (FULL UI RESTORED) */}
+          <TabsContent value="profile">
+            <Card className="shadow-xl">
+              <CardHeader className="flex flex-row justify-between items-center bg-indigo-50 rounded-t-xl">
+                <CardTitle>My Profile</CardTitle>
+                {!isEditingProfile ? (
+                  <Button onClick={() => setIsEditingProfile(true)} size="sm"><Edit2 size={16} className="mr-2" /> Edit</Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button onClick={handleSaveProfile} size="sm"><Save size={16} className="mr-2" /> Save</Button>
+                    <Button onClick={() => setIsEditingProfile(false)} variant="ghost" size="sm">Cancel</Button>
+                  </div>
+                )}
               </CardHeader>
-              <CardContent className="p-10 space-y-10">
-                <div className="grid md:grid-cols-2 gap-10">
-                  <div><Label className="text-xl">First Name</Label><Input value={profile?.firstName} disabled className="text-xl mt-2" /></div>
-                  <div><Label className="text-xl">Last Name</Label><Input value={profile?.lastName} disabled className="text-xl mt-2" /></div>
-                  <div><Label className="text-xl">Email</Label><Input value={profile?.email} disabled className="text-xl mt-2" /></div>
+              <CardContent className="p-8 space-y-8">
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div><Label>First Name</Label><Input value={profile?.firstName} disabled /></div>
+                  <div><Label>Last Name</Label><Input value={profile?.lastName} disabled /></div>
+                  <div><Label>Email</Label><Input value={profile?.email} disabled /></div>
                   <div>
-                    <Label className="text-xl">Phone Number</Label>
-                    <Input
-                      value={isEditingProfile ? editProfile.phone : profile?.phone || "Not set"}
-                      onChange={(e) => setEditProfile({ ...editProfile, phone: e.target.value })}
-                      disabled={!isEditingProfile}
-                      className="text-xl mt-2"
-                    />
+                    <Label>Phone Number</Label>
+                    <Input value={isEditingProfile ? editProfile.phone : profile?.phone} disabled={!isEditingProfile} onChange={e => setEditProfile({...editProfile, phone: e.target.value})} />
                   </div>
                 </div>
-
                 <div>
-                  <Label className="text-xl">Bio / About Me</Label>
-                  <Textarea
-                    rows={8}
-                    value={isEditingProfile ? editProfile.bio : profile?.bio || "Add a bio to help students know you better!"}
-                    onChange={(e) => setEditProfile({ ...editProfile, bio: e.target.value })}
-                    disabled={!isEditingProfile}
-                    className="text-lg mt-3"
-                  />
+                  <Label>Bio / About Me</Label>
+                  <Textarea rows={4} value={isEditingProfile ? editProfile.bio : profile?.bio} disabled={!isEditingProfile} onChange={e => setEditProfile({...editProfile, bio: e.target.value})} />
                 </div>
-
                 <div>
-                  <Label className="text-xl">Subjects I Teach</Label>
-                  <div className="flex flex-wrap gap-4 mt-5">
+                  <Label>Subjects I Teach</Label>
+                  <div className="flex flex-wrap gap-2 mt-2">
                     {profile?.subjects?.map((sub, i) => (
-                      <Badge key={i} variant="secondary" className="text-xl py-3 px-6">
-                        {sub.name} <span className="ml-2 opacity-80">({sub.curriculum})</span>
-                      </Badge>
-                    )) || <p className="text-gray-600 text-lg">No subjects listed yet.</p>}
+                      <Badge key={i} variant="secondary" className="py-2 px-4">{sub.name} ({sub.curriculum})</Badge>
+                    ))}
                   </div>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
+      </div>
+
+      {/* FLOATING CHAT WIDGET */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+        {chatOpen && (
+          <div className="mb-4 w-96 h-[500px] bg-white rounded-2xl shadow-2xl border flex flex-col overflow-hidden animate-in slide-in-from-bottom-5">
+            <div className="p-4 bg-indigo-600 text-white flex justify-between items-center">
+              <span className="font-bold">{activeConvId ? "Chatting with Parent" : "Messages"}</span>
+              <button onClick={() => { setChatOpen(false); setActiveConvId(null); }}><X size={20} /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto bg-gray-50 p-4 space-y-3">
+              {activeConvId ? (
+                messages.map(m => (
+                  <div key={m.id} className={`flex ${m.sender === user?.uid ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${m.sender === user?.uid ? "bg-indigo-600 text-white" : "bg-white border text-gray-800"}`}>
+                      {m.text}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                conversations.map(c => (
+                  <div key={c.id} onClick={() => setActiveConvId(c.id)} className="p-4 border rounded-xl bg-white cursor-pointer hover:bg-indigo-50 transition">
+                    <p className="font-bold text-indigo-900">{c.subject}</p>
+                    <p className="text-sm text-gray-500 truncate">{c.lastMessage}</p>
+                  </div>
+                ))
+              )}
+              <div ref={scrollRef} />
+            </div>
+            {activeConvId && (
+              <div className="p-3 border-t bg-white flex gap-2">
+                <Input placeholder="Type message..." value={newMessage} onChange={e => setNewMessage(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendChatMessage()} />
+                <Button size="icon" onClick={sendChatMessage} className="bg-indigo-600"><Send size={18} /></Button>
+              </div>
+            )}
+          </div>
+        )}
+        <button onClick={() => setChatOpen(!chatOpen)} className="bg-indigo-600 text-white p-5 rounded-full shadow-2xl relative hover:scale-105 transition">
+          <MessageCircle size={28} />
+          {totalUnread > 0 && <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] w-6 h-6 rounded-full flex items-center justify-center border-2 border-white">{totalUnread}</span>}
+        </button>
       </div>
     </div>
   );
