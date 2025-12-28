@@ -118,7 +118,7 @@ const TeacherDashboard: React.FC = () => {
      1. AUTH & PROFILE
   ===================================================== */
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => { u ? setUser(u) : navigate("/login"); });
+    const unsub = onAuthStateChanged(auth, (u) => { u ? setUser(u) : navigate("/"); });
     return () => unsub();
   }, [auth, navigate]);
 

@@ -182,7 +182,7 @@ const StudentDashboard: React.FC = () => {
             <Button variant="outline" size="lg" onClick={() => navigate("/parent-dashboard")}>
               <Home className="w-5 h-5 mr-2" /> Parent Portal
             </Button>
-            <Button variant="destructive" size="lg" onClick={() => navigate("/login")}>
+            <Button variant="destructive" size="lg" onClick={() => navigate("/")}>
               <LogOut className="w-5 h-5 mr-2" /> Logout
             </Button>
           </div>
