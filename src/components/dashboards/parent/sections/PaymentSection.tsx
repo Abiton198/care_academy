@@ -1,197 +1,347 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { useAuth } from "@/components/auth/AuthProvider";
+import React, { useState, useEffect } from "react";
+import { db } from "@/lib/firebaseConfig";
 import {
   collection,
   query,
   where,
-  getDocs,
-  orderBy,
+  onSnapshot,
+  doc,
+  updateDoc,
+  serverTimestamp,
 } from "firebase/firestore";
-import { db } from "@/lib/firebaseConfig";
+import { useAuth } from "@/components/auth/AuthProvider";
 
-import { Card } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
-import { Tag, Percent } from "lucide-react";
+import { 
+  ChevronDown, ChevronUp, CreditCard, DollarSign, 
+  Receipt, Tag, Ticket, CheckCircle, Info 
+} from "lucide-react";
+import md5 from "md5";
 
-/* ================= SAMPLE PROMO CODES ================= */
-const SAMPLE_PROMO_CODES = [
-  { code: "WELCOME10", discount: 10 },
-  { code: "SAVE15", discount: 15 },
-  { code: "HOLIDAY20", discount: 20 },
-  { code: "VIP25", discount: 25 },
-];
+/* ===========================================================
+   CONSTANTS & RATES
+=========================================================== */
+const MONTHLY_TUITION = 1000; 
+const REGISTRATION_FEE = 500;
+const TRANSACTION_FEE_RATE = 0.05; // 5%
+const VAT_RATE = 0.15; // 15%
 
-/* ================= CONSTANTS ================= */
-const REG_FEE = 350;
-const TRANSACTION_FEE_RATE = 0.05;
-const VAT_RATE = 0.15;
+// Valid promo codes for this logic
+const VALID_PROMOS: Record<string, number> = {
+  "SAVE10": 0.10,
+  "EXAMREADY": 0.15,
+  "WELCOME20": 0.20,
+};
 
-/* ================= TYPES ================= */
-interface Student {
-  id: string;
-  firstName: string; 
-  lastName: string;
-  subjects: string[];
-  regFeePaid?: boolean;
-}
+/* ===========================================================
+   PAYFAST CONFIG
+=========================================================== */
+const PAYFAST_MERCHANT_ID = import.meta.env.VITE_PAYFAST_MERCHANT_ID || "";
+const PAYFAST_MERCHANT_KEY = import.meta.env.VITE_PAYFAST_MERCHANT_KEY || "";
+const PAYFAST_PASSPHRASE = import.meta.env.VITE_PAYFAST_PASSPHRASE || "";
+const PAYFAST_SANDBOX = import.meta.env.VITE_PAYFAST_SANDBOX === "true";
+const PAYFAST_URL = PAYFAST_SANDBOX ? "https://sandbox.payfast.co.za/eng/process" : "https://www.payfast.co.za/eng/process";
 
-interface Payment {
-  id: string;
-  amount: number;
-  timestamp: any;
-}
-
-/* ================= COMPONENT ================= */
 export default function PaymentsSection() {
   const { user } = useAuth();
 
-  const [students, setStudents] = useState<Student[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [selectedStudent, setSelectedStudent] = useState("");
+  const [students, setStudents] = useState<any[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState<string>("all");
+  const [paymentType, setPaymentType] = useState<"all" | "tuition" | "registration">("all");
+  const [bankDetails, setBankDetails] = useState<any>({});
+  const [autoPayEnabled, setAutoPayEnabled] = useState(false);
+  const [autoPayItems, setAutoPayItems] = useState<string[]>(["tuition"]); // Options: tuition, registration
+  const [loading, setLoading] = useState(true);
 
-  const [hasPromo, setHasPromo] = useState(false);
+  // Promo State
   const [promoInput, setPromoInput] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState("");
   const [promoDiscount, setPromoDiscount] = useState(0);
-  const [promoValid, setPromoValid] = useState(false);
-  const [promoError, setPromoError] = useState("");
 
-  /* ================= LOAD DATA ================= */
+  // Collapsible states
+  const [payNowOpen, setPayNowOpen] = useState(true);
+  const [autoPayOpen, setAutoPayOpen] = useState(false);
+
   useEffect(() => {
     if (!user?.uid) return;
 
-    const load = async () => {
-      const sSnap = await getDocs(
-        query(collection(db, "students"), where("parentId", "==", user.uid))
-      );
-      setStudents(sSnap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
+    const studentsQuery = query(collection(db, "students"), where("parentId", "==", user.uid), where("status", "==", "enrolled"));
+    const unsubStudents = onSnapshot(studentsQuery, (snap) => {
+      setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
 
-      const pSnap = await getDocs(
-        query(
-          collection(db, "payments"),
-          where("parentId", "==", user.uid),
-          orderBy("timestamp", "desc")
-        )
-      );
-      setPayments(pSnap.docs.map(d => ({ id: d.id, ...d.data() } as Payment)));
-    };
+    const parentRef = doc(db, "parents", user.uid);
+    const unsubParent = onSnapshot(parentRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setBankDetails(data.bankDetails || {});
+        setAutoPayEnabled(data.autoPayEnabled || false);
+        if (data.autoPayItems) setAutoPayItems(data.autoPayItems);
+      }
+    });
 
-    load();
+    setLoading(false);
+    return () => { unsubStudents(); unsubParent(); };
   }, [user?.uid]);
 
-  /* ================= PROMO VALIDATION ================= */
-  const validatePromo = async () => {
-    setPromoError("");
-    setPromoValid(false);
+  /* ===========================================================
+     CALCULATION LOGIC (REACTIVE)
+  =========================================================== */
+  const targetStudents = selectedStudentId === "all" ? students : students.filter(s => s.id === selectedStudentId);
+  
+  // 1. Base Tuition
+  const rawTuition = paymentType !== "registration" ? targetStudents.length * MONTHLY_TUITION : 0;
+  
+  // 2. Base Registration
+  const unpaidRegCount = targetStudents.filter(s => !s.registrationPaid).length;
+  const rawRegistration = paymentType !== "tuition" ? unpaidRegCount * REGISTRATION_FEE : 0;
 
-    const q = query(
-      collection(db, "promoCodes"),
-      where("code", "==", promoInput),
-      where("active", "==", true)
-    );
+  // 3. Apply Discount (Tuition only usually, or subtotal)
+  const subtotal = rawTuition + rawRegistration;
+  const discountAmount = subtotal * promoDiscount;
+  const amountAfterDiscount = subtotal - discountAmount;
 
-    const snap = await getDocs(q);
+  // 4. Fees (Calculated on the discounted amount)
+  const transactionFee = amountAfterDiscount * TRANSACTION_FEE_RATE;
+  const vatAmount = (amountAfterDiscount + transactionFee) * VAT_RATE;
+  const finalTotal = amountAfterDiscount + transactionFee + vatAmount;
 
-    if (!snap.empty) {
-      setPromoDiscount(snap.docs[0].data().discountPercent);
-      setPromoValid(true);
-      return;
+  /* ===========================================================
+     HANDLERS
+  =========================================================== */
+  const handleApplyPromo = () => {
+    const code = promoInput.trim().toUpperCase();
+    if (VALID_PROMOS[code]) {
+      setPromoDiscount(VALID_PROMOS[code]);
+      setAppliedPromo(code);
+    } else {
+      alert("Invalid Promo Code");
+      setPromoDiscount(0);
+      setAppliedPromo("");
     }
-
-    const local = SAMPLE_PROMO_CODES.find(p => p.code === promoInput);
-    if (local) {
-      setPromoDiscount(local.discount);
-      setPromoValid(true);
-      return;
-    }
-
-    setPromoError("Invalid promo code");
   };
 
-  /* ================= CALCULATIONS ================= */
-  const selected = students.find(s => s.id === selectedStudent);
-  const subjectCount = selected?.subjects?.length || 0;
+  const initiatePayFast = () => {
+    if (finalTotal <= 0) return alert("Nothing to pay.");
 
-  const subjectsTotal = subjectCount * 250;
-  const discount = promoValid ? (subjectsTotal * promoDiscount) / 100 : 0;
-  const regFee = selected?.regFeePaid ? 0 : REG_FEE;
+    const payfastData: Record<string, string> = {
+      merchant_id: import.meta.env.VITE_PAYFAST_MERCHANT_ID,
+      merchant_key: import.meta.env.VITE_PAYFAST_MERCHANT_KEY,
+      amount: finalTotal.toFixed(2),
+      item_name: `School Payment: ${paymentType.toUpperCase()}`,
+      item_description: `Payment for ${targetStudents.length} student(s) ${appliedPromo ? `(Promo: ${appliedPromo})` : ""}`,
+      email_address: user?.email || "",
+      m_payment_id: `PAY-${Date.now()}`,
+    };
 
-  const base = subjectsTotal - discount + regFee;
-  const transaction = base * TRANSACTION_FEE_RATE;
-  const vat = (base + transaction) * VAT_RATE;
-  const total = (base + transaction + vat).toFixed(2);
+    // Signature generation logic would go here as per your environment
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = PAYFAST_URL;
+    Object.entries(payfastData).forEach(([k, v]) => {
+      const i = document.createElement("input");
+      i.name = k; i.value = v; form.appendChild(i);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  };
 
-  /* ================= UI ================= */
+  const saveBankDetails = async () => {
+    await updateDoc(doc(db, "parents", user.uid), { 
+      bankDetails, 
+      autoPayItems,
+      updatedAt: serverTimestamp() 
+    });
+    alert("Preferences saved.");
+  };
+
+  if (loading) return <div className="p-20 text-center">Loading...</div>;
+
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
-
-      {/* STUDENT */}
-      <Card className="p-4">
-        <select
-          className="w-full p-3 border rounded"
-          value={selectedStudent}
-          onChange={e => setSelectedStudent(e.target.value)}
+    <div className="space-y-8 max-w-4xl mx-auto p-4">
+      {/* 1. MAKE PAYMENT CARD */}
+      <Card className="border-0 shadow-2xl overflow-hidden">
+        <CardHeader 
+          className="cursor-pointer bg-indigo-600 text-white" 
+          onClick={() => setPayNowOpen(!payNowOpen)}
         >
-          <option value="">Select Student</option>
-          {students.map(s => (
-            <option key={s.id} value={s.id}>
-              {s.firstName} {s.lastName}
-            </option>
-          ))}
-        </select>
+          <CardTitle className="flex justify-between items-center">
+            <span className="flex items-center gap-2"><CreditCard /> Immediate Payment</span>
+            {payNowOpen ? <ChevronUp /> : <ChevronDown />}
+          </CardTitle>
+        </CardHeader>
+
+        {payNowOpen && (
+          <CardContent className="p-6 space-y-6">
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div>
+                  <Label>Who are you paying for?</Label>
+                  <Select value={selectedStudentId} onValueChange={setSelectedStudentId}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Registered Students</SelectItem>
+                      {students.map(s => <SelectItem key={s.id} value={s.id}>{s.firstName} {s.lastName}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Item Selection</Label>
+                  <Select value={paymentType} onValueChange={(v: any) => setPaymentType(v)}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tuition + Registration</SelectItem>
+                      <SelectItem value="tuition">Tuition Only</SelectItem>
+                      <SelectItem value="registration">Registration Only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Promo Code Box */}
+              <div className="bg-gray-50 p-4 rounded-xl border-2 border-dashed border-gray-200">
+                <Label className="flex items-center gap-2"><Ticket size={16}/> Have a Promo Code?</Label>
+                <div className="flex gap-2 mt-2">
+                  <Input 
+                    placeholder="Enter code..." 
+                    value={promoInput} 
+                    onChange={e => setPromoInput(e.target.value)} 
+                    className="bg-white"
+                  />
+                  <Button onClick={handleApplyPromo} variant="secondary">Apply</Button>
+                </div>
+                {appliedPromo && <p className="text-green-600 text-xs mt-2 font-bold">Code {appliedPromo} Applied!</p>}
+              </div>
+            </div>
+
+            {/* Fee Breakdown */}
+            <div className="bg-indigo-50/50 p-6 rounded-2xl space-y-3">
+              <div className="flex justify-between text-sm">
+                <span>Tuition Subtotal ({targetStudents.length} Students)</span>
+                <span>R{rawTuition.toFixed(2)}</span>
+              </div>
+              {rawRegistration > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span>Registration Fees ({unpaidRegCount} Unpaid)</span>
+                  <span>R{rawRegistration.toFixed(2)}</span>
+                </div>
+              )}
+              {promoDiscount > 0 && (
+                <div className="flex justify-between text-sm text-green-600 font-bold italic">
+                  <span>Promo Discount ({promoDiscount * 100}%)</span>
+                  <span>-R{discountAmount.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-xs text-gray-500 border-t pt-2">
+                <span>Transaction Processing (5%)</span>
+                <span>R{transactionFee.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>VAT (15%)</span>
+                <span>R{vatAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-2xl font-black text-indigo-900 pt-2">
+                <span>Total Amount</span>
+                <span>R{finalTotal.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <Button onClick={initiatePayFast} size="lg" className="w-full bg-orange-500 hover:bg-orange-600 h-16 text-xl">
+              Pay Now via PayFast
+            </Button>
+          </CardContent>
+        )}
       </Card>
 
-      {/* PROMO */}
-      {selected && (
-        <Card className="p-4 bg-indigo-50 border-indigo-300 space-y-3">
-          <label className="flex items-center gap-2">
-            <Checkbox checked={hasPromo} onCheckedChange={v => setHasPromo(!!v)} />
-            <span className="font-semibold flex items-center gap-1">
-              <Tag size={16} /> I have a promo code
-            </span>
-          </label>
+      {/* 2. AUTO-PAYMENT SETUP */}
+      <Card className="border-0 shadow-2xl overflow-hidden">
+        <CardHeader 
+          className="cursor-pointer bg-emerald-600 text-white" 
+          onClick={() => setAutoPayOpen(!autoPayOpen)}
+        >
+          <CardTitle className="flex justify-between items-center">
+            <span className="flex items-center gap-2"><CreditCard /> Auto-Debit Preferences</span>
+            {autoPayOpen ? <ChevronUp /> : <ChevronDown />}
+          </CardTitle>
+        </CardHeader>
 
-          {hasPromo && (
-            <>
-              <Input
-                placeholder="PROMO CODE"
-                value={promoInput}
-                onChange={e => setPromoInput(e.target.value.toUpperCase())}
-              />
-              <Button onClick={validatePromo} variant="outline">
-                Apply
-              </Button>
+        {autoPayOpen && (
+          <CardContent className="p-6 space-y-6">
+            <Alert className="bg-emerald-50 border-emerald-200">
+              <Info className="h-4 w-4 text-emerald-600" />
+              <AlertDescription className="text-emerald-800">
+                Auto-debits occur on the 1st of every month for the items selected below.
+              </AlertDescription>
+            </Alert>
 
-              {promoValid && (
-                <Badge className="bg-green-100 text-green-800">
-                  <Percent size={14} /> {promoDiscount}% applied
-                </Badge>
-              )}
+            <div className="space-y-4">
+              <Label className="text-lg">What should be paid automatically?</Label>
+              <div className="flex flex-wrap gap-6">
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="auto-tuition" 
+                    checked={autoPayItems.includes("tuition")} 
+                    onCheckedChange={(checked) => {
+                      setAutoPayItems(prev => checked ? [...prev, "tuition"] : prev.filter(i => i !== "tuition"));
+                    }}
+                  />
+                  <label htmlFor="auto-tuition">Monthly Tuition</label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="auto-reg" 
+                    checked={autoPayItems.includes("registration")} 
+                    onCheckedChange={(checked) => {
+                      setAutoPayItems(prev => checked ? [...prev, "registration"] : prev.filter(i => i !== "registration"));
+                    }}
+                  />
+                  <label htmlFor="auto-reg">Registration Fees (if pending)</label>
+                </div>
+              </div>
+            </div>
 
-              {promoError && <p className="text-red-600">{promoError}</p>}
-            </>
-          )}
-        </Card>
-      )}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <Label>Bank Name</Label>
+                <Input value={bankDetails.bankName || ""} onChange={e => setBankDetails({...bankDetails, bankName: e.target.value})} />
+              </div>
+              <div>
+                <Label>Account Number</Label>
+                <Input value={bankDetails.accountNumber || ""} onChange={e => setBankDetails({...bankDetails, accountNumber: e.target.value})} />
+              </div>
+            </div>
 
-      {/* TOTAL */}
-      {selected && (
-        <Card className="p-5 bg-green-50 border-green-400">
-          <div className="flex justify-between font-bold text-lg">
-            <span>Total Payable</span>
-            <span className="text-green-700">R{total}</span>
-          </div>
-        </Card>
-      )}
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+              <div>
+                <p className="font-bold">Active Auto-Pay Status</p>
+                <p className="text-xs text-gray-500">Enable or disable monthly debiting</p>
+              </div>
+              <Switch checked={autoPayEnabled} onCheckedChange={setAutoPayEnabled} />
+            </div>
 
-      <Button disabled={hasPromo && !promoValid} className="w-full h-12 text-lg">
-        Pay R{total}
-      </Button>
+            <Button onClick={saveBankDetails} className="w-full bg-emerald-600">
+              Save Auto-Pay Preferences
+            </Button>
+          </CardContent>
+        )}
+      </Card>
     </div>
   );
 }
