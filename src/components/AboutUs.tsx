@@ -2,192 +2,211 @@
 
 import React from "react";
 import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
+import { 
+  ChevronLeft, 
+  X, 
+  Globe, 
+  BookOpen, 
+  ShieldCheck, 
+  Users, 
+  CreditCard, 
+  Target, 
+  Trophy, 
+  MapPin, 
+  Zap,
+  Heart
+} from "lucide-react";
 
 const AboutUs: React.FC = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 px-6 py-12 relative">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 px-6 py-12 relative overflow-hidden">
+      
       {/* Navigation Controls */}
-      <div className="absolute top-4 left-4">
+      <div className="absolute top-6 left-6 z-20">
         <Link
           to="/"
-          className="flex items-center space-x-1 text-gray-600 hover:text-gray-800 transition"
+          className="group flex items-center space-x-2 bg-white/80 backdrop-blur-md px-4 py-2 rounded-2xl shadow-sm border border-slate-200 text-slate-600 hover:text-indigo-600 transition"
         >
-          <span className="text-xl">Back</span>
-          <span className="font-medium">Home</span>
+          <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+          <span className="font-bold">Home</span>
         </Link>
       </div>
-      <div className="absolute top-4 right-4">
+      <div className="absolute top-6 right-6 z-20">
         <Link
           to="/"
-          className="text-gray-600 hover:text-red-600 text-2xl font-bold transition"
+          className="flex items-center justify-center w-10 h-10 bg-white/80 backdrop-blur-md rounded-full shadow-sm border border-slate-200 text-slate-400 hover:text-red-500 transition"
         >
-          Close
+          <X size={24} />
         </Link>
       </div>
 
-      <div className="max-w-6xl mx-auto space-y-12">
-        {/* Heading */}
-        <h1 className="text-4xl font-bold text-gray-800 text-center">
-          Discover NextGen Online Support School
-        </h1>
-        <p className="text-center text-lg text-gray-600 max-w-3xl mx-auto">
-          We’re here to support. We’re building{" "}
-          <strong>future-ready innovators</strong> across South Africa and beyond.
-        </p>
-
-        {/* Hero Banner for Extra Lessons */}
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-8 rounded-2xl shadow-lg text-center">
-          <h2 className="text-3xl font-bold mb-3">
-            Online Support Learning 2026 – Registrations Open!
-          </h2>
-          <p className="text-lg mb-4 max-w-4xl mx-auto">
-            <strong>Affordable, reliable, goal-oriented extra lessons</strong> for Grade 10–12 (CAPS) and Cambridge Form 3–6. 
-            Classes start <strong>5 January 2026</strong>. Give your child the edge with experienced teachers who follow the prescribed curriculum.
-          </p>
-          <Link
-            to="/login"
-            className="inline-block bg-yellow-400 text-indigo-900 font-bold px-6 py-3 rounded-full hover:bg-yellow-300 transition shadow-md"
+      <div className="max-w-6xl mx-auto space-y-16 relative z-10">
+        
+        {/* Main Heading */}
+        <div className="text-center space-y-4">
+          <motion.h1 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-4xl md:text-6xl font-black text-slate-900 tracking-tight"
           >
-            Secure Your Spot Now
-          </Link>
+            Care Academy <span className="text-indigo-600">Hybrid School</span>
+          </motion.h1>
+          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+            A Christian-based academy for <strong>Grade 1 to 12</strong>. We blend world-class 
+            academics with total family mobility through our PE-linked hybrid model.
+          </p>
         </div>
 
-        {/* Sections Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Why Choose */}
-          <div className="p-6 bg-white rounded-xl shadow hover:shadow-md transition">
-            <h2 className="text-2xl font-semibold text-indigo-500 mb-2">Why Choose Us?</h2>
-            <p className="text-gray-700 mb-4">
-              <strong>Affordable excellence</strong> with experienced teachers in CAPS & Cambridge. 
-              After-school online support designed to boost grades, build confidence, and secure university pathways.
+        {/* Major Hero Banner: The Hybrid Promise */}
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-indigo-900 rounded-[3rem] p-8 md:p-12 text-white shadow-2xl relative overflow-hidden"
+        >
+          <div className="absolute -right-20 -bottom-20 w-80 h-80 bg-indigo-500/20 rounded-full blur-3xl"></div>
+          <div className="relative z-10 flex flex-col md:flex-row items-center gap-10">
+            <div className="flex-1 space-y-6 text-center md:text-left">
+              <span className="bg-yellow-400 text-indigo-950 px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest">
+                2026 Academic Year
+              </span>
+              <h2 className="text-3xl md:text-4xl font-black leading-tight">
+                One School. <span className="text-yellow-300">Anywhere.</span>
+              </h2>
+              <p className="text-indigo-100 text-lg">
+                Choose between our <strong>Gqeberha Campus</strong> or our <strong>Interactive Virtual Classroom</strong>. 
+                Switch termly to suit your family’s work and travel commitments.
+              </p>
+              <Link
+                to="/login"
+                className="inline-flex items-center gap-3 bg-white text-indigo-900 font-black px-8 py-4 rounded-2xl hover:bg-yellow-300 transition shadow-xl transform hover:scale-105"
+              >
+                Register Online Today <Zap size={20} className="fill-indigo-900" />
+              </Link>
+            </div>
+            <div className="hidden lg:block w-1/3">
+              
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Section Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          
+          {/* Why Choose Care Academy */}
+          <div className="p-8 bg-white rounded-[2.5rem] shadow-xl border border-slate-100 group hover:border-indigo-200 transition">
+            <Heart className="text-red-500 mb-6 group-hover:scale-110 transition-transform" size={40} />
+            <h2 className="text-2xl font-bold text-slate-800 mb-3">The Care Edge</h2>
+            <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+              Nurturing Christian values, small class sizes, and a "whole child" approach from Grade 1 through Matric.
             </p>
-            <Link
-              to="/about/why-choose"
-              className="inline-block bg-indigo-500 text-white px-4 py-2 rounded-lg shadow hover:bg-indigo-600 transition"
-            >
-              Read More
+            <Link to="/about/why-choose" className="text-indigo-600 font-bold flex items-center gap-2 hover:gap-4 transition-all">
+              Discover Why <ChevronLeft className="rotate-180" size={16} />
             </Link>
           </div>
 
-          {/* Learning Platform */}
-          <div className="p-6 bg-white rounded-xl shadow hover:shadow-md transition">
-            <h2 className="text-2xl font-semibold text-blue-500 mb-2">Learning Platform</h2>
-            <p className="text-gray-700 mb-4">
-              Live interactive classes via Google Classroom + Zoom. Real-time progress tracking, recorded sessions, 
-              and 24/7 access to materials — all in one parent-friendly dashboard.
+          {/* Subjects: Dual Pathway */}
+          <div className="p-8 bg-white rounded-[2.5rem] shadow-xl border border-slate-100 group hover:border-indigo-200 transition">
+            <BookOpen className="text-indigo-600 mb-6 group-hover:scale-110 transition-transform" size={40} />
+            <h2 className="text-2xl font-bold text-slate-800 mb-3">Curriculum</h2>
+            <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+              Grade 1–12 pathways for both <strong>Cambridge International</strong> and <strong>DBE CAPS</strong>.
             </p>
-            <Link
-              to="/about/learning-platform"
-              className="inline-block bg-blue-500 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-600 transition"
-            >
-              Read More
+            <Link to="/about/subjects" className="text-indigo-600 font-bold flex items-center gap-2 hover:gap-4 transition-all">
+              View Subjects <ChevronLeft className="rotate-180" size={16} />
             </Link>
           </div>
 
-          {/* Subjects Offered */}
-          <div className="p-6 bg-white rounded-xl shadow hover:shadow-md transition">
-            <h2 className="text-2xl font-semibold text-green-500 mb-2">Subjects Offered</h2>
-            <p className="text-gray-700 mb-4">
-              <strong>Grade 10–12 (CAPS):</strong> Mathematics, Physical Sciences, Life Sciences, Accounting, Business Studies, English, Afrikaans, Geography, History<br />
-              <strong>Cambridge Form 3–6 (IGCSE & AS/A-Level):</strong> Maths, Physics, Chemistry, Biology, Economics, Business, English, Computer Science
+          {/* Local Examinations Logic */}
+          <div className="p-8 bg-white rounded-[2.5rem] shadow-xl border border-slate-100 group hover:border-indigo-200 transition">
+            <MapPin className="text-emerald-500 mb-6 group-hover:scale-110 transition-transform" size={40} />
+            <h2 className="text-2xl font-bold text-slate-800 mb-3">Examinations</h2>
+            <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+              Linked to PE independent schools. We guide registration at your <strong>nearest local center</strong> for seamless finals.
             </p>
-            <Link
-              to="/about/subjects"
-              className="inline-block bg-green-500 text-white px-4 py-2 rounded-lg shadow hover:bg-green-600 transition"
-            >
-              View Full List
-            </Link>
-          </div>
-
-          {/* Enrolment */}
-          <div className="p-6 bg-white rounded-xl shadow hover:shadow-md transition">
-            <h2 className="text-2xl font-semibold text-yellow-500 mb-2">Enrolment</h2>
-            <p className="text-gray-700 mb-4">
-              <strong>100% online, instant confirmation.</strong> Register today with PayFast. 
-              Limited spots for 2026 — first 50 students get <strong>10% early-bird discount</strong>.
-            </p>
-            <Link
-              to="/about/enrolment"
-              className="inline-block bg-yellow-500 text-white px-4 py-2 rounded-lg shadow hover:bg-yellow-600 transition"
-            >
-              Enrol Now
-            </Link>
-          </div>
-
-          {/* Vision */}
-          <div className="p-6 bg-white rounded-xl shadow hover:shadow-md transition">
-            <h2 className="text-2xl font-semibold text-purple-500 mb-2">Our Vision</h2>
-            <p className="text-gray-700 mb-4">
-              To empower every South African learner with world-class extra support — 
-              turning potential into <strong>top matric results and global university offers</strong>.
-            </p>
-            <Link
-              to="/about/vision"
-              className="inline-block bg-purple-500 text-white px-4 py-2 rounded-lg shadow hover:bg-purple-600 transition"
-            >
-              Read More
-            </Link>
-          </div>
-
-          {/* Fees Structure */}
-          <div className="p-6 bg-white rounded-xl shadow hover:shadow-md transition">
-            <h2 className="text-2xl font-semibold text-red-500 mb-2">Fees Structure</h2>
-            <p className="text-gray-700 mb-4">
-              <strong>From R350/month per subject.</strong> Pay per subject or bundle for savings. 
-              No hidden fees. Flexible monthly plans — cancel anytime.
-            </p>
-            <Link
-              to="/about/fees"
-              className="inline-block bg-red-500 text-white px-4 py-2 rounded-lg shadow hover:bg-red-600 transition"
-            >
-              View Pricing
+            <Link to="/about/accreditation" className="text-indigo-600 font-bold flex items-center gap-2 hover:gap-4 transition-all">
+              How it works <ChevronLeft className="rotate-180" size={16} />
             </Link>
           </div>
 
           {/* Teaching Staff */}
-          <div className="p-6 bg-white rounded-xl shadow hover:shadow-md transition">
-            <h2 className="text-2xl font-semibold text-pink-500 mb-2">Our Teaching Staff</h2>
-            <p className="text-gray-700 mb-4">
-              <strong>SACE-registered experts</strong> with 10+ years in CAPS & Cambridge. 
-              Passionate mentors who’ve helped hundreds achieve distinctions.
+          <div className="p-8 bg-white rounded-[2.5rem] shadow-xl border border-slate-100 group hover:border-indigo-200 transition">
+            <Users className="text-blue-500 mb-6 group-hover:scale-110 transition-transform" size={40} />
+            <h2 className="text-2xl font-bold text-slate-800 mb-3">Our Staff</h2>
+            <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+              SACE-registered experts and Cambridge-certified mentors with a heart for student growth.
             </p>
-            <Link
-              to="/about/teaching-staff"
-              className="inline-block bg-pink-500 text-white px-4 py-2 rounded-lg shadow hover:bg-pink-600 transition"
-            >
-              Meet the Team
+            <Link to="/about/teaching-staff" className="text-indigo-600 font-bold flex items-center gap-2 hover:gap-4 transition-all">
+              Meet Teachers <ChevronLeft className="rotate-180" size={16} />
             </Link>
           </div>
 
-          {/* Accreditation */}
-          <div className="p-6 bg-white rounded-xl shadow hover:shadow-md transition">
-            <h2 className="text-2xl font-semibold text-teal-500 mb-2">Accreditation</h2>
-            <p className="text-gray-700 mb-4">
-              Aligned with <strong>DBE CAPS</strong> and <strong>Cambridge Assessment International Education</strong>. 
-              Partnerships with NMU & top universities ensure seamless progression.
+          {/* Enrollment */}
+          <div className="p-8 bg-white rounded-[2.5rem] shadow-xl border border-slate-100 group hover:border-indigo-200 transition">
+            <Target className="text-yellow-500 mb-6 group-hover:scale-110 transition-transform" size={40} />
+            <h2 className="text-2xl font-bold text-slate-800 mb-3">Enrolment</h2>
+            <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+              100% online registration. Secure your spot in the Virtual or Physical Campus for Jan 2026.
             </p>
-            <Link
-              to="/about/accreditation"
-              className="inline-block bg-teal-500 text-white px-4 py-2 rounded-lg shadow hover:bg-teal-600 transition"
-            >
-              Read More
+            <Link to="/about/enrolment" className="text-indigo-600 font-bold flex items-center gap-2 hover:gap-4 transition-all">
+              Start Enrolment <ChevronLeft className="rotate-180" size={16} />
+            </Link>
+          </div>
+
+          {/* Fees */}
+          <div className="p-8 bg-white rounded-[2.5rem] shadow-xl border border-slate-100 group hover:border-indigo-200 transition">
+            <CreditCard className="text-purple-500 mb-6 group-hover:scale-110 transition-transform" size={40} />
+            <h2 className="text-2xl font-bold text-slate-800 mb-3">Pricing</h2>
+            <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+              Affordable private education starting from <strong>R1,000/month</strong>. Flexible plans for every family.
+            </p>
+            <Link to="/about/fees" className="text-indigo-600 font-bold flex items-center gap-2 hover:gap-4 transition-all">
+              View Structure <ChevronLeft className="rotate-180" size={16} />
             </Link>
           </div>
         </div>
 
-        {/* Final CTA */}
-        <div className="text-center py-8">
-          <p className="text-xl font-semibold text-gray-700 mb-4">
-            Don’t let 2026 be another year of stress. 
-            <span className="text-indigo-600"> Give your child the support they deserve.</span>
+        {/* Mobility Diagram Callout */}
+        <div className="bg-slate-100 rounded-[3rem] p-10 flex flex-col md:flex-row items-center gap-12 border border-slate-200 shadow-inner">
+          <div className="w-full md:w-1/2">
+            
+          </div>
+          <div className="flex-1 space-y-4">
+            <h3 className="text-2xl font-black text-slate-800">Designed for Mobile Families</h3>
+            <p className="text-slate-600">
+              Our <strong>Mobility-First</strong> logic means your child's education is never interrupted by work 
+              relocations or travel. Carry your classroom in your pocket and your campus in your heart.
+            </p>
+          </div>
+        </div>
+
+        {/* Vision & Accreditation Recap */}
+        <div className="grid md:grid-cols-2 gap-8">
+          <Link to="/about/vision" className="p-8 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-[2.5rem] text-white shadow-lg hover:shadow-2xl transition group">
+            <Trophy className="mb-4" size={32} />
+            <h3 className="text-xl font-bold">Our Vision</h3>
+            <p className="text-sm text-indigo-100 mt-2">To be the #1 Hybrid Academy in Africa, bridging the gap between physical nurture and digital excellence.</p>
+          </Link>
+          <Link to="/about/learning-platform" className="p-8 bg-gradient-to-br from-slate-800 to-slate-900 rounded-[2.5rem] text-white shadow-lg hover:shadow-2xl transition group">
+            <Globe className="mb-4 text-indigo-400" size={32} />
+            <h3 className="text-xl font-bold">Hybrid Platform</h3>
+            <p className="text-sm text-slate-400 mt-2">Explore the tech that powers our interactive virtual classrooms and student dashboards.</p>
+          </Link>
+        </div>
+
+        {/* Final Registration Footer */}
+        <div className="text-center py-10 space-y-6">
+          <p className="text-2xl font-black text-slate-800 italic">
+            "Your child's success, <span className="text-indigo-600 underline underline-offset-4">anywhere in the world.</span>"
           </p>
           <Link
             to="/login"
-            className="inline-block bg-gradient-to-r from-green-500 to-teal-500 text-white font-bold text-lg px-8 py-4 rounded-full shadow-lg hover:shadow-xl transition transform hover:scale-105"
+            className="inline-block bg-indigo-600 text-white font-black text-xl px-12 py-5 rounded-2xl shadow-xl hover:bg-emerald-600 transition-all transform hover:scale-105"
           >
-            Register for Online Extra Lessons 2026
+            Enrol for 2026 Now
           </Link>
         </div>
+
       </div>
     </div>
   );

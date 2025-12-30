@@ -2,149 +2,189 @@
 
 import React from "react";
 import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
+import { 
+  Heart, 
+  Globe, 
+  RotateCw, 
+  ShieldCheck, 
+  UserCheck, 
+  Award, 
+  Briefcase,
+  Zap,
+  ArrowRight
+} from "lucide-react";
 
 const WhyChoose: React.FC = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 px-6 py-12">
-      <div className="max-w-5xl mx-auto space-y-10">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-blue-100 px-6 py-12">
+      <div className="max-w-6xl mx-auto space-y-12">
 
-        {/* Hero Banner */}
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-8 rounded-2xl shadow-lg text-center">
-          <h2 className="text-3xl font-bold mb-3">
-            Online Extra Lessons 2026 – Registrations Open!
-          </h2>
-          <p className="text-lg mb-4 max-w-4xl mx-auto">
-            <strong>Grade 10–12 (CAPS) & Cambridge Form 3–6</strong> • 
-            <strong className="text-yellow-300">Science • Arts • Commercial</strong> • 
-            Starts <strong>5 January 2026</strong>
-          </p>
-          <Link
-            to="/enrol/extra-lessons"
-            className="inline-block bg-yellow-400 text-indigo-900 font-bold px-8 py-3 rounded-full hover:bg-yellow-300 transition shadow-md transform hover:scale-105"
-          >
-            Register Now – Limited Spots!
-          </Link>
-        </div>
-
-        {/* Heading */}
-        <h1 className="text-4xl font-bold text-blue-800 text-center">
-          Why Choose NextGen Extra Lessons?
-        </h1>
-        <p className="text-center text-lg text-gray-700 max-w-3xl mx-auto">
-          Because your child deserves <strong>more than just homework help</strong> — 
-          they deserve <strong>exam mastery, confidence, and a clear path to university</strong>.
-        </p>
-
-        {/* Feature Cards – Updated for Extra Support */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          {/* 1. Highly Rated Teachers */}
-          <div className="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition border-l-4 border-indigo-500">
-            <h2 className="text-xl font-bold text-indigo-700 mb-2">Top-Rated Teachers</h2>
-            <p className="text-gray-700">
-              <strong>SACE-registered experts</strong> with <strong>12+ years experience</strong> — 
-              <strong>4.9/5 parent rating</strong>. They’ve helped hundreds go from C to A.
+        {/* Hero Banner - Focus on Mobility & Peace */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-indigo-900 rounded-[2.5rem] p-8 md:p-12 text-white shadow-2xl relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl"></div>
+          <div className="relative z-10 text-center space-y-4">
+            <span className="bg-yellow-400 text-indigo-950 px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest">
+              A First-of-its-Kind Model
+            </span>
+            <h2 className="text-3xl md:text-5xl font-black leading-tight">
+              Education That Moves <br /> <span className="text-yellow-300">With Your Life</span>
+            </h2>
+            <p className="text-lg md:text-xl text-indigo-100 max-w-3xl mx-auto leading-relaxed">
+              Registrations are <strong>always open</strong>. Enroll termly and choose between 
+              <strong> Campus or Virtual</strong> learning. Experience total peace of mind for your 
+              family and work commitments.
             </p>
-            <div className="flex mt-3">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <span key={i} className="text-yellow-500 text-lg">★</span>
-              ))}
-              <span className="text-sm text-gray-500 ml-1">(4.9/5)</span>
+            <div className="pt-4">
+              <Link
+                to="/login"
+                className="inline-flex items-center gap-2 bg-white text-indigo-900 font-black px-10 py-4 rounded-2xl hover:bg-yellow-300 transition shadow-xl transform hover:scale-105"
+              >
+                Secure Your Spot for 2026 <Zap size={18} className="fill-indigo-900"/>
+              </Link>
             </div>
           </div>
+        </motion.div>
 
-          {/* 2. Affordable & Flexible */}
-          <div className="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition border-l-4 border-green-500">
-            <h2 className="text-xl font-bold text-green-700 mb-2">Affordable Excellence</h2>
-            <p className="text-gray-700">
-              Only <strong>R350/month per subject</strong>. Bundle 3+ and save up to <strong>28.6%</strong>. 
-              Pay via <strong>PayFast</strong> — cancel or switch anytime.
-            </p>
-            <p className="text-xs text-green-600 font-bold mt-2">More subjects = bigger savings</p>
-          </div>
+        {/* Heading */}
+        <div className="text-center space-y-4">
+          <h1 className="text-4xl md:text-6xl font-black text-gray-900">
+            Why Care Academy?
+          </h1>
+          <p className="text-lg text-gray-600 max-w-2xl mx-auto italic">
+            "Nurturing Excellence, Nurturing Character — Grade 1 to 12"
+          </p>
+        </div>
 
-          {/* 3. Goal-Oriented Support */}
-          <div className="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition border-l-4 border-purple-500">
-            <h2 className="text-xl font-bold text-purple-700 mb-2">Exam-Focused Results</h2>
-            <p className="text-gray-700">
-              <strong>Weekly live classes</strong>, <strong>monthly mocks</strong>, 
-              <strong>past paper drills</strong>, and <strong>1-on-1 feedback</strong> — 
-              <strong>85% of students improve by 1–2 letter grades</strong>.
-            </p>
-          </div>
+        {/* Feature Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
 
-          {/* 4. Parent Dashboard */}
-          <div className="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition border-l-4 border-teal-500">
-            <h2 className="text-xl font-bold text-teal-700 mb-2">Real-Time Progress</h2>
-            <p className="text-gray-700">
-              Parents get <strong>instant reports</strong> on attendance, test scores, 
-              and teacher notes. <strong>Know exactly how your child is doing — anytime.</strong>
-            </p>
-            <p className="text-xs text-teal-600 font-medium mt-2">No more surprises in Term 4</p>
-          </div>
-
-          {/* 5. Small Groups */}
-          <div className="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition border-l-4 border-pink-500">
-            <h2 className="text-xl font-bold text-pink-700 mb-2">Personal Attention</h2>
-            <p className="text-gray-700">
-              <strong>Max 20 students per class</strong> — your child isn’t lost in the crowd. 
-              Teachers know their strengths, weaknesses, and goals.
+          {/* 1. Flexibility & Mobility */}
+          <div className="p-8 bg-white rounded-3xl shadow-xl hover:shadow-2xl transition border-t-8 border-indigo-500 group">
+            <div className="bg-indigo-100 w-14 h-14 rounded-2xl flex items-center justify-center text-indigo-600 mb-6 group-hover:rotate-12 transition-transform">
+              <RotateCw size={30} />
+            </div>
+            <h2 className="text-xl font-bold text-gray-800 mb-3">Total Mobility</h2>
+            <p className="text-gray-600 text-sm leading-relaxed">
+              Relocating for work? Traveling? Our model allows you to switch between 
+              <strong> Physical Campus and Virtual</strong> every term. Your child's education 
+              never skips a beat.
             </p>
           </div>
 
-          {/* 6. University Pathways */}
-          <div className="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition border-l-4 border-yellow-500">
-            <h2 className="text-xl font-bold text-yellow-700 mb-2">University Ready</h2>
-            <p className="text-gray-700">
-              Free <strong>pre-university course</strong> (Google, IBM, Coursera) + 
-              <strong>mock interviews</strong> and <strong>CV guidance</strong> — 
-              for <strong>NMU, UCT, Wits, and global offers</strong>.
+          {/* 2. Global Curricula Choice */}
+          <div className="p-8 bg-white rounded-3xl shadow-xl hover:shadow-2xl transition border-t-8 border-blue-500 group">
+            <div className="bg-blue-100 w-14 h-14 rounded-2xl flex items-center justify-center text-blue-600 mb-6 group-hover:rotate-12 transition-transform">
+              <Globe size={30} />
+            </div>
+            <h2 className="text-xl font-bold text-gray-800 mb-3">Cambridge or CAPS</h2>
+            <p className="text-gray-600 text-sm leading-relaxed">
+              We offer both <strong>Cambridge International</strong> and <strong>CAPS</strong> pathways 
+              from Grade 1 to 12. Choose the standard that best fits your child's future.
+            </p>
+          </div>
+
+          {/* 3. Nurturing Christian Values */}
+          <div className="p-8 bg-white rounded-3xl shadow-xl hover:shadow-2xl transition border-t-8 border-pink-500 group">
+            <div className="bg-pink-100 w-14 h-14 rounded-2xl flex items-center justify-center text-pink-600 mb-6 group-hover:rotate-12 transition-transform">
+              <Heart size={30} />
+            </div>
+            <h2 className="text-xl font-bold text-gray-800 mb-3">Christian Environment</h2>
+            <p className="text-gray-600 text-sm leading-relaxed">
+              We don't just teach; we nurture. Our environment is rooted in 
+              <strong> Christian values</strong>, focusing on character building and spiritual growth.
+            </p>
+          </div>
+
+          {/* 4. Affordable Quality */}
+          <div className="p-8 bg-white rounded-3xl shadow-xl hover:shadow-2xl transition border-t-8 border-emerald-500 group">
+            <div className="bg-emerald-100 w-14 h-14 rounded-2xl flex items-center justify-center text-emerald-600 mb-6 group-hover:rotate-12 transition-transform">
+              <Award size={30} />
+            </div>
+            <h2 className="text-xl font-bold text-gray-800 mb-3">Affordable Excellence</h2>
+            <p className="text-gray-600 text-sm leading-relaxed">
+              Quality education shouldn't be a luxury. At <strong>R1,000 tuition</strong> per month, 
+              we bring subject-specialist teachers within reach of every family.
+            </p>
+          </div>
+
+          {/* 5. Work-Family Peace */}
+          <div className="p-8 bg-white rounded-3xl shadow-xl hover:shadow-2xl transition border-t-8 border-yellow-500 group">
+            <div className="bg-yellow-100 w-14 h-14 rounded-2xl flex items-center justify-center text-yellow-700 mb-6 group-hover:rotate-12 transition-transform">
+              <Briefcase size={30} />
+            </div>
+            <h2 className="text-xl font-bold text-gray-800 mb-3">Family Harmony</h2>
+            <p className="text-gray-600 text-sm leading-relaxed">
+              Our flexible model removes the stress of fixed locations. Adjust your child's 
+              schooling to your <strong>work commitments</strong>—not the other way around.
+            </p>
+          </div>
+
+          {/* 6. Smart Technology */}
+          <div className="p-8 bg-white rounded-3xl shadow-xl hover:shadow-2xl transition border-t-8 border-purple-500 group">
+            <div className="bg-purple-100 w-14 h-14 rounded-2xl flex items-center justify-center text-purple-600 mb-6 group-hover:rotate-12 transition-transform">
+              <UserCheck size={30} />
+            </div>
+            <h2 className="text-xl font-bold text-gray-800 mb-3">Integrated Dashboards</h2>
+            <p className="text-gray-600 text-sm leading-relaxed">
+              Stay connected through our <strong>seamless LMS</strong>. In-app chat, 
+              real-time progress tracking, and instant teacher communication at your fingertips.
             </p>
           </div>
 
         </div>
 
-        {/* Trust Badges */}
-        <div className="flex justify-center space-x-8 mt-10 flex-wrap">
-          <div className="text-center">
-            <p className="text-3xl font-bold text-indigo-600">85%</p>
-            <p className="text-xs text-gray-600">Grade Improvement</p>
+        {/* Mobility Diagram/Visual Callout */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-[3rem] p-10 text-white flex flex-col md:flex-row items-center gap-8 shadow-2xl">
+          <div className="flex-1 space-y-4">
+            <h3 className="text-2xl font-bold">Why Termly Enrolment?</h3>
+            <p className="text-blue-100 leading-relaxed">
+              Life changes fast. By allowing termly choices between virtual and campus, we provide 
+              a safety net for families who value mobility. Your child remains in the same 
+              curriculum with the same teachers, regardless of where you are.
+            </p>
+            <div className="flex gap-4 pt-2">
+              <span className="flex items-center gap-1 text-xs font-bold bg-white/10 px-3 py-1 rounded-full"><ShieldCheck size={14}/> Secure</span>
+              <span className="flex items-center gap-1 text-xs font-bold bg-white/10 px-3 py-1 rounded-full"><RotateCw size={14}/> Seamless</span>
+            </div>
           </div>
-          <div className="text-center">
-            <p className="text-3xl font-bold text-green-600">R350</p>
-            <p className="text-xs text-gray-600">Per Subject/Month</p>
-          </div>
-          <div className="text-center">
-            <p className="text-3xl font-bold text-purple-600">4.9/5</p>
-            <p className="text-xs text-gray-600">Parent Rating</p>
-          </div>
-          <div className="text-center">
-            <p className="text-3xl font-bold text-teal-600">20</p>
-            <p className="text-xs text-gray-600">Max Students/Class</p>
+          <div className="bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/20 w-full md:w-auto">
+            <p className="text-sm font-bold uppercase tracking-widest text-yellow-300 mb-4">Registration Always Open</p>
+            <ul className="space-y-3">
+              <li className="flex items-center gap-2 text-sm"><CheckCircle /> Secure online registration</li>
+              <li className="flex items-center gap-2 text-sm"><CheckCircle /> Pay registration fee online</li>
+              <li className="flex items-center gap-2 text-sm"><CheckCircle /> Choose path: Virtual or Campus</li>
+            </ul>
           </div>
         </div>
 
         {/* Final CTA */}
-        <div className="text-center mt-12">
-          <p className="text-xl font-bold text-blue-900">
-            Don’t settle for average support.  
-            <span className="block text-indigo-700 text-2xl mt-2">
-              Give your child the <strong>NextGen Edge</strong> in 2026.
-            </span>
+        <div className="text-center py-12">
+          <p className="text-2xl font-black text-indigo-900 mb-8">
+            The Future of Education is <span className="text-blue-600 underline decoration-yellow-400">Flexible</span>.
           </p>
-          <Link
-            to="/login"
-            className="inline-block mt-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-lg px-10 py-4 rounded-full shadow-xl hover:shadow-2xl transition transform hover:scale-105"
-          >
-            Enrol Now – Classes Start 5 Jan 2026
-          </Link>
+          <div className="inline-block p-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-2xl">
+            <Link
+              to="/login"
+              className="flex items-center gap-3 bg-white text-gray-900 font-black text-xl px-12 py-6 rounded-xl hover:bg-transparent hover:text-white transition-all duration-300"
+            >
+              Enrol for 2026 Intake <ArrowRight />
+            </Link>
+          </div>
+          <p className="mt-6 text-gray-500 text-sm font-medium">
+            Classes start 22 January 2026 • Registration fee secures your spot.
+          </p>
         </div>
 
         {/* Back Navigation */}
         <div className="text-center mt-8">
           <Link
             to="/about"
-            className="inline-block bg-gray-200 text-gray-800 px-6 py-2 rounded-lg shadow hover:bg-gray-300 transition"
+            className="text-gray-400 font-bold hover:text-indigo-600 transition underline decoration-2 underline-offset-4"
           >
             ← Back to About Us
           </Link>
@@ -153,5 +193,10 @@ const WhyChoose: React.FC = () => {
     </div>
   );
 };
+
+// Helper Component for the list
+const CheckCircle = () => (
+  <div className="bg-green-400 rounded-full p-1"><ShieldCheck size={12} className="text-indigo-900" /></div>
+);
 
 export default WhyChoose;

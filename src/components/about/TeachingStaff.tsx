@@ -2,209 +2,203 @@
 
 import React from "react";
 import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
+import { 
+  UserCheck, 
+  Heart, 
+  Globe, 
+  ShieldCheck, 
+  Star, 
+  Zap, 
+  Users,
+  Award,
+  ArrowRight
+} from "lucide-react";
 
 const TeachingStaff: React.FC = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-100 px-6 py-12">
-      <div className="max-w-5xl mx-auto space-y-10">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-100 px-6 py-12">
+      <div className="max-w-6xl mx-auto space-y-16">
 
-        {/* Hero Banner */}
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-8 rounded-2xl shadow-lg text-center">
-          <h2 className="text-3xl font-bold mb-3">
-            Online Extra Lessons 2026 – Registrations Open!
-          </h2>
-          <p className="text-lg mb-4 max-w-4xl mx-auto">
-            <strong>Grade 10–12 (CAPS) & Cambridge Form 3–6</strong> • 
-            <strong className="text-yellow-300">Science • Arts • Commercial</strong> • 
-            Starts <strong>5 January 2026</strong>
-          </p>
-          <Link
-            to="/login"
-            className="inline-block bg-yellow-400 text-indigo-900 font-bold px-8 py-3 rounded-full hover:bg-yellow-300 transition shadow-md transform hover:scale-105"
-          >
-            Register Now – Limited Spots!
-          </Link>
-        </div>
+        {/* Hero Banner - Hybrid Excellence */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-indigo-900 rounded-[2.5rem] p-8 md:p-12 text-white shadow-2xl relative overflow-hidden text-center"
+        >
+          <div className="relative z-10 space-y-4">
+            <span className="bg-yellow-400 text-indigo-950 px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest">
+              Expert Mentors for 2026
+            </span>
+            <h2 className="text-3xl md:text-5xl font-black leading-tight">
+              A World-Class Faculty <br /> <span className="text-yellow-300">For a Borderless Education</span>
+            </h2>
+            <p className="text-lg text-indigo-100 max-w-3xl mx-auto">
+              Our SACE-registered educators are specialists in <strong>Hybrid Pedagogy</strong>, 
+              ensuring your child receives the same nurturing excellence whether they are in 
+              the <strong>classroom or across the globe</strong>.
+            </p>
+            <div className="pt-4">
+              <Link
+                to="/login"
+                className="inline-flex items-center gap-2 bg-white text-indigo-900 font-black px-10 py-4 rounded-2xl hover:bg-yellow-300 transition shadow-xl transform hover:scale-105"
+              >
+                Register for 2026 Intake <Zap size={18} className="fill-indigo-900"/>
+              </Link>
+            </div>
+          </div>
+        </motion.div>
 
         {/* Heading */}
-        <h1 className="text-4xl font-bold text-pink-800 text-center">
-          Meet Our Highly Rated Teaching Staff
-        </h1>
-        <p className="text-center text-lg text-gray-700 max-w-3xl mx-auto">
-          Your child learns from <strong>SACE-registered, top-rated educators</strong> with 
-          <strong>12+ years of experience</strong> in <strong>CAPS and Cambridge</strong> — 
-          passionate mentors who’ve helped hundreds achieve distinctions.
-        </p>
-
-        {/* Teacher Highlights */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-          {/* Teacher 1 */}
-          <div className="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition border-t-4 border-pink-500">
-            <div className="flex items-center mb-4">
-              <div className="bg-pink-200 border-2 border-dashed rounded-xl w-16 h-16 mr-4" />
-              <div>
-                <h3 className="font-bold text-pink-700">Mr. Chibwe</h3>
-                <p className="text-sm text-gray-600">Physical Sciences & Chemistry</p>
-              </div>
-            </div>
-            <p className="text-sm text-gray-700">
-              18 years exp • 92% A-symbol rate • BA in Chemistry (UZ)
-            </p>
-            <div className="flex mt-2">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <span key={i} className="text-yellow-500 text-lg">★</span>
-              ))}
-              <span className="text-sm text-gray-500 ml-1">(4.9/5)</span>
-            </div>
-          </div>
-
-          {/* Teacher 2 */}
-          <div className="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition border-t-4 border-blue-500">
-            <div className="flex items-center mb-4">
-              <div className="bg-blue-200 border-2 border-dashed rounded-xl w-16 h-16 mr-4" />
-              <div>
-                <h3 className="font-bold text-blue-700">Mr. Liam van der Merwe</h3>
-                <p className="text-sm text-gray-600">Mathematics & AP Maths</p>
-              </div>
-            </div>
-            <p className="text-sm text-gray-700">
-              15 years exp • 87% distinctions • Cambridge IGCSE Examiner
-            </p>
-            <div className="flex mt-2">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <span key={i} className="text-yellow-500 text-lg">★</span>
-              ))}
-              <span className="text-sm text-gray-500 ml-1">(4.8/5)</span>
-            </div>
-          </div>
-
-          {/* Teacher 3 */}
-          <div className="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition border-t-4 border-yellow-500">
-            <div className="flex items-center mb-4">
-              <div className="bg-yellow-200 border-2 border-dashed rounded-xl w-16 h-16 mr-4" />
-              <div>
-                <h3 className="font-bold text-yellow-700">Ms. Priya Naidoo</h3>
-                <p className="text-sm text-gray-600">Accounting & Business Studies</p>
-              </div>
-            </div>
-            <p className="text-sm text-gray-700">
-              14 years exp • CA(SA) • 90% pass rate in final exams
-            </p>
-            <div className="flex mt-2">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <span key={i} className="text-yellow-500 text-lg">★</span>
-              ))}
-              <span className="text-sm text-gray-500 ml-1">(5.0/5)</span>
-            </div>
-          </div>
-
-          {/* Teacher 4 */}
-          <div className="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition border-t-4 border-purple-500">
-            <div className="flex items-center mb-4">
-              <div className="bg-purple-200 border-2 border-dashed rounded-xl w-16 h-16 mr-4" />
-              <div>
-                <h3 className="font-bold text-purple-700">Mrs. Fatima Abrahams</h3>
-                <p className="text-sm text-gray-600">English & Dramatic Arts</p>
-              </div>
-            </div>
-            <p className="text-sm text-gray-700">
-              16 years exp • Published poet • 95% A/B symbols
-            </p>
-            <div className="flex mt-2">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <span key={i} className="text-yellow-500 text-lg">★</span>
-              ))}
-              <span className="text-sm text-gray-500 ml-1">(4.9/5)</span>
-            </div>
-          </div>
-
-          {/* Teacher 5 */}
-          <div className="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition border-t-4 border-green-500">
-            <div className="flex items-center mb-4">
-              <div className="bg-green-200 border-2 border-dashed rounded-xl w-16 h-16 mr-4" />
-              <div>
-                <h3 className="font-bold text-green-700">Mr. David Okafor</h3>
-                <p className="text-sm text-gray-600">Life Sciences & Geography</p>
-              </div>
-            </div>
-            <p className="text-sm text-gray-700">
-              13 years exp • MSc Biology • 88% university acceptance
-            </p>
-            <div className="flex mt-2">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <span key={i} className="text-yellow-500 text-lg">★</span>
-              ))}
-              <span className="text-sm text-gray-500 ml-1">(4.7/5)</span>
-            </div>
-          </div>
-
-          {/* Teacher 6 */}
-          <div className="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition border-t-4 border-teal-500">
-            <div className="flex items-center mb-4">
-              <div className="bg-teal-200 border-2 border-dashed rounded-xl w-16 h-16 mr-4" />
-              <div>
-                <h3 className="font-bold text-teal-700">Mr. A </h3>
-                <p className="text-sm text-gray-600">Computer Science & Coding</p>
-              </div>
-            </div>
-            <p className="text-sm text-gray-700">
-              5 years exp • Google Certified • 100+ apps built with students
-            </p>
-            <div className="flex mt-2">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <span key={i} className="text-yellow-500 text-lg">★</span>
-              ))}
-              <span className="text-sm text-gray-500 ml-1">(5.0/5)</span>
-            </div>
-          </div>
-
-        </div>
-
-        {/* Core Values – Updated */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-10">
-          <div className="p-6 bg-gradient-to-br from-pink-500 to-purple-600 text-white rounded-xl shadow-lg">
-            <h2 className="text-xl font-bold mb-2">Excellence</h2>
-            <p className="text-sm">Only the best — SACE-registered, proven results, parent-approved.</p>
-          </div>
-          <div className="p-6 bg-gradient-to-br from-purple-500 to-indigo-600 text-white rounded-xl shadow-lg">
-            <h2 className="text-xl font-bold mb-2">Diversity</h2>
-            <p className="text-sm">Teachers from all backgrounds, united by passion and expertise.</p>
-          </div>
-          <div className="p-6 bg-gradient-to-br from-indigo-500 to-blue-600 text-white rounded-xl shadow-lg">
-            <h2 className="text-xl font-bold mb-2">Empowerment</h2>
-            <p className="text-sm">We uplift women, support communities, and inspire every learner.</p>
-          </div>
-        </div>
-
-        {/* Parent Testimonial */}
-        <div className="bg-yellow-50 border border-yellow-300 rounded-xl p-6 text-center mt-10">
-          <p className="text-lg italic text-gray-800">
-            “My son went from 58% to 84% in Maths in one term. 
-            <strong>Best decision we made.</strong>” 
-            <br />— <strong>Mrs. Govender, Parent</strong>
+        <div className="text-center space-y-4">
+          <h1 className="text-4xl md:text-6xl font-black text-gray-900 tracking-tight">Meet Our Specialist Educators</h1>
+          <p className="text-lg text-gray-600 max-w-3xl mx-auto italic">
+            "SACE-registered experts with 12+ years of experience in CAPS & Cambridge, 
+            united by a mission to nurture character and academic brilliance."
           </p>
         </div>
 
-        {/* CTA */}
-        <div className="text-center mt-12">
-          <p className="text-xl font-bold text-pink-800">
-            Give your child the <strong>best teachers in South Africa</strong> — 
-            <span className="block text-purple-700">starting 5 January 2026.</span>
-          </p>
-          <Link
-            to="/login"
-            className="inline-block mt-6 bg-gradient-to-r from-pink-600 to-purple-600 text-white font-bold text-lg px-8 py-4 rounded-full shadow-lg hover:shadow-xl transition transform hover:scale-105"
-          >
-            Enrol in Extra Lessons 2026
-          </Link>
+        {/* Teacher Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+
+          {/* Teacher 1 - High School Science */}
+          <motion.div whileHover={{ y: -5 }} className="bg-white p-8 rounded-[2.5rem] shadow-xl border-t-8 border-indigo-600 group">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-20 h-20 bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-600 border-2 border-dashed border-indigo-200">
+                <UserCheck size={40} />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 leading-tight">Mr. Trevor</h3>
+                <p className="text-sm text-indigo-600 font-bold">Physical Sciences Lead</p>
+                <div className="flex mt-1">
+                  {[1, 2, 3, 4, 5].map((i) => <Star key={i} size={12} className="fill-yellow-400 text-yellow-400" />)}
+                </div>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+              18 years of experience. Specialist in <strong>Cambridge IGCSE & AS-Level</strong> Chemistry and CAPS Physics.
+            </p>
+            <ul className="text-xs space-y-2 text-gray-500 font-medium border-t pt-4">
+              <li className="flex items-center gap-2 italic">BA in Chemistry (NMU)</li>
+              <li className="flex items-center gap-2 italic">92% Distinction Rate in 2024</li>
+            </ul>
+          </motion.div>
+
+          {/* Teacher 2 - High School Maths */}
+          <motion.div whileHover={{ y: -5 }} className="bg-white p-8 rounded-[2.5rem] shadow-xl border-t-8 border-blue-600 group">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-20 h-20 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600 border-2 border-dashed border-blue-200">
+                <UserCheck size={40} />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 leading-tight">Mr. Liam v.d Merwe</h3>
+                <p className="text-sm text-blue-600 font-bold">Maths & AP Maths Head</p>
+                <div className="flex mt-1">
+                  {[1, 2, 3, 4, 5].map((i) => <Star key={i} size={12} className="fill-yellow-400 text-yellow-400" />)}
+                </div>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+              <strong>Cambridge Examiner</strong> and CAPS specialist. Expert in building mathematical confidence in senior phases.
+            </p>
+            <ul className="text-xs space-y-2 text-gray-500 font-medium border-t pt-4">
+              <li className="flex items-center gap-2 italic">15+ Years Experience</li>
+              <li className="flex items-center gap-2 italic">SACE Registered Expert</li>
+            </ul>
+          </motion.div>
+
+          {/* Teacher 3 - Primary Phase */}
+          <motion.div whileHover={{ y: -5 }} className="bg-white p-8 rounded-[2.5rem] shadow-xl border-t-8 border-emerald-600 group">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-20 h-20 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600 border-2 border-dashed border-emerald-200">
+                <Heart size={40} className="fill-emerald-600" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 leading-tight">Mrs. Fatima A.</h3>
+                <p className="text-sm text-emerald-600 font-bold">Primary Phase Lead</p>
+                <div className="flex mt-1">
+                  {[1, 2, 3, 4, 5].map((i) => <Star key={i} size={12} className="fill-yellow-400 text-yellow-400" />)}
+                </div>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+              Grade 1–7 literacy and numeracy specialist. Nurturing the foundations through a <strong>Christian-based approach</strong>.
+            </p>
+            <ul className="text-xs space-y-2 text-gray-500 font-medium border-t pt-4">
+              <li className="flex items-center gap-2 italic">B.Ed Foundation Phase</li>
+              <li className="flex items-center gap-2 italic">Specialist in English Literature</li>
+            </ul>
+          </motion.div>
+
         </div>
 
-        {/* Back Navigation */}
+        {/* The Continuity logic visual */}
+        <div className="bg-white rounded-[3rem] p-10 shadow-2xl border border-indigo-50">
+          <div className="flex flex-col md:flex-row items-center gap-12">
+            <div className="flex-1 space-y-6">
+              <h2 className="text-3xl font-black text-gray-900 leading-tight">
+                Teachers Who Travel <br /> <span className="text-indigo-600 underline decoration-yellow-400">With Your Child</span>
+              </h2>
+              <p className="text-gray-600 leading-relaxed">
+                Relocating? Traveling for work? Our teachers stay the same. By using our 
+                <strong> integrated app and virtual portal</strong>, your child maintains their 
+                mentors, curriculum, and classmates regardless of where your family is based.
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-2 text-sm font-bold text-indigo-900">
+                  <ShieldCheck size={20} className="text-emerald-500" /> Same Mentorship
+                </div>
+                <div className="flex items-center gap-2 text-sm font-bold text-indigo-900">
+                  <Globe size={20} className="text-emerald-500" /> Seamless Transition
+                </div>
+              </div>
+            </div>
+            
+          </div>
+        </div>
+
+        {/* Core Values Section */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
+          <div className="p-8 bg-indigo-50 rounded-[2.5rem]">
+            <Award size={48} className="mx-auto text-indigo-600 mb-4" />
+            <h3 className="font-black text-indigo-900 mb-2">Excellence</h3>
+            <p className="text-sm text-indigo-700">Only SACE-registered experts with proven academic records.</p>
+          </div>
+          <div className="p-8 bg-purple-50 rounded-[2.5rem]">
+            <Heart size={48} className="mx-auto text-purple-600 mb-4" />
+            <h3 className="font-black text-purple-900 mb-2">Nurture</h3>
+            <p className="text-sm text-purple-700">Mentorship rooted in Christian values and character building.</p>
+          </div>
+          <div className="p-8 bg-blue-50 rounded-[2.5rem]">
+            <Users size={48} className="mx-auto text-blue-600 mb-4" />
+            <h3 className="font-black text-blue-900 mb-2">Diversity</h3>
+            <p className="text-sm text-blue-700">A global-minded faculty serving students from Grade 1 to 12.</p>
+          </div>
+        </div>
+
+        {/* Final Registration CTA */}
+        <div className="text-center py-12">
+          <p className="text-2xl font-black text-indigo-900">
+            Secure Your Child’s Spot with the Best Educators.
+          </p>
+          <div className="mt-8">
+            <Link
+              to="/login"
+              className="inline-flex items-center gap-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black text-xl px-12 py-6 rounded-2xl shadow-2xl hover:scale-105 transition-all duration-300"
+            >
+              Start Registration for 2026 <ArrowRight />
+            </Link>
+          </div>
+          <p className="mt-6 text-gray-500 text-sm italic">
+            Registrations are always open. Termly enrolment allows for total family peace of mind.
+          </p>
+        </div>
+
+        {/* Navigation */}
         <div className="text-center mt-8">
           <Link
             to="/about"
-            className="inline-block bg-gray-200 text-gray-800 px-6 py-2 rounded-lg shadow hover:bg-gray-300 transition"
+            className="text-gray-400 font-bold hover:text-indigo-600 transition underline decoration-2 underline-offset-4"
           >
             ← Back to About Us
           </Link>

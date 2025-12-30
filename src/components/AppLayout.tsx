@@ -118,7 +118,7 @@ const AppContent: React.FC = () => {
             </motion.button>
 
             <motion.a
-              href="/explore"
+              href="/about"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               className="bg-blue-600/30 backdrop-blur-md border border-white/30 text-white font-bold py-4 px-10 rounded-full flex items-center justify-center gap-2 hover:bg-blue-600/50 transition"
