@@ -70,7 +70,7 @@ const CAMBRIDGE_GRADES = Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`);
    TYPES
 ========================================================= */
 interface Teacher {
-  id: string;
+  id: string;              // teacher UID
   name: string;
   subjects: string[];
 }
@@ -98,17 +98,17 @@ const TimetableManager: React.FC = () => {
   // Create slot form
   const [day, setDay] = useState("");
   const [time, setTime] = useState("");
-  const [curriculum, setCurriculum] = useState<"CAPS" | "Cambridge">("CAPS");
+  const [curriculum, setCurriculum] =
+    useState<"CAPS" | "Cambridge">("CAPS");
   const [grade, setGrade] = useState("");
   const [subject, setSubject] = useState("");
   const [teacher, setTeacher] = useState<Teacher | null>(null);
 
-  // Editing slot (principal)
+  // Editing slot
   const [editing, setEditing] = useState<TimetableEntry | null>(null);
 
   /* =========================================================
      FETCH APPROVED TEACHERS
-     (Used to assign teachers to timetable slots)
 ========================================================= */
   useEffect(() => {
     const q = query(
@@ -120,7 +120,7 @@ const TimetableManager: React.FC = () => {
       const fetched: Teacher[] = snap.docs.map((d) => {
         const data = d.data();
         return {
-          id: data.uid, // teacher UID (important for security rules)
+          id: data.uid,
           name: `${data.personalInfo?.firstName || ""} ${data.personalInfo?.lastName || ""}`.trim(),
           subjects: data.subjects?.map((s: any) => s.name) || [],
         };
@@ -150,11 +150,36 @@ const TimetableManager: React.FC = () => {
   }, []);
 
   /* =========================================================
+     CRITICAL FIXES (DEPENDENT STATE)
+========================================================= */
+
+  // When subject changes → previously selected teacher may be invalid
+  useEffect(() => {
+    setTeacher(null);
+  }, [subject]);
+
+  // When curriculum changes → previously selected grade may be invalid
+  useEffect(() => {
+    setGrade("");
+  }, [curriculum]);
+
+  /* =========================================================
      CREATE TIMETABLE SLOT
 ========================================================= */
   const createSlot = async () => {
-    if (!day || !time || !grade || !subject || !teacher) {
-      alert("Please fill in all fields");
+    if (!day || !time || !grade || !subject || !teacher) return;
+
+    // Prevent duplicate slots
+    const conflict = entries.find(
+      (e) =>
+        e.day === day &&
+        e.time === time &&
+        e.grade === grade &&
+        e.curriculum === curriculum
+    );
+
+    if (conflict) {
+      alert("A class already exists for this time and grade.");
       return;
     }
 
@@ -178,7 +203,7 @@ const TimetableManager: React.FC = () => {
   };
 
   /* =========================================================
-     UPDATE SLOT (PRINCIPAL ONLY)
+     UPDATE SLOT
 ========================================================= */
   const updateSlot = async () => {
     if (!editing) return;
@@ -196,7 +221,7 @@ const TimetableManager: React.FC = () => {
   };
 
   /* =========================================================
-     DELETE SLOT (PRINCIPAL ONLY)
+     DELETE SLOT
 ========================================================= */
   const deleteSlot = async (id: string) => {
     await deleteDoc(doc(db, "timetable", id));
@@ -217,28 +242,20 @@ const TimetableManager: React.FC = () => {
         <div className="grid md:grid-cols-6 gap-3 bg-gray-50 p-4 rounded-lg">
           {/* Day */}
           <Select value={day} onValueChange={setDay}>
-            <SelectTrigger>
-              <SelectValue placeholder="Day" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Day" /></SelectTrigger>
             <SelectContent>
               {DAYS.map((d) => (
-                <SelectItem key={d} value={d}>
-                  {d}
-                </SelectItem>
+                <SelectItem key={d} value={d}>{d}</SelectItem>
               ))}
             </SelectContent>
           </Select>
 
           {/* Time */}
           <Select value={time} onValueChange={setTime}>
-            <SelectTrigger>
-              <SelectValue placeholder="Time" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Time" /></SelectTrigger>
             <SelectContent>
               {TIMES.map((t) => (
-                <SelectItem key={t} value={t}>
-                  {t}
-                </SelectItem>
+                <SelectItem key={t} value={t}>{t}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -246,11 +263,9 @@ const TimetableManager: React.FC = () => {
           {/* Curriculum */}
           <Select
             value={curriculum}
-            onValueChange={(v) => setCurriculum(v as "CAPS" | "Cambridge")}
+            onValueChange={(v) => setCurriculum(v as any)}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Curriculum" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Curriculum" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="CAPS">CAPS</SelectItem>
               <SelectItem value="Cambridge">Cambridge</SelectItem>
@@ -259,15 +274,11 @@ const TimetableManager: React.FC = () => {
 
           {/* Grade */}
           <Select value={grade} onValueChange={setGrade}>
-            <SelectTrigger>
-              <SelectValue placeholder="Grade" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Grade" /></SelectTrigger>
             <SelectContent>
               {(curriculum === "CAPS" ? CAPS_GRADES : CAMBRIDGE_GRADES).map(
                 (g) => (
-                  <SelectItem key={g} value={g}>
-                    {g}
-                  </SelectItem>
+                  <SelectItem key={g} value={g}>{g}</SelectItem>
                 )
               )}
             </SelectContent>
@@ -275,14 +286,10 @@ const TimetableManager: React.FC = () => {
 
           {/* Subject */}
           <Select value={subject} onValueChange={setSubject}>
-            <SelectTrigger>
-              <SelectValue placeholder="Subject" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Subject" /></SelectTrigger>
             <SelectContent>
               {subjects.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
+                <SelectItem key={s} value={s}>{s}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -294,21 +301,29 @@ const TimetableManager: React.FC = () => {
               setTeacher(teachers.find((t) => t.id === id) || null)
             }
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Teacher" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Teacher" /></SelectTrigger>
             <SelectContent>
               {teachers
                 .filter((t) => t.subjects.includes(subject))
                 .map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
-                  </SelectItem>
+                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                 ))}
             </SelectContent>
           </Select>
 
-          <Button onClick={createSlot} className="md:col-span-6 bg-indigo-600">
+          {/* Teacher availability warning */}
+          {subject &&
+            teachers.filter((t) => t.subjects.includes(subject)).length === 0 && (
+              <p className="md:col-span-6 text-xs text-red-600 font-semibold">
+                No approved teacher teaches this subject
+              </p>
+            )}
+
+          <Button
+            onClick={createSlot}
+            disabled={!day || !time || !grade || !subject || !teacher}
+            className="md:col-span-6 bg-indigo-600 disabled:opacity-50"
+          >
             Add Slot
           </Button>
         </div>
@@ -318,7 +333,6 @@ const TimetableManager: React.FC = () => {
           {DAYS.map((d) => (
             <div key={d}>
               <h3 className="font-semibold mb-2">{d}</h3>
-
               <div className="grid grid-cols-5 gap-2">
                 {entries
                   .filter((e) => e.day === d)

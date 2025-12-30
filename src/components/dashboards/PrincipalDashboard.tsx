@@ -1,17 +1,15 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
-import { db, auth } from "@/lib/firebaseConfig";
+import { db } from "@/lib/firebaseConfig";
 import {
   collection,
   onSnapshot,
   doc,
   updateDoc,
   serverTimestamp,
-  getDoc,
-  setDoc
+  setDoc,
 } from "firebase/firestore";
-import { getStorage, ref, listAll, getDownloadURL } from "firebase/storage";
 
 import {
   Card,
@@ -38,7 +36,6 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useNavigate } from "react-router-dom";
 import TimetableManager from "@/lib/TimetableManager";
@@ -46,35 +43,29 @@ import {
   LogOut,
   Search,
   Eye,
-  Download,
-  AlertCircle,
   Users,
   CheckCircle,
-  DollarSign,
   ChevronDown,
   ChevronUp,
+  MapPin, 
+  Laptop,
+  GraduationCap,
+  Megaphone,
+  Calendar,
+  DollarSign,
+  AlertCircle,
+  SendHorizontal
 } from "lucide-react";
 
 /* ---------------- Types ---------------- */
-interface ParentProfile {
-  id: string;
-  name?: string;
-  email?: string;
-  phone?: string;
-  address?: string;
-  occupation?: string;
-}
-
 interface Student {
   id: string;
   firstName?: string;
   lastName?: string;
   grade?: string;
-  parentEmail?: string;
-  parentId?: string;
-  subjects?: string[];
-  status?: "pending" | "enrolled" | "rejected" | "suspended";
-  curriculum?: "CAPS" | "Cambridge";
+  status?: "pending" | "enrolled" | "rejected";
+  learningMode?: "Campus" | "Virtual";
+  paymentReceived?: boolean;
 }
 
 interface Teacher {
@@ -84,743 +75,420 @@ interface Teacher {
     firstName?: string;
     lastName?: string;
     email?: string;
-    yearsOfExperience?: number;
-    gradePhase?: "Primary" | "Secondary";
+    phone?: string;
+    yearsOfExperience?: string;
   };
-  subjects?: { name: string; curriculum: "CAPS" | "Cambridge" }[];
+  subjects?: { name: string; curriculum: string }[];
   status?: "pending" | "approved" | "rejected";
-  documents?: Record<string, string[]>;
+  learningMode?: "Campus" | "Virtual";
 }
 
-interface DocumentFile {
-  name: string;
-  url: string;
-  type: string;
-}
-
-/* ---------------- Component ---------------- */
 const PrincipalDashboard: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [documents, setDocuments] = useState<DocumentFile[]>([]);
-  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Filters
+  // UI States
   const [searchTerm, setSearchTerm] = useState("");
-  const [gradeFilter, setGradeFilter] = useState("all");
-  const [subjectFilter, setSubjectFilter] = useState("all");
-  const [teacherFilter, setTeacherFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [curriculumFilter, setCurriculumFilter] = useState<"all" | "CAPS" | "Cambridge">("all");
-
+  const [viewMode, setViewMode] = useState<"students" | "teachers">("students");
+  const [paymentFilter, setPaymentFilter] = useState("all");
   const [timetableExpanded, setTimetableExpanded] = useState(false);
+  const [announcementExpanded, setAnnouncementExpanded] = useState(false);
 
-  const [selectedItem, setSelectedItem] = useState<Student | Teacher | null>(null);
+  // Announcement Form
+  const [announcementTitle, setAnnouncementTitle] = useState("");
+  const [announcementBody, setAnnouncementBody] = useState("");
+  const [isPublishing, setIsPublishing] = useState(false);
+
+  // Modal States
+  const [selectedItem, setSelectedItem] = useState<any>(null);
   const [selectedType, setSelectedType] = useState<"student" | "teacher" | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<"Details" | "Documents">("Details");
-
-  const [parentProfile, setParentProfile] = useState<ParentProfile | null>(null);
-
-  const principalName = auth.currentUser?.displayName || "Principal";
-  const principalEmail = auth.currentUser?.email || "";
 
   const { logout } = useAuth();
   const navigate = useNavigate();
 
-
-// announcement
-  const [announcementExpanded, setAnnouncementExpanded] = useState(false);
-const [announcementTitle, setAnnouncementTitle] = useState("");
-const [announcementSubject, setAnnouncementSubject] = useState("");
-const [savingAnnouncement, setSavingAnnouncement] = useState(false);
-const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
-const [clearAfterSave, setClearAfterSave] = useState(false);
-const [announcementDate, setAnnouncementDate] = useState<any>(null);
-
-
-
-
-  /* ---------------- Unique Filter Values ---------------- */
-  const uniqueGrades = useMemo(() => {
-    return Array.from(new Set(students.map((s) => s.grade).filter(Boolean))).sort();
-  }, [students]);
-
-  const uniqueSubjects = useMemo(() => {
-    const fromStudents = students.flatMap((s) => s.subjects || []);
-    const fromTeachers = teachers.flatMap((t) => t.subjects?.map((s) => s.name) || []);
-    return Array.from(new Set([...fromStudents, ...fromTeachers])).sort();
-  }, [students, teachers]);
-
-  const uniqueTeachers = useMemo(() => {
-    return Array.from(
-      new Set(
-        teachers
-          .map((t) => {
-            const first = t.personalInfo?.firstName || "";
-            const last = t.personalInfo?.lastName || "";
-            return `${first} ${last}`.trim();
-          })
-          .filter(Boolean)
-      )
-    ).sort();
-  }, [teachers]);
-
-  /* ---------------- Firestore Listeners ---------------- */
+  /* ---------------- Real-time Listeners ---------------- */
   useEffect(() => {
     const unsubStudents = onSnapshot(collection(db, "students"), (snap) => {
       setStudents(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Student) })));
     });
-
     const unsubTeachers = onSnapshot(collection(db, "teacherApplications"), (snap) => {
       setTeachers(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Teacher) })));
+      setLoading(false);
     });
-
-    return () => {
-      unsubStudents();
-      unsubTeachers();
-    };
+    return () => { unsubStudents(); unsubTeachers(); };
   }, []);
 
-  // anouncements
-useEffect(() => {
-  const unsub = onSnapshot(
-    doc(db, "announcements", "active"),
-    (snap) => {
-      if (!snap.exists()) return;
+  /* ---------------- Analytics ---------------- */   
+  const stats = useMemo(() => {
+    const totalS = students.length;
+    const campusS = students.filter(s => s.learningMode === "Campus").length;
+    const virtualS = students.filter(s => (s.learningMode || "Virtual") === "Virtual").length;
+    
+    return {
+      totalStudents: totalS,
+      campus: campusS,
+      virtual: virtualS,
+      totalTeachers: teachers.filter(t => t.status === "approved").length,
+      unpaid: students.filter(s => !s.paymentReceived).length,
+      pendingApps: teachers.filter(t => t.status === "pending").length,
+    };
+  }, [students, teachers]);   
 
-      // 🚫 Do not repopulate right after clearing
-      if (clearAfterSave) {
-        setClearAfterSave(false);
-        return;
-      }
-
-      // 🚫 Do not override while typing
-      if (isEditingAnnouncement) return;
-
-      const data = snap.data();
-      setAnnouncementTitle(data.title ?? "");
-      setAnnouncementSubject(data.subject ?? "");
-      setAnnouncementDate(data.updatedAt);
+  /* ---------------- Filtered Data ---------------- */
+  const filteredData = useMemo(() => {
+    if (viewMode === "students") {
+      return students.filter(s => {
+        const matchesSearch = `${s.firstName} ${s.lastName}`.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesPayment = paymentFilter === "all" ? true : (paymentFilter === "paid" ? s.paymentReceived : !s.paymentReceived);
+        return matchesSearch && matchesPayment;
+      });
+    } else {
+      return teachers.filter(t => 
+        `${t.personalInfo?.firstName} ${t.personalInfo?.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
+      );
     }
-  );
+  }, [viewMode, students, teachers, searchTerm, paymentFilter]);
 
-  return () => unsub();
-}, [isEditingAnnouncement, clearAfterSave]);
+  /* ---------------- Handlers ---------------- */
+  const handleLogout = async () => { await logout(); navigate("/login"); };
 
-const saveAnnouncement = async () => {
-  if (announcementTitle.trim() === "" || announcementSubject.trim() === "") {
-    alert("Please fill in both the title and subject.");
-    return;
-  }
-
-  setSavingAnnouncement(true); // Set loading state to true
-  try {
-    await setDoc(
-      doc(db, "announcements", "active"),
-      {
-        title: announcementTitle.trim(),
-        subject: announcementSubject.trim(),
-        updatedAt: serverTimestamp(),
-        createdBy: auth.currentUser?.email ?? "principal",
-      },
-      { merge: true }
-    );
-
-    // ✅ Clear inputs AFTER publish
-    setAnnouncementTitle("");
-    setAnnouncementSubject("");
-
-    // 🚫 Prevent snapshot from restoring values
-    setClearAfterSave(true);
-    setIsEditingAnnouncement(false);
-  } catch (error) {
-    console.error("Error saving announcement:", error);
-    alert("Failed to save announcement. Check permissions.");
-  } finally {
-    setSavingAnnouncement(false); // Reset loading state
-  }
-};
-
-
-  /* ---------------- Approve / Reject ---------------- */
-  const approveStudent = async (studentId: string) => {
-    await updateDoc(doc(db, "students", studentId), {
-      status: "enrolled",
-      reviewedAt: serverTimestamp(),
-    });
-    closeModal();
-  };
-
-  const approveTeacher = async (teacherId: string) => {
-    await updateDoc(doc(db, "teacherApplications", teacherId), {
-      status: "approved",
-      reviewedAt: serverTimestamp(),
-    });
-    closeModal();
-  };
-
-  const reject = async (collectionName: "students" | "teacherApplications", id: string) => {
-    await updateDoc(doc(db, collectionName, id), {
-      status: "rejected",
-      reviewedAt: serverTimestamp(),
-    });
-    closeModal();
-  };
-
-  /* ---------------- Fetch Documents ---------------- */
-  const fetchDocuments = async (type: "student" | "teacher", item: Student | Teacher) => {
-    setLoadingDocs(true);
-    setDocuments([]);
-
+  const handlePublishAnnouncement = async () => {
+    if (!announcementTitle || !announcementBody) return;
+    setIsPublishing(true);
     try {
-      const storage = getStorage();
-
-      if (type === "student") {
-        const pathRef = ref(storage, `registrations/${item.id}/documents`);
-        const result = await listAll(pathRef);
-        const files = await Promise.all(
-          result.items.map(async (itemRef) => ({
-            name: itemRef.name,
-            url: await getDownloadURL(itemRef),
-            type: "general",
-          }))
-        );
-        setDocuments(files);
-      }
-
-      if (type === "teacher" && "uid" in item && item.uid) {
-        const teacher = item as Teacher;
-        const basePath = `teacherApplications/${teacher.uid}/${teacher.id}`;
-        const docTypes = ["idDoc", "qualification", "cv", "ceta", "proofOfAddress", "policeClearance"];
-
-        const allFiles: DocumentFile[] = [];
-
-        for (const docType of docTypes) {
-          try {
-            const folderRef = ref(storage, `${basePath}/${docType}`);
-            const listResult = await listAll(folderRef);
-            for (const fileRef of listResult.items) {
-              allFiles.push({
-                name: fileRef.name,
-                url: await getDownloadURL(fileRef),
-                type: docType,
-              });
-            }
-          } catch (err: any) {
-            if (err.code !== "storage/object-not-found") {
-              console.warn(`Error loading ${docType}:`, err);
-            }
-          }
-        }
-        setDocuments(allFiles);
-      }
-    } catch (err) {
-      console.error("Failed to load documents:", err);
-    } finally {
-      setLoadingDocs(false);
-    }
+      await setDoc(doc(db, "announcements", "active"), {
+        title: announcementTitle,
+        subject: announcementBody,
+        updatedAt: serverTimestamp(),
+        author: "Principal Office"
+      });
+      setAnnouncementTitle("");
+      setAnnouncementBody("");
+      setAnnouncementExpanded(false);
+    } catch (err) { console.error(err); }
+    finally { setIsPublishing(false); }
   };
 
-  /* ---------------- Modal ---------------- */
-  const openModal = async (item: Student | Teacher, type: "student" | "teacher") => {
-    setSelectedItem(item);
-    setSelectedType(type);
-    setShowModal(true);
-    setActiveTab("Details");
-    setDocuments([]);
-    setParentProfile(null);
-
-    if (type === "student") {
-      await fetchDocuments("student", item);
-      if ((item as Student).parentId) {
-        const snap = await getDoc(doc(db, "parents", (item as Student).parentId!));
-        if (snap.exists()) setParentProfile({ id: snap.id, ...(snap.data() as ParentProfile) });
-      }
-    } else if (type === "teacher") {
-      await fetchDocuments("teacher", item);
-    }
-  };
-
-  const closeModal = () => {
+  const updateStatus = async (col: string, id: string, status: string) => {
+    await updateDoc(doc(db, col, id), { status, reviewedAt: serverTimestamp() });
     setShowModal(false);
-    setSelectedItem(null);
-    setSelectedType(null);
-    setDocuments([]);
-    setParentProfile(null);
   };
 
-  const handleLogout = async () => {
-    await logout();
-    navigate("/");
-  };
-
-  /* ---------------- Combined Filtering ---------------- */
-  const filteredStudents = useMemo(() => {
-    return students.filter((s) => {
-      const fullName = `${s.firstName ?? ""} ${s.lastName ?? ""}`.toLowerCase();
-      const matchesSearch = searchTerm === "" || fullName.includes(searchTerm.toLowerCase());
-      const matchesGrade = gradeFilter === "all" || s.grade === gradeFilter;
-      const matchesSubject = subjectFilter === "all" || s.subjects?.includes(subjectFilter);
-      const matchesStatus = statusFilter === "all" || s.status === statusFilter;
-      const matchesCurriculum = curriculumFilter === "all" || s.curriculum === curriculumFilter;
-      return matchesSearch && matchesGrade && matchesSubject && matchesStatus && matchesCurriculum;
-    });
-  }, [students, searchTerm, gradeFilter, subjectFilter, statusFilter, curriculumFilter]);
-
-  const filteredTeachers = useMemo(() => {
-    return teachers.filter((t) => {
-      const fullName = `${t.personalInfo?.firstName ?? ""} ${t.personalInfo?.lastName ?? ""}`.toLowerCase();
-      const email = (t.personalInfo?.email ?? "").toLowerCase();
-      const matchesSearch = searchTerm === "" || fullName.includes(searchTerm.toLowerCase()) || email.includes(searchTerm.toLowerCase());
-      const matchesTeacher = teacherFilter === "all" || `${t.personalInfo?.firstName} ${t.personalInfo?.lastName}`.trim() === teacherFilter;
-      const matchesSubject = subjectFilter === "all" || t.subjects?.some((sub) => sub.name === subjectFilter);
-      const matchesStatus = statusFilter === "all" || t.status === statusFilter;
-      return matchesSearch && matchesTeacher && matchesSubject && matchesStatus;
-    });
-  }, [teachers, searchTerm, teacherFilter, subjectFilter, statusFilter]);
-
-  /* ---------------- Render ---------------- */
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-bold text-indigo-800">Principal Dashboard</h1>
-          <Button variant="destructive" onClick={handleLogout}>
-            <LogOut className="w-4 h-4 mr-2" /> Logout
-          </Button>
-        </div>
-
-        {/* Advanced Filters */}
-        <Card className="mb-6">
-          <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row gap-4 flex-wrap">
-              <div className="flex-1 min-w-[300px] relative">
-                <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-                <Input
-                  placeholder="Search by name, email, subject..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-
-              <Select value={gradeFilter} onValueChange={setGradeFilter}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="All Grades" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Grades</SelectItem>
-                  {uniqueGrades.map((g) => (
-                    <SelectItem key={g} value={g}>{g}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={subjectFilter} onValueChange={setSubjectFilter}>
-                <SelectTrigger className="w-64">
-                  <SelectValue placeholder="All Subjects" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Subjects</SelectItem>
-                  {uniqueSubjects.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={teacherFilter} onValueChange={setTeacherFilter}>
-                <SelectTrigger className="w-64">
-                  <SelectValue placeholder="All Teachers" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Teachers</SelectItem>
-                  {uniqueTeachers.map((t) => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="All Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="enrolled">Enrolled</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {(searchTerm || gradeFilter !== "all" || subjectFilter !== "all" || teacherFilter !== "all" || statusFilter !== "all") && (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSearchTerm("");
-                    setGradeFilter("all");
-                    setSubjectFilter("all");
-                    setTeacherFilter("all");
-                    setStatusFilter("all");
-                  }}
-                >
-                  Clear All
-                </Button>
-              )}
+    <div className="min-h-screen bg-[#f1f5f9] p-4 md:p-8 font-sans transition-colors duration-500">
+      <div className="max-w-7xl mx-auto space-y-8">
+        
+        {/* Modern Header */}
+        <header className="flex flex-col md:flex-row justify-between items-center bg-white/70 backdrop-blur-md p-6 rounded-[2.5rem] shadow-xl shadow-blue-900/5 border border-white/50">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 bg-gradient-to-tr from-indigo-700 via-indigo-600 to-blue-400 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+              <GraduationCap size={32} />
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card className="bg-orange-500 text-white">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
-                <p className="text-lg">Pending Reviews</p>
-                <p className="text-3xl font-bold">
-                  {students.filter((s) => s.status === "pending").length +
-                    teachers.filter((t) => t.status === "pending").length}
-                </p>
-              </div>
-              <AlertCircle className="w-10 h-10 opacity-80" />
-            </CardContent>
-          </Card>
-          <Card className="bg-green-600 text-white">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
-                <p className="text-lg">Total Students</p>
-                <p className="text-3xl font-bold">{students.length}</p>
-              </div>
-              <Users className="w-10 h-10 opacity-80" />
-            </CardContent>
-          </Card>
-          <Card className="bg-blue-600 text-white">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
-                <p className="text-lg">Active Teachers</p>
-                <p className="text-3xl font-bold">{teachers.filter((t) => t.status === "approved").length}</p>
-              </div>
-              <CheckCircle className="w-10 h-10 opacity-80" />
-            </CardContent>
-          </Card>
-          <Card className="bg-purple-600 text-white">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
-                <p className="text-lg">Teacher Applications</p>
-                <p className="text-3xl font-bold">{teachers.length}</p>
-              </div>
-              <DollarSign className="w-10 h-10 opacity-80" />
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Students */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Student Registrations ({filteredStudents.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4 max-h-96 overflow-y-auto">
-                {filteredStudents.length === 0 ? (
-                  <p className="text-center text-gray-500 py-8">No students match filters</p>
-                ) : (
-                  filteredStudents.map((s) => (
-                    <div
-                      key={s.id}
-                      className={`p-4 rounded-lg border ${s.status === "pending" ? "bg-yellow-50 border-yellow-400" : "bg-white"}`}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-semibold text-lg">{s.firstName} {s.lastName}</p>
-                          <p className="text-sm text-gray-600">Grade {s.grade} • {s.curriculum}</p>
-                          <div className="mt-2 flex gap-2 flex-wrap">
-                            <Badge variant={s.status === "enrolled" ? "default" : s.status === "pending" ? "secondary" : "destructive"}>
-                              {s.status}
-                            </Badge>
-                          </div>
-                        </div>
-                        <Button size="sm" variant="ghost" onClick={() => openModal(s, "student")}>
-                          <Eye className="w-5 h-5" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Teachers */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Teacher Applications ({filteredTeachers.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4 max-h-96 overflow-y-auto">
-                {filteredTeachers.length === 0 ? (
-                  <p className="text-center text-gray-500 py-8">No teachers match filters</p>
-                ) : (
-                  filteredTeachers.map((t) => (
-                    <div
-                      key={t.id}
-                      className={`p-4 rounded-lg border ${t.status === "pending" ? "bg-yellow-50 border-yellow-400" : "bg-white"}`}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-semibold text-lg">
-                            {t.personalInfo?.firstName} {t.personalInfo?.lastName}
-                          </p>
-                          <p className="text-sm text-gray-600">{t.personalInfo?.email}</p>
-                          <p className="text-sm text-gray-500">
-                            {t.subjects?.length || 0} subject{t.subjects?.length !== 1 ? "s" : ""} • {t.personalInfo?.yearsOfExperience} yrs exp
-                          </p>
-                          <div className="mt-2 flex gap-2 flex-wrap">
-                            <Badge variant={t.status === "approved" ? "default" : t.status === "pending" ? "secondary" : "destructive"}>
-                              {t.status || "pending"}
-                            </Badge>
-                          </div>
-                        </div>
-                        <Button size="sm" variant="ghost" onClick={() => openModal(t, "teacher")}>
-                          <Eye className="w-5 h-5" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Timetable */}
-        <Card className="mt-8">
-          <CardHeader className="cursor-pointer" onClick={() => setTimetableExpanded(!timetableExpanded)}>
-            <CardTitle className="flex justify-between items-center">
-              School Timetable
-              {timetableExpanded ? <ChevronUp /> : <ChevronDown />}
-            </CardTitle>
-          </CardHeader>
-          {timetableExpanded && (
-            <CardContent>
-              <TimetableManager />
-            </CardContent>
-          )}
-        </Card>
-      </div>
-
-{/* Announcements */}
-<Card className="mt-6">
-  <CardHeader
-    className="cursor-pointer bg-slate-50"
-    onClick={() => setAnnouncementExpanded(!announcementExpanded)}
-  >
-    <CardTitle className="flex justify-between items-center text-indigo-900">
-      <div className="flex items-center gap-2">
-        <Users className="w-5 h-5" />
-        <span>Manage School Announcements</span>
-      </div>
-      {announcementExpanded ? <ChevronUp /> : <ChevronDown />}
-    </CardTitle>
-  </CardHeader>
-
-  {announcementExpanded && (
-    <CardContent className="p-6 space-y-6">
-      {/* SECTION HEADING */}
-      <div className="border-b pb-2">
-        <h2 className="text-xl font-bold text-gray-800">Announcements</h2>
-        <p className="text-sm text-gray-500">Create or edit the message seen by all parents and teachers.</p>
-      </div>
-
-      {/* COMPOSER */}
-      <div className="space-y-4 bg-gray-50 p-4 rounded-lg border border-dashed border-gray-300">
-        <div>
-          <label className="text-xs font-semibold uppercase text-gray-500 mb-1 block">Announcement Title</label>
-          <Input
-            placeholder="e.g. School Inter-house Athletics 2024"
-            value={announcementTitle}
-            onChange={(e) => {
-              setIsEditingAnnouncement(true);
-              setAnnouncementTitle(e.target.value);
-            }}
-            className="bg-white"
-          />
-        </div>
-
-        <div>
-          <label className="text-xs font-semibold uppercase text-gray-500 mb-1 block">Message Body</label>
-          <textarea
-            className="flex min-h-[100px] w-full rounded-md border border-input bg-white px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            placeholder="Type your message here..."
-            value={announcementSubject}
-            onChange={(e) => {
-              setIsEditingAnnouncement(true);
-              setAnnouncementSubject(e.target.value);
-            }}
-          />
-        </div>
-
-        <div className="flex justify-end">
-          <Button 
-            onClick={saveAnnouncement} 
-            disabled={savingAnnouncement}
-            className="bg-indigo-600 hover:bg-indigo-700"
-          >
-            {savingAnnouncement ? "Publishing..." : "Publish Announcement"}
-          </Button>
-        </div>
-      </div>
-
-      {/* LIVE PREVIEW / SEND MESSAGE DISPLAY */}
-      {!isEditingAnnouncement && announcementTitle && (
-        <div className="mt-8">
-          <h3 className="text-xs font-semibold uppercase text-green-600 mb-2 flex items-center gap-1">
-            <CheckCircle className="w-3 h-3" /> Currently Live on Dashboards
-          </h3>
-          
-          <div className="p-6 bg-white border-2 border-indigo-100 rounded-xl shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
-            
-            <h4 className="text-xl font-bold text-indigo-900 mb-2">{announcementTitle}</h4>
-            <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{announcementSubject}</p>
-            
-            {/* FINE PRINT FOOTER */}
-            <div className="mt-6 pt-4 border-t border-gray-100 flex justify-between items-center text-[10px] uppercase tracking-widest text-gray-400 italic">
-              <div>
-                DATE: {announcementDate?.seconds 
-                  ? new Date(announcementDate.seconds * 1000).toLocaleDateString('en-GB', {
-                      day: '2-digit', month: 'long', year: 'numeric'
-                    }) 
-                  : "Recently Updated"}
-              </div>
-              <div className="font-bold">
-                SENDER: THE PRINCIPAL
-              </div>
+            <div>
+              <h1 className="text-2xl font-black text-slate-900 leading-tight">Care Academy <span className="text-indigo-600">Console</span></h1>
+              <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.2em]">Administration v2.0</p>
             </div>
           </div>
+          <Button variant="ghost" className="rounded-2xl font-bold text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-all" onClick={handleLogout}>
+            <LogOut size={18} className="mr-2" /> Sign Out
+          </Button>
+        </header>
+
+        {/* Dynamic Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCard label="Enrollment" value={stats.totalStudents} sub="Active Learners" icon={<Users/>} color="bg-indigo-600" />
+          <StatCard label="Finance Status" value={stats.unpaid} sub="Unpaid Accounts" icon={<DollarSign/>} color="bg-rose-500" />
+          <StatCard label="Certified Staff" value={stats.totalTeachers} sub={`${stats.pendingApps} Apps Review`} icon={<CheckCircle/>} color="bg-emerald-500" />
+          <StatCard 
+            label="Learning Modes" 
+            value={stats.campus + stats.virtual} 
+            sub={`${stats.campus} Campus | ${stats.virtual} Virtual`} 
+            icon={<Laptop/>} 
+            color="bg-amber-500" 
+          />
         </div>
-      )}
-    </CardContent>
-  )}
-</Card>
 
-      {/* Review Modal */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Registry (Left 2 Columns) */}
+          <div className="lg:col-span-2 space-y-8">
+            <Card className="border-none shadow-2xl rounded-[3rem] bg-white overflow-hidden">
+              <CardHeader className="p-8 border-b border-slate-50 bg-slate-50/30">
+                <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+                  <div className="flex bg-white shadow-sm p-1.5 rounded-[1.5rem] border border-slate-100">
+                    <button 
+                      onClick={() => setViewMode("students")}
+                      className={`px-8 py-2.5 rounded-[1.2rem] text-sm font-black transition-all duration-300 ${viewMode === "students" ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100" : "text-slate-400 hover:text-slate-600"}`}
+                    >Learners</button>
+                    <button 
+                      onClick={() => setViewMode("teachers")}
+                      className={`px-8 py-2.5 rounded-[1.2rem] text-sm font-black transition-all duration-300 ${viewMode === "teachers" ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100" : "text-slate-400 hover:text-slate-600"}`}
+                    >Teachers</button>
+                  </div>
+
+                  <div className="flex gap-3 w-full md:w-auto">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                      <Input 
+                        placeholder="Filter by name..." 
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-12 h-12 rounded-2xl border-none bg-slate-100/80 focus:bg-white focus:ring-2 ring-indigo-100 transition-all"
+                      />
+                    </div>
+                    {viewMode === "students" && (
+                       <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+                        <SelectTrigger className="w-36 h-12 rounded-2xl bg-slate-100/80 border-none font-black text-xs text-slate-600 uppercase tracking-tighter"><SelectValue placeholder="Finance"/></SelectTrigger>
+                        <SelectContent className="rounded-2xl border-none shadow-2xl">
+                          <SelectItem value="all">Total Balance</SelectItem>
+                          <SelectItem value="paid">Paid Only</SelectItem>
+                          <SelectItem value="pending">Outstanding</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto max-h-[600px]">
+                  <table className="w-full">
+                    <thead className="bg-slate-50/80 sticky top-0 z-10">
+                      <tr className="text-[11px] font-black uppercase text-slate-400 tracking-[0.15em]">
+                        <th className="px-8 py-5 text-left">Identity</th>
+                        <th className="px-8 py-5 text-left">Mode</th>
+                        <th className="px-8 py-5 text-left">Account Status</th>
+                        <th className="px-8 py-5 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {filteredData.map((item: any) => (
+                        <tr key={item.id} className="group hover:bg-slate-50/80 transition-all cursor-default">
+                          <td className="px-8 py-6">
+                            <div className="font-black text-slate-800 text-sm group-hover:text-indigo-600 transition-colors">
+                              {viewMode === "students" ? `${item.firstName} ${item.lastName}` : `${item.personalInfo?.firstName} ${item.personalInfo?.lastName}`}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-bold tracking-tight">ID: {item.id.slice(0,10)}</div>
+                          </td>
+                          <td className="px-8 py-6">
+                            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl w-fit font-bold text-[10px] ${item.learningMode === "Campus" ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"}`}>
+                              {item.learningMode === "Campus" ? <MapPin size={12}/> : <Laptop size={12}/>}
+                              {item.learningMode || "Virtual"}
+                            </div>
+                          </td>
+                          <td className="px-8 py-6">
+                            {viewMode === "students" ? (
+                               <div className={`text-[10px] font-black px-3 py-1.5 rounded-xl flex items-center gap-2 w-fit ${item.paymentReceived ? "text-emerald-700 bg-emerald-100" : "text-rose-700 bg-rose-100"}`}>
+                                 <span className="w-2 h-2 rounded-full animate-pulse bg-current"></span>
+                                 {item.paymentReceived ? "CLEARED" : "OWING"}
+                               </div>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] border-slate-200 uppercase px-3 py-1 rounded-lg">{item.status || "pending"}</Badge>
+                            )}
+                          </td>
+                          <td className="px-8 py-6 text-right">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="rounded-xl hover:bg-indigo-600 hover:text-white transition-all shadow-none" 
+                              onClick={() => {setSelectedItem(item); setSelectedType(viewMode === "students" ? "student" : "teacher"); setShowModal(true);}}
+                            >
+                              <Eye size={20}/>
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right Column: Interactive Modules */}
+          <div className="space-y-6">
+            {/* Collapsible Broadcast Hub */}
+            <Card className="border-none shadow-2xl rounded-[2.5rem] bg-indigo-950 text-white overflow-hidden transition-all duration-500">
+              <CardHeader 
+                className="p-8 cursor-pointer flex flex-row items-center justify-between hover:bg-indigo-900/50 transition-colors"
+                onClick={() => setAnnouncementExpanded(!announcementExpanded)}
+              >
+                <CardTitle className="text-lg font-black flex items-center gap-4">
+                  <div className="p-2 bg-indigo-500/20 rounded-xl text-indigo-300">
+                    <Megaphone size={20}/>
+                  </div>
+                  Broadcast Hub
+                </CardTitle>
+                {announcementExpanded ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}
+              </CardHeader>
+              
+              <div className={`transition-all duration-500 ease-in-out overflow-hidden ${announcementExpanded ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"}`}>
+                <CardContent className="px-8 pb-8 space-y-5 border-t border-white/5 pt-6">
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black text-indigo-300/50 uppercase tracking-widest">Message Heading</p>
+                    <Input 
+                      placeholder="e.g. Exam Schedule Release" 
+                      value={announcementTitle}
+                      onChange={(e) => setAnnouncementTitle(e.target.value)}
+                      className="bg-white/5 border-white/10 text-white placeholder:text-white/20 rounded-xl h-12"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black text-indigo-300/50 uppercase tracking-widest">Full Announcement</p>
+                    <textarea 
+                      placeholder="Enter details for parents and teachers..."
+                      value={announcementBody}
+                      onChange={(e) => setAnnouncementBody(e.target.value)}
+                      className="w-full bg-white/5 border-white/10 text-white placeholder:text-white/20 rounded-xl p-4 text-sm min-h-[120px] outline-none ring-offset-indigo-950 focus:ring-2 ring-indigo-500/50 transition-all resize-none"
+                    />
+                  </div>
+                  <Button 
+                    onClick={handlePublishAnnouncement}
+                    disabled={isPublishing}
+                    className="w-full h-12 bg-white text-indigo-950 font-black rounded-2xl hover:bg-indigo-50 transition-all shadow-xl shadow-indigo-500/10 group"
+                  >
+                    {isPublishing ? "Publishing..." : (
+                      <span className="flex items-center gap-2">
+                        Send to Community <SendHorizontal size={16} className="group-hover:translate-x-1 transition-transform"/>
+                      </span>
+                    )}
+                  </Button>
+                </CardContent>
+              </div>
+            </Card>
+
+            {/* Quick Access Schedule */}
+            <button 
+              onClick={() => setTimetableExpanded(!timetableExpanded)}
+              className={`w-full flex items-center justify-between p-8 rounded-[2.5rem] shadow-xl transition-all duration-300 group overflow-hidden relative ${timetableExpanded ? 'bg-indigo-600 text-white' : 'bg-white text-slate-800 hover:translate-y-[-4px]'}`}
+            >
+              <div className="flex items-center gap-5 z-10">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${timetableExpanded ? 'bg-white/20 text-white' : 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white'}`}>
+                  <Calendar size={28}/>
+                </div>
+                <div className="text-left">
+                  <span className="block font-black text-lg">Master Schedule</span>
+                  <span className={`text-[10px] font-bold uppercase tracking-widest ${timetableExpanded ? 'text-indigo-100' : 'text-slate-400'}`}>Edit Class Timings</span>
+                </div>
+              </div>
+              <ChevronDown className={`transition-transform duration-500 z-10 ${timetableExpanded ? 'rotate-180' : ''}`}/>
+              {timetableExpanded && <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-10 -mt-10 blur-2xl"></div>}
+            </button>
+          </div>
+        </div>
+
+        {/* Timetable Section (Expansion) */}
+        {timetableExpanded && (
+          <Card className="border-none shadow-2xl rounded-[3rem] p-10 bg-white animate-in zoom-in-95 duration-500">
+            <div className="flex justify-between items-center mb-10">
+              <div>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight italic">Schedule Builder</h2>
+                <p className="text-slate-400 font-bold text-sm">Assign teachers based on their live availability and mode.</p>
+              </div>
+              <Button variant="outline" className="rounded-2xl h-12 px-6 border-slate-100 font-black text-slate-400 hover:text-rose-500" onClick={() => setTimetableExpanded(false)}>Hide Timetable</Button>
+            </div>
+            <TimetableManager />
+          </Card>
+        )}
+      </div>
+
+      {/* Modern Profile Dialog */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {selectedType === "teacher" ? "Teacher Application Review" : "Student Registration Review"}
-            </DialogTitle>
-          </DialogHeader>
+        <DialogContent className="max-w-2xl rounded-[3rem] border-none shadow-2xl bg-white p-0 overflow-hidden">
+          <div className="bg-slate-900 p-8 text-white relative">
+            <DialogHeader>
+              <DialogTitle className="text-3xl font-black italic">Record Dossier</DialogTitle>
+              <p className="text-indigo-300 font-bold text-xs uppercase tracking-[0.2em]">{selectedType === "student" ? "Learner Profile" : "Staff Credentials"}</p>
+            </DialogHeader>
+            <div className="absolute -bottom-6 right-8 w-24 h-24 bg-white/10 rounded-full blur-2xl"></div>
+          </div>
+          
+          <div className="p-8">
+            <Tabs defaultValue="info" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 bg-slate-100 rounded-2xl p-1.5 h-14 mb-8">
+                <TabsTrigger value="info" className="rounded-[1rem] font-black uppercase text-xs tracking-widest data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm transition-all">Overview</TabsTrigger>
+                <TabsTrigger value="special" className="rounded-[1rem] font-black uppercase text-xs tracking-widest data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm transition-all">{selectedType === "teacher" ? "Curriculum" : "Finance"}</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="info" className="grid grid-cols-2 gap-5 animate-in fade-in slide-in-from-bottom-2">
+                <InfoBox label="Full Name" value={selectedType === "student" ? `${selectedItem?.firstName} ${selectedItem?.lastName}` : `${selectedItem?.personalInfo?.firstName} ${selectedItem?.personalInfo?.lastName}`} />
+                <InfoBox label="Registry ID" value={selectedItem?.id.slice(0,12)} />
+                <InfoBox label="Contact Email" value={selectedItem?.personalInfo?.email || selectedItem?.parentEmail || "Not Listed"} />
+                <InfoBox label="Learning Mode" value={selectedItem?.learningMode || "Virtual"} isBadge />
+              </TabsContent>
 
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-            <TabsList className="grid grid-cols-2">
-              <TabsTrigger value="Details">Details</TabsTrigger>
-              <TabsTrigger value="Documents">Documents ({documents.length})</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="Details" className="mt-6 space-y-6">
-              {selectedType === "student" && selectedItem && (
-                <>
-                  <div>
-                    <h3 className="font-bold text-lg mb-3">Student Information</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <p><strong>Name:</strong> {(selectedItem as Student).firstName} {(selectedItem as Student).lastName}</p>
-                      <p><strong>Grade:</strong> {(selectedItem as Student).grade}</p>
-                      <p><strong>Curriculum:</strong> {(selectedItem as Student).curriculum || "N/A"}</p>
-                      <p><strong>Status:</strong> <Badge>{(selectedItem as Student).status}</Badge></p>
-                    </div>
-                  </div>
-
-                  {parentProfile && (
-                    <div>
-                      <h3 className="font-bold text-lg mb-3">Parent/Guardian</h3>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <p><strong>Name:</strong> {parentProfile.name}</p>
-                        <p><strong>Email:</strong> {parentProfile.email}</p>
-                        <p><strong>Phone:</strong> {parentProfile.phone}</p>
-                        <p><strong>Occupation:</strong> {parentProfile.occupation}</p>
+              <TabsContent value="special" className="animate-in fade-in slide-in-from-bottom-2">
+                 {selectedType === "teacher" ? (
+                   <div className="p-6 bg-indigo-50 rounded-[2rem] space-y-4">
+                     <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Expertise Matrix</p>
+                     <div className="flex flex-wrap gap-2">
+                       {selectedItem?.subjects?.map((s: any, i: number) => (
+                         <Badge key={i} className="bg-white text-indigo-700 border-none shadow-sm px-4 py-1.5 rounded-xl font-black">{s.name} <span className="text-[8px] opacity-40 ml-1">{s.curriculum}</span></Badge>
+                       ))}
+                     </div>
+                     <div className="pt-4 border-t border-indigo-100 flex justify-between items-center">
+                        <span className="text-xs font-black text-indigo-900 uppercase">Teaching Experience</span>
+                        <span className="text-2xl font-black text-indigo-600">{selectedItem?.personalInfo?.yearsOfExperience || 0} <span className="text-xs">Years</span></span>
+                     </div>
+                   </div>
+                 ) : (
+                   <div className="p-8 bg-slate-50 rounded-[2rem] flex flex-col items-center text-center">
+                      <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${selectedItem?.paymentReceived ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"}`}>
+                        <DollarSign size={32}/>
                       </div>
-                    </div>
-                  )}
-                </>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Fee Compliance</p>
+                      <h4 className={`text-2xl font-black ${selectedItem?.paymentReceived ? "text-emerald-600" : "text-rose-600"}`}>
+                        {selectedItem?.paymentReceived ? "Account Settled" : "Payment Overdue"}
+                      </h4>
+                   </div>
+                 )}
+              </TabsContent>
+            </Tabs>
+
+            <DialogFooter className="mt-10 gap-3">
+              <Button variant="ghost" className="rounded-2xl h-12 px-8 font-black text-slate-400" onClick={() => setShowModal(false)}>Close Dossier</Button>
+              {selectedItem?.status === "pending" && (
+                <Button 
+                  className="bg-indigo-600 rounded-2xl h-12 px-8 font-black shadow-xl shadow-indigo-200 hover:scale-105 transition-all"
+                  onClick={() => updateStatus(selectedType === "teacher" ? "teacherApplications" : "students", selectedItem.id, selectedType === "teacher" ? "approved" : "enrolled")}
+                >Validate & Enroll</Button>
               )}
-
-              {selectedType === "teacher" && selectedItem && (
-                <div>
-                  <h3 className="font-bold text-lg mb-4">Teacher Application Details</h3>
-                  <div className="space-y-4 text-sm">
-                    <div className="grid grid-cols-2 gap-4">
-                      <p><strong>Name:</strong> {selectedItem.personalInfo?.firstName} {selectedItem.personalInfo?.lastName}</p>
-                      <p><strong>Email:</strong> {selectedItem.personalInfo?.email}</p>
-                      <p><strong>Experience:</strong> {selectedItem.personalInfo?.yearsOfExperience} years</p>
-                      <p><strong>Phase:</strong> {selectedItem.personalInfo?.gradePhase}</p>
-                      <p><strong>Status:</strong> <Badge>{selectedItem.status || "pending"}</Badge></p>
-                    </div>
-
-                    <div>
-                      <strong>Subjects Taught:</strong>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {selectedItem.subjects?.map((sub, i) => (
-                          <Badge key={i} variant="secondary">
-                            {sub.name} ({sub.curriculum})
-                          </Badge>
-                        )) || <span className="text-gray-500">None listed</span>}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="Documents" className="mt-6">
-              {loadingDocs ? (
-                <p className="text-center text-gray-500">Loading documents...</p>
-              ) : documents.length > 0 ? (
-                <div className="space-y-3">
-                  {documents.map((file, i) => (
-                    <div key={i} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
-                      <div>
-                        <p className="font-medium">{file.name}</p>
-                        <p className="text-xs text-gray-500 capitalize">{file.type.replace(/([A-Z])/g, ' $1').trim()}</p>
-                      </div>
-                      <Button size="sm" variant="outline" asChild>
-                        <a href={file.url} target="_blank" rel="noopener noreferrer">
-                          <Download className="w-4 h-4 mr-2" /> Open
-                        </a>
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-center text-gray-500 py-8">No documents uploaded yet.</p>
-              )}
-            </TabsContent>
-          </Tabs>
-
-          {selectedItem?.status === "pending" && (
-            <DialogFooter className="mt-8">
-              <Button
-                variant="destructive"
-                onClick={() => reject(selectedType === "teacher" ? "teacherApplications" : "students", selectedItem.id)}
-              >
-                Reject
-              </Button>
-              <Button
-                onClick={() => {
-                  if (selectedType === "student") approveStudent(selectedItem.id);
-                  else approveTeacher(selectedItem.id);
-                }}
-              >
-                Approve
-              </Button>
             </DialogFooter>
-          )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
   );
 };
+
+/* Internal Styled Stat Card Component */
+const StatCard = ({ label, value, sub, icon, color }: any) => (
+  <Card className="border-none shadow-xl rounded-[2.5rem] bg-white overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1">
+    <CardContent className="p-8">
+      <div className="flex justify-between items-start">
+        <div className="space-y-1">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">{label}</p>
+          <h3 className="text-4xl font-black text-slate-900 tracking-tighter">{value}</h3>
+          <p className="text-[11px] font-bold text-slate-500/80 bg-slate-50 px-2 py-0.5 rounded-lg w-fit">{sub}</p>
+        </div>
+        <div className={`p-4 rounded-2xl text-white shadow-xl ${color} shadow-${color.split('-')[1]}-200`}>
+          {React.cloneElement(icon, { size: 24 })}
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+);
+
+/* Internal Info Field Component */
+const InfoBox = ({ label, value, isBadge }: any) => (
+  <div className="bg-slate-50/50 border border-slate-100 p-5 rounded-[1.5rem] group hover:bg-white hover:shadow-md transition-all">
+    <p className="text-[10px] font-black text-slate-300 uppercase mb-1 tracking-widest">{label}</p>
+    {isBadge ? (
+      <Badge className="bg-indigo-600 text-white border-none font-black text-[10px] px-3 py-1 rounded-lg uppercase tracking-tighter">{value}</Badge>
+    ) : (
+      <p className="font-black text-slate-700 text-sm truncate">{value}</p>
+    )}
+  </div>
+);
 
 export default PrincipalDashboard;
