@@ -3,10 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-/* 🔥 Firebase Core */
 import { auth, db } from "@/lib/firebaseConfig";
-
-/* 🔐 Firebase Auth */
+import { signOut } from "firebase/auth";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -18,7 +16,6 @@ import {
   PhoneAuthProvider,
 } from "firebase/auth";
 
-/* 🧾 Firestore */
 import {
   doc,
   getDoc,
@@ -26,28 +23,18 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 
-/* =====================================================
-   🚪 LOGIN FORM
-   - Prevents double auth
-   - Prevents double navigation
-   - Prevents duplicate Firestore writes
-===================================================== */
 export default function LoginForm() {
   const navigate = useNavigate();
 
-  /* =====================================================
-     🧠 AUTH FLOW GUARDS (CRITICAL)
-  ===================================================== */
-
-  // Prevents multiple login attempts at once
+  /* =========================
+     AUTH GUARDS
+  ========================= */
   const [authInProgress, setAuthInProgress] = useState(false);
-
-  // Hard lock: ensures dashboard navigation happens ONLY ONCE
   const hasNavigatedRef = useRef(false);
 
-  /* =====================================================
-     📌 FORM STATE
-  ===================================================== */
+  /* =========================
+     FORM STATE
+  ========================= */
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -59,10 +46,9 @@ export default function LoginForm() {
   const [accountExists, setAccountExists] = useState<boolean | null>(null);
   const [method, setMethod] = useState<"email" | "phone">("email");
 
-  /* =====================================================
-     🔐 INVISIBLE RECAPTCHA (PHONE AUTH)
-     - Initialized ONCE
-  ===================================================== */
+  /* =========================
+     RECAPTCHA
+  ========================= */
   useEffect(() => {
     if (!(window as any).recaptchaVerifier) {
       (window as any).recaptchaVerifier = new RecaptchaVerifier(
@@ -73,32 +59,34 @@ export default function LoginForm() {
     }
   }, []);
 
-  /* =====================================================
-     📧 CHECK EMAIL REGISTRATION STATUS
-     - Determines Sign In vs Sign Up
-  ===================================================== */
+  /* =========================
+     CHECK EMAIL
+  ========================= */
   const checkEmail = async (email: string) => {
     if (!email) return;
-
     const methods = await fetchSignInMethodsForEmail(auth, email);
     setAccountExists(methods.length > 0);
   };
 
-  /* =====================================================
-     📧 EMAIL AUTH (Sign In / Sign Up)
-  ===================================================== */
+  /* =========================
+     EMAIL AUTH
+  ========================= */
   const handleEmail = async () => {
-    if (!role) return alert("Select role");
     if (authInProgress) return;
+
+    if (accountExists === false && !role) {
+      alert("Select role to continue");
+      return;
+    }
 
     try {
       setAuthInProgress(true);
 
-      const userCred = accountExists
+      const cred = accountExists
         ? await signInWithEmailAndPassword(auth, email, password)
         : await createUserWithEmailAndPassword(auth, email, password);
 
-      await postAuth(userCred.user);
+      await postAuth(cred.user);
     } catch (err) {
       console.error(err);
       alert("Authentication failed");
@@ -107,51 +95,22 @@ export default function LoginForm() {
     }
   };
 
-  /* =====================================================
-     📱 PHONE AUTH
-  ===================================================== */
-  const sendOtp = async () => {
-    if (!phone || authInProgress) return;
-
-    const appVerifier = (window as any).recaptchaVerifier;
-    const result = await signInWithPhoneNumber(auth, phone, appVerifier);
-    setConfirmation(result);
-  };
-
-  const verifyOtp = async () => {
-    if (!confirmation || authInProgress) return;
-
-    try {
-      setAuthInProgress(true);
-
-      const credential = PhoneAuthProvider.credential(
-        confirmation.verificationId,
-        otp
-      );
-
-      const userCred = await auth.signInWithCredential(credential);
-      await postAuth(userCred.user);
-    } finally {
-      setAuthInProgress(false);
-    }
-  };
-
-  /* =====================================================
-     🌐 GOOGLE AUTH
-  ===================================================== */
+  /* =========================
+     GOOGLE AUTH
+  ========================= */
   const handleGoogle = async () => {
-    if (!role) return alert("Select role");
     if (authInProgress) return;
 
+    if (accountExists === false && !role) {
+      alert("Select role to continue");
+      return;
+    }
+
     try {
       setAuthInProgress(true);
-
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-
+      const result = await signInWithPopup(auth, new GoogleAuthProvider());
       await postAuth(result.user);
     } catch (err: any) {
-      // Safe to ignore — occurs when popup is closed or duplicated
       if (err.code !== "auth/cancelled-popup-request") {
         console.error(err);
       }
@@ -160,69 +119,153 @@ export default function LoginForm() {
     }
   };
 
-  /* =====================================================
-     🔁 POST-AUTH LOGIC (MOST IMPORTANT)
-     - Creates Firestore user doc ONCE
-     - Navigates to dashboard ONCE
-  ===================================================== */
+  /* =========================
+     PHONE AUTH
+  ========================= */
+  const sendOtp = async () => {
+    if (!phone || authInProgress) return;
+    const appVerifier = (window as any).recaptchaVerifier;
+    const result = await signInWithPhoneNumber(auth, phone, appVerifier);
+    setConfirmation(result);
+  };
+
+  const verifyOtp = async () => {
+    if (!confirmation || authInProgress) return;
+
+    if (!role) {
+      alert("Select role to continue");
+      return;
+    }
+
+    try {
+      setAuthInProgress(true);
+      const cred = PhoneAuthProvider.credential(
+        confirmation.verificationId,
+        otp
+      );
+      const userCred = await auth.signInWithCredential(cred);
+      await postAuth(userCred.user);
+    } finally {
+      setAuthInProgress(false);
+    }
+  };
+
+  /* =========================
+     POST AUTH (CORE FIX)
+  ========================= */
   const postAuth = async (user: any) => {
-    // 🚫 Prevent duplicate navigation
     if (hasNavigatedRef.current) return;
     hasNavigatedRef.current = true;
 
     const userRef = doc(db, "users", user.uid);
     const snap = await getDoc(userRef);
 
-    // 🆕 Create user document only on first signup
-    if (!snap.exists()) {
+    let finalRole: string;
+
+    if (snap.exists()) {
+      finalRole = snap.data().role;
+    } else {
+      finalRole = role!;
       await setDoc(userRef, {
         uid: user.uid,
-        role,
+        role: finalRole,
         email: user.email ?? null,
         phone: user.phoneNumber ?? null,
-
-        // Teacher application gate
         applicationStatus:
-          role === "teacher" ? "not_submitted" : null,
-
+          finalRole === "teacher" ? "not_submitted" : null,
         createdAt: serverTimestamp(),
       });
     }
 
-    // ✅ Navigate exactly once
-    navigate(`/${role}-dashboard`, { replace: true });
+    navigate(`/${finalRole}-dashboard`, { replace: true });
   };
 
-  /* =====================================================
-     🎨 UI
-  ===================================================== */
+  /* =========================
+     CONTINUE TO DASHBOARD
+  ========================= */
+  
+  const continueToDashboard = async () => {
+  if (!auth.currentUser) return;
+
+  const userRef = doc(db, "users", auth.currentUser.uid);
+  const snap = await getDoc(userRef);
+
+  if (!snap.exists()) {
+    alert("User profile not found");
+    return;
+  }
+
+  const userRole = snap.data().role;
+
+  if (!userRole) {
+    alert("User role missing");
+    return;
+  }
+
+  navigate(`/${userRole}-dashboard`, { replace: true });
+};
+
+
+  /* =========================
+     UI
+  ========================= */
   return (
-    <div className="max-w-md mx-auto p-6">
+    <div className="max-w-md mx-auto p-6 relative">
       <div id="recaptcha-container" />
 
-      {/* ROLE SELECTION */}
-      <div className="flex gap-2 justify-center mb-4">
-        {["student", "teacher", "parent", "principal"].map((r) => (
-          <button
-            key={r}
-            onClick={() => setRole(r)}
-            disabled={authInProgress}
-            className={`px-3 py-1 rounded ${
-              role === r ? "bg-blue-600 text-white" : "bg-gray-200"
-            }`}
-          >
-            {r}
-          </button>
-        ))}
-      </div>
+    <div className="flex justify-between items-center mb-4">
+        {/* ← Cancel */}
+        <button
+          onClick={async () => {
+            await signOut(auth);
+            navigate("/", { replace: true });
+          }}
+          disabled={authInProgress}
+          className="flex items-center gap-1 text-sm text-gray-600 hover:text-black"
+        >
+          ← Cancel
+        </button>
 
-      {/* AUTH METHOD */}
+        {/* Continue → */}
+        <button
+          onClick={continueToDashboard}
+          disabled={authInProgress}
+          className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium"
+        >
+          Continue →
+        </button>
+</div>
+
+
+
+      <h2 className="text-xl font-bold text-center mb-4">
+        Sign in to your account
+      </h2>
+
+      {/* ROLE — ONLY FOR NEW USERS */}
+      {accountExists === false && (
+        <div className="flex gap-2 justify-center mb-4">
+          {["student", "teacher", "parent", "principal"].map((r) => (
+            <button
+              key={r}
+              onClick={() => setRole(r)}
+              className={`px-3 py-1 rounded ${
+                role === r ? "bg-blue-600 text-white" : "bg-gray-200"
+              }`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* METHOD */}
       <div className="flex gap-2 justify-center mb-4">
         <button onClick={() => setMethod("email")}>Email</button>
         <button onClick={() => setMethod("phone")}>Phone</button>
       </div>
 
-      {/* EMAIL AUTH */}
+      {/* EMAIL */}
       {method === "email" && (
         <>
           <input
@@ -239,7 +282,7 @@ export default function LoginForm() {
           {accountExists !== null && (
             <input
               type="password"
-              placeholder={accountExists ? "Enter password" : "Create password"}
+              placeholder="Password"
               className="w-full border p-2 mb-2"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -249,20 +292,15 @@ export default function LoginForm() {
           {accountExists !== null && (
             <button
               onClick={handleEmail}
-              disabled={authInProgress}
-              className="w-full bg-blue-600 text-white py-2 disabled:opacity-50"
+              className="w-full bg-blue-600 text-white py-2"
             >
-              {authInProgress
-                ? "Signing in..."
-                : accountExists
-                ? "Sign In"
-                : "Sign Up"}
+              {accountExists ? "Sign In" : "Sign Up"}
             </button>
           )}
         </>
       )}
 
-      {/* PHONE AUTH */}
+      {/* PHONE */}
       {method === "phone" && (
         <>
           <input
@@ -276,7 +314,6 @@ export default function LoginForm() {
           {!confirmation ? (
             <button
               onClick={sendOtp}
-              disabled={authInProgress}
               className="w-full bg-blue-600 text-white py-2"
             >
               Continue
@@ -291,7 +328,6 @@ export default function LoginForm() {
               />
               <button
                 onClick={verifyOtp}
-                disabled={authInProgress}
                 className="w-full bg-green-600 text-white py-2"
               >
                 Verify
@@ -301,14 +337,13 @@ export default function LoginForm() {
         </>
       )}
 
-      {/* GOOGLE AUTH */}
+      {/* GOOGLE */}
       <div className="mt-4">
         <button
           onClick={handleGoogle}
-          disabled={authInProgress}
-          className="w-full bg-red-500 text-white py-2 disabled:opacity-50"
+          className="w-full bg-red-500 text-white py-2"
         >
-          {authInProgress ? "Signing in..." : "Continue with Google"}
+          Continue with Google
         </button>
       </div>
     </div>

@@ -1,0 +1,60 @@
+{
+  "name": "care academy",
+  "short_name": "care",
+
+  "start_url": "/",
+  "scope": "/",
+
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+     {
+      "src": "icons/icon-144.png",
+      "sizes": "159x159",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+ {
+      "src": "icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+    ,
+    {
+      "src": "icons/icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "theme_color": "#fdfdfd",
+  "background_color": "#131744",
+  "display": "standalone"
+,
+
+  "screenshots": [
+    {
+      "src": "/icons/home.png",
+      "sizes": "320x320",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "/icons/desktop.png",
+      "sizes": "320x320",
+      "type": "image/png",
+      "form_factor": "wide"
+    }
+  ]
+}
