@@ -28,6 +28,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Trash2, PlusCircle } from "lucide-react";
 
 /* Icons */
 import {
@@ -112,7 +113,11 @@ const TeacherDashboard: React.FC = () => {
   const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
   const [editLinks, setEditLinks] = useState<{ zoomLink?: string; classroomLink?: string }>({});
 
+  const [userProfile, setUserProfile] = useState<any>(null);
   const teacherFullName = `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim();
+  const [resources, setResources] = useState<any[]>([]);
+  const studentGrade = userProfile?.grade; // Assuming you have the student's grade in their profile
+
 
   /* ======================================================
      1. AUTH & PROFILE
@@ -255,6 +260,67 @@ const TeacherDashboard: React.FC = () => {
     }
   };
 
+ 
+
+//   * ======================================================
+//    5. TEACHER RESOURCE MANAGEMENT (NEW)
+// ===================================================== */
+
+const [newResource, setNewResource] = useState({ title: "", url: "", type: "classroom", grade: "" });
+
+// Fetch resources created by THIS teacher
+useEffect(() => {
+  if (!user) return;
+  const q = query(collection(db, "class_links"), where("teacherId", "==", user.uid));
+  const unsub = onSnapshot(q, (snap) => {
+    setResources(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  });
+  return () => unsub();
+}, [user]);
+
+const handleAddResource = async () => {
+  if (!newResource.title || !newResource.url || !newResource.grade) {
+    return alert("Please fill in all fields (Title, URL, and Grade)");
+  }
+  try {
+    await addDoc(collection(db, "class_links"), {
+      ...newResource,
+      teacherId: user?.uid,
+      teacherName: teacherFullName,
+      createdAt: serverTimestamp()
+    });
+    setNewResource({ title: "", url: "", type: "classroom", grade: "" });
+  } catch (err) {
+    console.error("Error adding resource:", err);
+  }
+};
+
+const handleDeleteResource = async (id: string) => {
+  if (confirm("Are you sure you want to delete this resource? Students will no longer see it.")) {
+    await deleteDoc(doc(db, "class_links", id));
+  }
+};
+
+useEffect(() => {
+  if (!studentGrade) return;
+
+  // Query only links created for this specific student's grade
+  const q = query(
+    collection(db, "class_links"), 
+    where("grade", "==", studentGrade)
+  );
+
+  const unsub = onSnapshot(q, (snap) => {
+    const fetchedLinks = snap.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    setResources(fetchedLinks);
+  });
+
+  return () => unsub();
+}, [studentGrade]);
+
   const saveLinks = async () => {
     if (!editingSlotId) return;
     await updateDoc(doc(db, "timetable", editingSlotId), {
@@ -326,34 +392,74 @@ const TeacherDashboard: React.FC = () => {
             </Card>
           </TabsContent>
 
-          {/* MANAGE LINKS */}
+          {/* Links */}
           <TabsContent value="links">
-            <Card className="shadow-xl">
-              <CardHeader><CardTitle>Manage Class Links</CardTitle></CardHeader>
-              <CardContent className="grid gap-6">
-                {timetable.map(slot => (
-                  <div key={slot.id} className="p-6 border rounded-2xl bg-gray-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div>
-                      <h3 className="font-bold text-lg">{slot.subject}</h3>
-                      <p className="text-sm text-gray-600">{slot.day} {slot.time} • {slot.grade}</p>
-                      {slot.zoomLink && <a href={slot.zoomLink} target="_blank" className="text-xs text-blue-600 underline block mt-1">{slot.zoomLink}</a>}
-                    </div>
-                    {editingSlotId === slot.id ? (
-                      <div className="flex-1 w-full max-w-md space-y-2">
-                        <Input placeholder="Zoom Link" value={editLinks.zoomLink} onChange={e => setEditLinks({...editLinks, zoomLink: e.target.value})} />
-                        <div className="flex gap-2">
-                          <Button size="sm" onClick={saveLinks}>Save</Button>
-                          <Button size="sm" variant="ghost" onClick={() => setEditingSlotId(null)}>Cancel</Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <Button variant="outline" onClick={() => { setEditingSlotId(slot.id); setEditLinks({ zoomLink: slot.zoomLink || "" }); }}>Edit Link</Button>
-                    )}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </TabsContent>
+  <div className="space-y-6">
+    {/* ADD RESOURCE FORM */}
+    <Card className="border-2 border-indigo-100 shadow-md">
+      <CardHeader className="bg-indigo-50/50">
+        <CardTitle className="text-sm font-bold uppercase text-indigo-900 flex items-center gap-2">
+          <PlusCircle size={18} /> Create New Student Resource
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+          <div className="space-y-2">
+            <Label>Title</Label>
+            <Input placeholder="e.g. Term 1 Recap" value={newResource.title} onChange={e => setNewResource({...newResource, title: e.target.value})} />
+          </div>
+          <div className="space-y-2">
+            <Label>URL</Label>
+            <Input placeholder="https://..." value={newResource.url} onChange={e => setNewResource({...newResource, url: e.target.value})} />
+          </div>
+          <div className="space-y-2">
+            <Label>Target Grade</Label>
+            <Input placeholder="e.g. 10" value={newResource.grade} onChange={e => setNewResource({...newResource, grade: e.target.value})} />
+          </div>
+          <div className="space-y-2">
+            <Label>Type</Label>
+            <select 
+              className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+              value={newResource.type} 
+              onChange={e => setNewResource({...newResource, type: e.target.value})}
+            >
+              <option value="classroom">Classroom Link</option>
+              <option value="resource">Resource Material</option>
+            </select>
+          </div>
+          <Button onClick={handleAddResource} className="bg-indigo-600 hover:bg-indigo-700 font-bold">
+            Add Link
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+
+    {/* LIST OF EXISTING RESOURCES */}
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {resources.map((item) => (
+        <div key={item.id} className="bg-white border p-5 rounded-[1.5rem] shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex justify-between mb-2">
+              <Badge className="bg-indigo-100 text-indigo-700 border-none uppercase text-[9px]">Grade {item.grade}</Badge>
+              <button onClick={() => handleDeleteResource(item.id)} className="text-red-400 hover:text-red-600">
+                <Trash2 size={16} />
+              </button>
+            </div>
+            <h3 className="font-bold text-slate-800 text-sm">{item.title}</h3>
+            <p className="text-[10px] text-slate-400 truncate mt-1">{item.url}</p>
+          </div>
+          <div className="mt-4 pt-4 border-t flex items-center justify-between">
+            <span className="text-[10px] font-bold text-slate-500 uppercase">{item.type}</span>
+            <a href={item.url} target="_blank" className="text-indigo-600 text-xs font-bold flex items-center gap-1">
+              Test Link <ExternalLink size={12} />
+            </a>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</TabsContent>
+
 
           {/* TIMETABLE */}
           <TabsContent value="timetable">

@@ -99,11 +99,11 @@ const TeachingStaff: React.FC = () => {
               </div>
             </div>
             <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-              <strong>Cambridge Examiner</strong> and CAPS specialist. Expert in building mathematical confidence in senior phases.
+              <strong>Cambridge Examiner</strong> . Expert in building mathematical confidence in senior phases.
             </p>
             <ul className="text-xs space-y-2 text-gray-500 font-medium border-t pt-4">
               <li className="flex items-center gap-2 italic">15+ Years Experience</li>
-              <li className="flex items-center gap-2 italic">SACE Registered Expert</li>
+            
             </ul>
           </motion.div>
 
@@ -162,7 +162,7 @@ const TeachingStaff: React.FC = () => {
           <div className="p-8 bg-indigo-50 rounded-[2.5rem]">
             <Award size={48} className="mx-auto text-indigo-600 mb-4" />
             <h3 className="font-black text-indigo-900 mb-2">Excellence</h3>
-            <p className="text-sm text-indigo-700">Only SACE-registered experts with proven academic records.</p>
+            <p className="text-sm text-indigo-700">Only Cambridge experts with proven academic records.</p>
           </div>
           <div className="p-8 bg-purple-50 rounded-[2.5rem]">
             <Heart size={48} className="mx-auto text-purple-600 mb-4" />

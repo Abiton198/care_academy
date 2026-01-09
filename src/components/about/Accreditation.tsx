@@ -37,7 +37,7 @@ const Accreditation: React.FC = () => {
           </motion.h1>
           <p className="text-lg text-slate-600 max-w-3xl mx-auto leading-relaxed">
             We provide a seamless pathway to internationally recognized qualifications. 
-            Through our network of <strong>established Gqeberha (PE) independent schools</strong>, 
+            Through our network of <strong>established Gqeberha (PE) and Johannesburg independent boards</strong>, 
             we ensure your child is registered, prepared, and ready for success.
           </p>
         </div>
@@ -52,9 +52,9 @@ const Accreditation: React.FC = () => {
               <MapPin className="text-indigo-600" /> Established PE Links
             </h2>
             <p className="text-slate-600 leading-relaxed">
-              Care Academy is currently linked to <strong>established independent schools in Gqeberha (Port Elizabeth)</strong>. 
+              Care Academy is currently linked to <strong>established independent institutions in Gqeberha (Port Elizabeth)</strong>. 
               This partnership allows us to facilitate student registrations for official 
-              <strong> CAPS and Cambridge International</strong> examinations through registered centers.
+              <strong> Cambridge International</strong> examinations through registered centers.
             </p>
           </div>
 

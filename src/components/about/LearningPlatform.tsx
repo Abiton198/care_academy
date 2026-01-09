@@ -36,7 +36,7 @@ const LearningPlatform: React.FC = () => {
           </h1>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
             Care Academy Grade 1 – 12: A nurturing <strong>Christian environment</strong> offering 
-            both <strong>Cambridge and CAPS</strong> pathways through a seamless digital ecosystem.
+            both <strong>Cambridge</strong> pathways through a seamless digital ecosystem.
           </p>
         </div>
 
@@ -153,8 +153,8 @@ const LearningPlatform: React.FC = () => {
             </h2>
             <p className="text-indigo-100 text-lg max-w-2xl mx-auto mb-10 relative z-10">
               Secure your child's place in our 2026 intake. Choose between 
-              <strong> Cambridge</strong> or <strong>CAPS</strong> and start your hybrid 
-              educational journey on <strong>22 January 2026</strong>.
+              <strong> Cambridge</strong>and start your hybrid 
+              educational journey on <strong>21 January 2026</strong>.
             </p>
             
             <Link

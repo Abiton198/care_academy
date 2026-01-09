@@ -15,7 +15,8 @@ import {
   BookOpen, 
   Globe, 
   MapPin, 
-  Laptop 
+  Laptop, 
+  AlertCircle
 } from "lucide-react";
 
 interface Student {
@@ -76,62 +77,111 @@ export default function StatusSection() {
     return () => unsubscribe();
   }, [user?.uid]);
 
+/* ---------------- Updated useEffect with Invoice Listener ---------------- */
+/* ---------------- Updated useEffect for Parent Status Section ---------------- */
+useEffect(() => {
+  if (!user?.uid) return;
+
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+
+  // Listen to students
+  const qStudents = query(collection(db, "students"), where("parentId", "==", user.uid));
+  // Listen to all invoices for this parent
+  const qInvoices = query(collection(db, "invoices"), where("parentId", "==", user.uid));
+
+  const unsubscribeStudents = onSnapshot(qStudents, (studentSnap) => {
+    const studentList = studentSnap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+
+    const unsubscribeInvoices = onSnapshot(qInvoices, (invoiceSnap) => {
+      const allInvoices = invoiceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      const finalData = studentList.map(student => {
+        // Find any pending invoice for this specific student for the current month
+        const hasPendingInvoice = allInvoices.some(inv => 
+          inv.status === "pending" &&
+          inv.createdAt?.toDate().getMonth() === currentMonth &&
+          inv.createdAt?.toDate().getFullYear() === currentYear &&
+          (inv.studentId === student.id || inv.studentNames?.includes(student.firstName))
+        );
+
+        return {
+          ...student,
+          // Force status to pending if an invoice exists for the 1st of the month
+          paymentReceived: !hasPendingInvoice
+        };
+      });
+
+      setStudents(finalData);
+    });
+
+    return () => unsubscribeInvoices();
+  });
+
+  return () => unsubscribeStudents();
+}, [user?.uid]);
+
+
   // ──────────────────────────────────────────────────────────
   // STATUS BADGE COLOR
   // ──────────────────────────────────────────────────────────
-  const getStatusBadge = (student: Student) => {
-    const { status, principalReviewed, paymentReceived } = student;
-
-    if (status === "enrolled") {
-      return (
-        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800">
-          <CheckCircle size={14} /> Enrolled
-        </span>
-      );
-    }
-    if (!paymentReceived) {
-      return (
-        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-800">
-          <Clock size={14} /> Payment Pending
-        </span>
-      );
-    }
-    if (!principalReviewed) {
-      return (
-        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
-          <Clock size={14} /> Awaiting Approval
-        </span>
-      );
-    }
+ const getStatusBadge = (student: Student) => {
+  if (student.status === "enrolled" && student.paymentReceived) {
     return (
-      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-800">
-        Processing
+      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-700 border border-emerald-200 uppercase">
+        <CheckCircle size={12} /> Account Clear
       </span>
     );
-  };
+  }
+
+  // Monthly Invoice Pending (Red/Orange Pulse)
+  if (!student.paymentReceived) {
+    return (
+      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-200 animate-pulse uppercase">
+        <AlertCircle size={12} /> Monthly Invoice Pending
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black bg-blue-100 text-blue-700 uppercase">
+      <Clock size={12} /> Awaiting Principal Review
+    </span>
+  );
+};
+
+
+  // ──────────────────────────────────────────────────────────
+  // ACTION BUTTONS
+  // ──────────────────────────────────────────────────────────
 
   const getActionButton = (student: Student) => {
-    if (student.status === "enrolled") {
-      return (
-        <Button size="sm" className="bg-green-600 hover:bg-green-700">
-          <Link to={`/student-dashboard/${student.id}`}>Access Portal</Link>
-        </Button>
-      );
-    }
-    if (!student.paymentReceived) {
-      return (
-        <Button size="sm" className="bg-orange-600 hover:bg-orange-700">
-          <Link to={`/payments?studentId=${student.id}`}>Pay Now</Link>
-        </Button>
-      );
-    }
+  if (student.status === "enrolled") {
     return (
-      <Button size="sm" disabled className="bg-blue-500 text-white cursor-not-allowed">
-        Under Review
+      <Button size="sm" className="bg-green-600 hover:bg-green-700 rounded-xl font-bold">
+        <Link to={`/student-dashboard/${student.id}`}>Access Portal</Link>
       </Button>
     );
-  };
+  }
+  
+  // If paymentReceived is false (meaning at least one invoice is pending)
+  if (!student.paymentReceived) {
+    return (
+      <div className="flex flex-col gap-2">
+        <Button size="sm" className="bg-orange-600 hover:bg-orange-700 rounded-xl font-bold animate-pulse">
+          <Link to={`/payments?studentId=${student.id}`}>Settle Outstanding</Link>
+        </Button>
+        <p className="text-[9px] text-center text-orange-500 font-bold uppercase">Action Required</p>
+      </div>
+    );
+  }
 
+  return (
+    <Button size="sm" disabled className="bg-slate-100 text-slate-400 rounded-xl font-bold border border-slate-200">
+      Awaiting Review
+    </Button>
+  );
+};
   const renderTimeline = (student: Student) => {
     const steps = [
       { label: "Registration Submitted", done: true, icon: <CheckCircle className="w-5 h-5 text-green-600" /> },

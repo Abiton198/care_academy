@@ -37,7 +37,7 @@ const Vision: React.FC = () => {
               Pioneering <span className="text-yellow-300">Hybrid Excellence</span>
             </h2>
             <p className="text-xl text-indigo-100 max-w-3xl mx-auto leading-relaxed">
-              Grade 1–12 • CAPS & Cambridge • Opening <strong>22 January 2026</strong>. 
+               • Cambridge • Opening <strong>21 January 2026</strong>. 
               One school, two ways to learn—giving your family the peace and mobility you deserve.
             </p>
             <div className="pt-6">
@@ -70,7 +70,7 @@ const Vision: React.FC = () => {
               <Anchor size={40} className="text-indigo-600 flex-shrink-0" />
               <p className="text-gray-700 font-medium">
                 Our mission is to build <strong>resilient, global citizens</strong> who carry 
-                strong values and world-class qualifications (Cambridge & CAPS) into their futures.
+                strong values and world-class qualifications (Cambridge) into their futures.
               </p>
             </div>
           </div>
@@ -128,7 +128,7 @@ const Vision: React.FC = () => {
               <Award size={32} />
             </div>
             <h3 className="text-xl font-bold text-gray-800 mb-2">Excellence</h3>
-            <p className="text-gray-600 text-sm">World-recognized Cambridge and CAPS pathways for students in Grade 1 through 12.</p>
+            <p className="text-gray-600 text-sm">World-recognized Cambridge pathways for students in Grade 1 through 12.</p>
           </motion.div>
         </div>
 
@@ -142,11 +142,11 @@ const Vision: React.FC = () => {
             <p className="text-xs text-gray-500 uppercase font-bold mt-2">Hybrid Continuity</p>
           </div>
           <div className="text-center p-8 bg-white rounded-[2rem] shadow-lg border border-gray-100">
-            <p className="text-4xl font-black text-purple-600 tracking-tighter">R1,000</p>
+            <p className="text-4xl font-black text-purple-600 tracking-tighter">R1,200</p>
             <p className="text-xs text-gray-500 uppercase font-bold mt-2">Affordable Monthly Tuition</p>
           </div>
           <div className="text-center p-8 bg-white rounded-[2rem] shadow-lg border border-gray-100">
-            <p className="text-4xl font-black text-emerald-600 tracking-tighter">G1-12</p>
+            <p className="text-4xl font-black text-emerald-600 tracking-tighter">Cambridge Primary, Lower Secondary, IGCSE and AS/A Levels</p>
             <p className="text-xs text-gray-500 uppercase font-bold mt-2">Comprehensive Pathways</p>
           </div>
         </div>
