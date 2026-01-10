@@ -148,7 +148,7 @@ const WhyChoose: React.FC = () => {
             Enrol for 2026 <ArrowRight />
           </Link>
           <p className="mt-6 text-gray-500 text-sm">
-            Cambridge • Grade 1–12 • Registration Open
+            Cambridge • All levels • Registration Open
           </p>
         </div>
 

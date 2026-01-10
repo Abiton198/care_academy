@@ -68,15 +68,15 @@ const TeachingStaff: React.FC = () => {
                 <UserCheck size={40} />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-gray-900 leading-tight">Mr. Trevor</h3>
-                <p className="text-sm text-indigo-600 font-bold">Physical Sciences Lead</p>
+                <h3 className="text-xl font-bold text-gray-900 leading-tight">Trevor Ryan</h3>
+                <p className="text-sm text-indigo-600 font-bold">Physics and Mathematics</p>
                 <div className="flex mt-1">
                   {[1, 2, 3, 4, 5].map((i) => <Star key={i} size={12} className="fill-yellow-400 text-yellow-400" />)}
                 </div>
               </div>
             </div>
             <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-              18 years of experience. Specialist in <strong>Cambridge IGCSE & AS-Level</strong> Chemistry and CAPS Physics.
+              18 years of experience. Specialist in <strong>Cambridge IGCSE & AS-Level</strong> Chemistry
             </p>
             <ul className="text-xs space-y-2 text-gray-500 font-medium border-t pt-4">
               <li className="flex items-center gap-2 italic">BA in Chemistry (NMU)</li>
@@ -91,8 +91,8 @@ const TeachingStaff: React.FC = () => {
                 <UserCheck size={40} />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-gray-900 leading-tight">Mr. Liam v.d Merwe</h3>
-                <p className="text-sm text-blue-600 font-bold">Maths & AP Maths Head</p>
+                <h3 className="text-xl font-bold text-gray-900 leading-tight">Pauline Slater</h3>
+                <p className="text-sm text-blue-600 font-bold">Mathematics </p>
                 <div className="flex mt-1">
                   {[1, 2, 3, 4, 5].map((i) => <Star key={i} size={12} className="fill-yellow-400 text-yellow-400" />)}
                 </div>
@@ -114,8 +114,8 @@ const TeachingStaff: React.FC = () => {
                 <Heart size={40} className="fill-emerald-600" />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-gray-900 leading-tight">Mrs. Fatima A.</h3>
-                <p className="text-sm text-emerald-600 font-bold">Primary Phase Lead</p>
+                <h3 className="text-xl font-bold text-gray-900 leading-tight">Jason Oosthuizen</h3>
+                <p className="text-sm text-emerald-600 font-bold">Mathematics & Coding</p>
                 <div className="flex mt-1">
                   {[1, 2, 3, 4, 5].map((i) => <Star key={i} size={12} className="fill-yellow-400 text-yellow-400" />)}
                 </div>
@@ -125,8 +125,31 @@ const TeachingStaff: React.FC = () => {
               Grade 1–7 literacy and numeracy specialist. Nurturing the foundations through a <strong>Christian-based approach</strong>.
             </p>
             <ul className="text-xs space-y-2 text-gray-500 font-medium border-t pt-4">
-              <li className="flex items-center gap-2 italic">B.Ed Foundation Phase</li>
-              <li className="flex items-center gap-2 italic">Specialist in English Literature</li>
+              <li className="flex items-center gap-2 italic">Mathematics guru</li>
+              <li className="flex items-center gap-2 italic">Specialist in Software</li>
+            </ul>
+          </motion.div>
+
+            {/* Teacher 4 - Primary Phase */}
+          <motion.div whileHover={{ y: -5 }} className="bg-white p-8 rounded-[2.5rem] shadow-xl border-t-8 border-emerald-600 group">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-20 h-20 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600 border-2 border-dashed border-emerald-200">
+                <Heart size={40} className="fill-emerald-600" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 leading-tight">Abiton Padera</h3>
+                <p className="text-sm text-emerald-600 font-bold">Programming & Coding</p>
+                <div className="flex mt-1">
+                  {[1, 2, 3, 4, 5].map((i) => <Star key={i} size={12} className="fill-yellow-400 text-yellow-400" />)}
+                </div>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+              Specialist in software development. Nurturing the foundations through a <strong>programming-based approach</strong>.
+            </p>
+            <ul className="text-xs space-y-2 text-gray-500 font-medium border-t pt-4">
+              <li className="flex items-center gap-2 italic">AI Specialist</li>
+              <li className="flex items-center gap-2 italic">Specialist in Software Development</li>
             </ul>
           </motion.div>
 

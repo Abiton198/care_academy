@@ -15,8 +15,8 @@ import {
 
 const FeesStructure: React.FC = () => {
   // Calculation Logic for UI Clarity
-  const tuition = 1000;
-  const lmsFee = tuition * 0.20; // 20% Taxable LMS Fee
+  const tuition = 1200;
+  const lmsFee = tuition * 0.10; // 20% Taxable LMS Fee
   const totalMonthly = tuition + lmsFee;
 
   return (
@@ -35,7 +35,7 @@ const FeesStructure: React.FC = () => {
           <p className="mt-3 text-lg text-gray-600 max-w-3xl mx-auto">
             Our mission is to provide world-class Cambridge and Christian-based education 
             at a price that makes sense for modern families. 
-            <strong> Classes start 22 January 2026.</strong>
+            <strong> Classes start 26 January 2026.</strong>
           </p>
         </div>
 
@@ -137,7 +137,7 @@ const FeesStructure: React.FC = () => {
               <Zap size={24} className="fill-current" /> Early Bird Special
             </h3>
             <p className="mt-4 text-lg font-medium leading-relaxed">
-              Register and pay your registration fee by <strong>30 November 2025</strong> and get an 
+              Register and pay your registration fee by <strong>20 January 2026</strong> and get an 
               additional <span className="bg-white text-orange-600 px-2 py-0.5 rounded-lg font-bold">10% OFF</span> your first month's tuition!
             </p>
           </div>

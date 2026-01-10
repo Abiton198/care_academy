@@ -28,10 +28,10 @@ const Enrolment: React.FC = () => {
               Academic Year 2026
             </span>
             <h2 className="mt-4 text-4xl md:text-5xl font-black">
-              School Opens: <span className="text-yellow-300">21 January 2026</span>
+              School Opens: <span className="text-yellow-300">26 January 2026</span>
             </h2>
             <p className="mt-4 text-xl text-indigo-100 max-w-2xl mx-auto">
-              Grade 1 to Grade 12 • Cambridge & CAPS Curriculum • 
+              Lower to Senior Level • Cambridge • 
               <span className="block font-bold text-white">Virtual or Physical Campus — You Decide!</span>
             </p>
           </div>
@@ -106,7 +106,7 @@ const Enrolment: React.FC = () => {
             <h2 className="text-xl font-bold text-gray-800 mb-2">3. Start Learning</h2>
             <p className="text-gray-600 text-sm">
               Receive your orientation pack and login details. Get ready for 
-              <strong> 21 Jan 2026</strong>!
+              <strong> 26 Jan 2026</strong>!
             </p>
           </div>
         </div>

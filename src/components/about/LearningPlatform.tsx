@@ -154,7 +154,7 @@ const LearningPlatform: React.FC = () => {
             <p className="text-indigo-100 text-lg max-w-2xl mx-auto mb-10 relative z-10">
               Secure your child's place in our 2026 intake. Choose between 
               <strong> Cambridge</strong>and start your hybrid 
-              educational journey on <strong>21 January 2026</strong>.
+              educational journey on <strong>26 January 2026</strong>.
             </p>
             
             <Link

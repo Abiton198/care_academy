@@ -30,7 +30,7 @@ const SubjectsOffered: React.FC = () => {
               Cambridge International
             </span>
             <h2 className="text-3xl md:text-5xl font-black leading-tight">
-              Grade 1 to 12 <br />
+              All levels <br />
               <span className="text-yellow-300">Cambridge Pathway</span>
             </h2>
             <p className="text-lg text-indigo-100 max-w-3xl mx-auto">
@@ -123,7 +123,7 @@ const SubjectsOffered: React.FC = () => {
                 <li>• Physics</li>
                 <li>• Chemistry</li>
                 <li>• Biology</li>
-                <li>• Computer Science</li>
+                <li>• Coding</li>
               </ul>
               <div className="mt-6 pt-4 border-t text-[10px] font-bold tracking-widest text-gray-400">
                 Medicine · Engineering · Technology
@@ -139,10 +139,7 @@ const SubjectsOffered: React.FC = () => {
               <ul className="space-y-3 text-sm text-gray-600">
                 <li>• English Language</li>
                 <li>• English Literature</li>
-                <li>• History</li>
-                <li>• Geography</li>
-                <li>• Global Perspectives</li>
-                <li>• Art & Design</li>
+            
               </ul>
               <div className="mt-6 pt-4 border-t text-[10px] font-bold tracking-widest text-gray-400">
                 Law · Media · Education · International Studies

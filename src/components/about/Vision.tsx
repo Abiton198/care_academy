@@ -37,7 +37,7 @@ const Vision: React.FC = () => {
               Pioneering <span className="text-yellow-300">Hybrid Excellence</span>
             </h2>
             <p className="text-xl text-indigo-100 max-w-3xl mx-auto leading-relaxed">
-               • Cambridge • Opening <strong>21 January 2026</strong>. 
+               • Cambridge • Opening <strong>26 January 2026</strong>. 
               One school, two ways to learn—giving your family the peace and mobility you deserve.
             </p>
             <div className="pt-6">

@@ -14,14 +14,11 @@ import { Info, ArrowRight, ExternalLink, Sparkles } from "lucide-react";
 
 // Logos
 import logo from "../img/logo.png";
-import dbeLogo from "../img/dbe.png";
-import cambridgeLogo from "../img/cambridge.png";
 import ZoomableImage from "@/lib/ZoomableImage";
 
 const logos = [
   { src: logo, alt: "School Logo" },
-  { src: cambridgeLogo, alt: "Cambridge International" },
-  { src: dbeLogo, alt: "DBE Logo" },
+ 
 ];
 
 const AppContent: React.FC = () => {
@@ -101,9 +98,9 @@ const AppContent: React.FC = () => {
           </h1>
 
           <p className="text-lg md:text-xl max-w-3xl mb-10 text-blue-100 leading-relaxed font-light">
-            A <strong>premier hybrid school</strong> offering Cambridge International education. 
+            A <strong>premier hybrid academy</strong> offering Cambridge International education. 
             We blend world-class academic support with character-building 
-            instruction for Grade 1 through 12.
+            instruction for ALL phases.
           </p>
 
           {/* Action Buttons */}
@@ -114,7 +111,7 @@ const AppContent: React.FC = () => {
               onClick={() => setShowLoginModal(true)}
               className="bg-white text-blue-900 font-bold py-4 px-10 rounded-full shadow-xl flex items-center justify-center gap-2"
             >
-              Access School Portal <ArrowRight size={20} />
+              Access Academy Portal <ArrowRight size={20} />
             </motion.button>
 
             <motion.a
@@ -123,7 +120,7 @@ const AppContent: React.FC = () => {
               whileTap={{ scale: 0.95 }}
               className="bg-blue-600/30 backdrop-blur-md border border-white/30 text-white font-bold py-4 px-10 rounded-full flex items-center justify-center gap-2 hover:bg-blue-600/50 transition"
             >
-              <Info size={20} /> Explore Our School
+              <Info size={20} /> Explore Our Academy
             </motion.a>
           </div>
 
@@ -238,7 +235,7 @@ const AppLayout: React.FC = () => {
       <div className="min-h-screen flex flex-col font-sans antialiased">
         <AppContent />
         <footer className="bg-gray-950 text-white/40 text-center py-6 text-[10px] tracking-widest uppercase border-t border-white/5">
-          © {new Date().getFullYear()} Cambridge Hybrid Christian School • Excellence Reformed
+          © {new Date().getFullYear()} Cambridge Hybrid Christian Academy • Excellence Reformed
         </footer>
       </div>
     </AuthProvider>
