@@ -59,6 +59,16 @@ interface TimetableEntry {
   classroomLink?: string | null;
 }
 
+interface ClassLink {
+  id: string;
+  title: string;
+  url: string;
+  type: "classroom" | "resource"; // Matching your Firestore "type"
+  grade: string;
+  teacherName: string;
+  createdAt: any;
+}
+
 /* ======================================================
    MAIN COMPONENT
 ====================================================== */
@@ -69,6 +79,7 @@ const StudentDashboard: React.FC = () => {
   const [student, setStudent] = useState<Student | null>(null);
   const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
   const [activeTab, setActiveTab] = useState<"overview" | "timetable" | "links">("overview");
+  const [classLinks, setClassLinks] = useState<ClassLink[]>([]);
 
   /* ======================================================
      FETCH STUDENT PROFILE
@@ -125,6 +136,34 @@ const StudentDashboard: React.FC = () => {
 
     return () => unsub();
   }, [student]);
+
+/* ======================================================
+   2. FETCH CLASS LINKS (REAL-TIME)
+===================================================== */
+useEffect(() => {
+  // Ensure we have the student's grade before querying
+  if (!student?.grade) return;
+
+  // Query: Fetch links for specific grade OR "all"
+  const linksQuery = query(
+    collection(db, "class_links"),
+    where("grade", "in", [student.grade, "all"]),
+    orderBy("createdAt", "desc")
+  );
+
+  const unsub = onSnapshot(linksQuery, (snap) => {
+    const fetchedLinks = snap.docs.map((d) => ({
+      id: d.id,
+      ...(d.data() as Omit<ClassLink, "id">),
+    }));
+    setClassLinks(fetchedLinks);
+  }, (error) => {
+    console.error("Error fetching class links:", error);
+  });
+
+  return () => unsub();
+}, [student?.grade]);
+
 
   /* ======================================================
      GROUP TIMETABLE BY DAY
@@ -315,77 +354,65 @@ const StudentDashboard: React.FC = () => {
         )}
 
         {/* CLASS LINKS TAB */}
-        {activeTab === "links" && (
-          <div className="space-y-8">
-            <Card className="shadow-2xl border-0">
-              <CardHeader className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white">
-                <CardTitle className="text-4xl font-bold flex items-center gap-5">
-                  <LinkIcon className="w-12 h-12" /> Your Class Links
-                </CardTitle>
-                <p className="text-xl mt-3 text-teal-100">
-                  Quick access to live classes and learning materials
-                </p>
-              </CardHeader>
-              <CardContent className="p-10">
-                {timetable.length > 0 ? (
-                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {timetable.map((slot) => (
-                      <Card
-                        key={slot.id}
-                        className="shadow-xl hover:shadow-2xl transition-all duration-300 border-0 overflow-hidden"
-                      >
-                        <div className={`h-4 ${slot.curriculum === "CAPS" ? "bg-gradient-to-r from-green-500 to-emerald-600" : "bg-gradient-to-r from-purple-500 to-pink-600"}`} />
-                        <CardHeader className="bg-gradient-to-b from-gray-50 to-white">
-                          <CardTitle className="text-2xl text-indigo-900">{slot.subject}</CardTitle>
-                          <p className="text-lg text-purple-700 mt-1">
-                            {slot.day} • {slot.time}
-                          </p>
-                          <p className="text-sm text-gray-600 mt-2">Teacher: {slot.teacherName}</p>
-                        </CardHeader>
-                        <CardContent className="p-6 space-y-4">
-                          {slot.zoomLink ? (
-                            <Button
-                              asChild
-                              className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold py-6 text-lg shadow-lg"
-                            >
-                              <a href={slot.zoomLink} target="_blank" rel="noopener noreferrer">
-                                <Video className="w-7 h-7 mr-3" /> Join Live Zoom Class
-                              </a>
-                            </Button>
-                          ) : (
-                            <Button disabled className="w-full bg-gray-300 text-gray-600 py-6 text-lg">
-                              <Video className="w-7 h-7 mr-3" /> Zoom Link Not Set
-                            </Button>
-                          )}
+       {activeTab === "links" && (
+  <div className="space-y-8">
+    <Card className="shadow-2xl border-0">
+      <CardHeader className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white">
+        <CardTitle className="text-4xl font-bold flex items-center gap-5">
+          <LinkIcon className="w-12 h-12" /> Your Class Links
+        </CardTitle>
+        <p className="text-xl mt-3 text-teal-100">
+          Access your live Zoom classes and study materials
+        </p>
+      </CardHeader>
+      <CardContent className="p-10">
+        {classLinks.length > 0 ? (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {classLinks.map((link) => (
+              <Card
+                key={link.id}
+                className="shadow-xl hover:shadow-2xl transition-all duration-300 border-0 overflow-hidden group"
+              >
+                {/* Visual indicator based on type */}
+                <div className={`h-3 ${link.type === 'classroom' ? 'bg-blue-500' : 'bg-emerald-500'}`} />
+                
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-2xl text-slate-900">{link.title}</CardTitle>
+                      <p className="text-sm text-slate-500 mt-1">Teacher: {link.teacherName}</p>
+                    </div>
+                    {link.grade === "all" && (
+                      <Badge className="bg-amber-100 text-amber-700 border-none font-bold">General</Badge>
+                    )}
+                  </div>
+                </CardHeader>
 
-                          {slot.classroomLink ? (
-                            <Button
-                              asChild
-                              variant="outline"
-                              className="w-full border-2 border-purple-500 hover:bg-purple-50 py-6 text-lg font-bold"
-                            >
-                              <a href={slot.classroomLink} target="_blank" rel="noopener noreferrer">
-                                <LinkIcon className="w-7 h-7 mr-3 text-purple-600" /> Open Classroom / Materials
-                              </a>
-                            </Button>
-                          ) : (
-                            <Button disabled variant="outline" className="w-full py-6 text-lg text-gray-500 border-gray-300">
-                              <LinkIcon className="w-7 h-7 mr-3" /> Classroom Link Not Set
-                            </Button>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-20">
-                    <LinkIcon className="w-28 h-28 text-gray-300 mx-auto mb-8" />
-                    <h3 className="text-3xl font-bold text-gray-700 mb-4">No Links Available Yet</h3>
-                    <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-                      Your teachers will set Zoom and classroom links once classes are scheduled.
-                    </p>
-                  </div>
-                )}
+                <CardContent className="p-6">
+                  <Button
+                    asChild
+                    className={`w-full py-8 text-xl font-black shadow-lg transition-transform active:scale-95 ${
+                      link.type === 'classroom' 
+                      ? 'bg-blue-600 hover:bg-blue-700' 
+                      : 'bg-emerald-600 hover:bg-emerald-700'
+                    }`}
+                  >
+                    <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-3">
+                      {link.type === 'classroom' ? <Video size={28} /> : <BookOpen size={28} />}
+                      {link.type === 'classroom' ? 'JOIN LIVE CLASS' : 'VIEW RESOURCES'}
+                    </a>
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-24">
+            <LinkIcon className="w-24 h-24 text-slate-200 mx-auto mb-6" />
+            <h3 className="text-2xl font-bold text-slate-400">No links available for Grade {student.grade}</h3>
+            <p className="text-slate-500 mt-2">Links will appear here when your teacher publishes them.</p>
+          </div>
+        )}
               </CardContent>
             </Card>
           </div>

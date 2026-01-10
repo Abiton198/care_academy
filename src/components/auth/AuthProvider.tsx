@@ -40,6 +40,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      setLoading(true);
+      
       if (!firebaseUser) {
         setUser(null);
         setLoading(false);
@@ -51,13 +53,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       try {
         /* ====================================================
-           1. CHECK TEACHER FIRST
+           1. PARALLEL ROLE CHECK
+           Checks all possible role collections at once
         ==================================================== */
-        const teacherRef = doc(db, "teachers", uid);
-        const teacherSnap = await getDoc(teacherRef);
+        const [tSnap, pSnap, aSnap, uSnap] = await Promise.all([
+          getDoc(doc(db, "teachers", uid)),
+          getDoc(doc(db, "principals", uid)),
+          getDoc(doc(db, "admins", uid)),
+          getDoc(doc(db, "users", uid))
+        ]);
 
-        if (teacherSnap.exists()) {
-          const data = teacherSnap.data();
+        if (tSnap.exists()) {
+          const data = tSnap.data();
           setUser({
             uid,
             email,
@@ -65,54 +72,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             applicationStatus: data.applicationStatus,
             classActivated: data.classActivated,
           });
-          setLoading(false);
-          return;
-        }
-
-        /* ====================================================
-           2. CHECK PRINCIPAL
-        ==================================================== */
-        const principalRef = doc(db, "principals", uid);
-        const principalSnap = await getDoc(principalRef);
-
-        if (principalSnap.exists()) {
+        } else if (pSnap.exists()) {
           setUser({ uid, email, role: "principal" });
-          setLoading(false);
-          return;
-        }
-
-        /* ====================================================
-           3. CHECK ADMIN
-        ==================================================== */
-        const adminRef = doc(db, "admins", uid);
-        const adminSnap = await getDoc(adminRef);
-
-        if (adminSnap.exists()) {
+        } else if (aSnap.exists()) {
           setUser({ uid, email, role: "admin" });
-          setLoading(false);
-          return;
-        }
-
-        /* ====================================================
-           4. CHECK GENERIC USER
-        ==================================================== */
-        const userRef = doc(db, "users", uid);
-        const userSnap = await getDoc(userRef);
-
-        if (userSnap.exists()) {
-          const data = userSnap.data();
+        } else if (uSnap.exists()) {
+          const data = uSnap.data();
           setUser({ uid, email, role: data.role || "parent" });
-          setLoading(false);
-          return;
+        } else {
+          /* ====================================================
+             2. BRAND NEW USER → DEFAULT TO PARENT
+          ==================================================== */
+          const newUserRef = doc(db, "users", uid);
+          await setDoc(newUserRef, { 
+            uid, 
+            email, 
+            role: "parent", 
+            createdAt: serverTimestamp() 
+          });
+          setUser({ uid, email, role: "parent" });
         }
-
-        /* ====================================================
-           5. BRAND NEW USER → DEFAULT PARENT
-        ==================================================== */
-        await setDoc(userRef, { uid, email, role: "parent", createdAt: serverTimestamp() });
-        setUser({ uid, email, role: "parent" });
-      } catch (error) {
-        console.error("AuthProvider error:", error);
+      } catch (error: any) {
+        console.error("AuthProvider Error:", error.message);
         setUser(null);
       } finally {
         setLoading(false);
