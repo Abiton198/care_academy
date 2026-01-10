@@ -97,6 +97,7 @@ const finalTotal = baseAmount + PROCESSING_FEE;
     const form = document.createElement("form");
     form.method = "POST";
     form.action = PAYFAST_URL;
+    form.target = "_blank";
 
     Object.keys(paymentData).forEach((key) => {
       const input = document.createElement("input");
