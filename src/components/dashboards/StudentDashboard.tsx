@@ -25,6 +25,9 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+// import { LinkCard } from "../cards/LinkCard";
+
+
 
 /* Icons */
 import {
@@ -36,6 +39,9 @@ import {
   BookOpen,
   Calendar as CalendarIcon,
   AlertCircle,
+  FileText,
+  User,
+  ExternalLink,
 } from "lucide-react";
 
 /* Auth */
@@ -93,6 +99,33 @@ const StudentDashboard: React.FC = () => {
 
   /* ---------------- UI ---------------- */
   const [activeTab, setActiveTab] = useState<"overview" | "timetable" | "links">("overview");
+
+
+const LinkCard = ({ link }: { link: ClassLink }) => (
+  <a 
+    href={link.url} 
+    target="_blank" 
+    rel="noopener noreferrer"
+    className="group bg-white border-2 border-slate-100 hover:border-indigo-200 hover:shadow-xl hover:shadow-indigo-50/50 transition-all duration-300 rounded-[2rem] p-6 flex items-center justify-between"
+  >
+    <div className="flex items-center gap-5">
+      <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+        {link.type === 'classroom' ? <Video size={20} /> : <FileText size={20} />}
+      </div>
+      <div>
+        <h4 className="font-black text-slate-800 uppercase text-sm tracking-tight group-hover:text-indigo-600 transition-colors">
+          {link.title}
+        </h4>
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+          <User size={10} /> {link.teacherName}
+        </p>
+      </div>
+    </div>
+    <div className="bg-slate-50 p-2 rounded-xl text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+      <ExternalLink size={16} />
+    </div>
+  </a>
+);
 
   // ===========================================================================
   // 1. LOAD STUDENT PROFILE (ONCE AUTH IS RESOLVED)
@@ -170,6 +203,10 @@ const StudentDashboard: React.FC = () => {
   // 3. REAL-TIME CLASS LINKS (ONCE PROFILE LOADS)
   // ===========================================================================
   useEffect(() => {
+    // If profile.grade is missing, the query won't run. 
+    // Log it to make sure it's what you expect (e.g., "Primary")
+    console.log("Fetching links for grade:", profile?.grade);
+    
     if (!profile?.grade) return;
 
     setLinksLoaded(false);
@@ -183,11 +220,17 @@ const StudentDashboard: React.FC = () => {
     const unsub = onSnapshot(
       q,
       (snap) => {
-        const links = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ClassLink));
+        const links = snap.docs.map((d) => ({ 
+          id: d.id, 
+          ...d.data() 
+        } as ClassLink));
+        
+        console.log(`Found ${links.length} links for student.`);
         setClassLinks(links);
         setLinksLoaded(true);
       },
       (err) => {
+        // Look here for the "Missing Index" link!
         console.error("Class links error:", err);
         setLinksLoaded(true);
       }
@@ -294,7 +337,7 @@ const StudentDashboard: React.FC = () => {
               groupedTimetable.map(({ day, slots }) => (
                 <Card key={day} className="overflow-hidden">
                   <CardHeader className="bg-slate-900 text-white">
-                    <CardTitle>{day}</CardTitle>
+                    <CardTitle className="text-white">{day}</CardTitle>
                   </CardHeader>
                   <CardContent className="p-6 space-y-4">
                     {slots.map((slot) => (
@@ -323,33 +366,22 @@ const StudentDashboard: React.FC = () => {
 
         {activeTab === "links" && (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {classLinks.length > 0 ? (
-              classLinks.map((link) => (
-                <Card key={link.id} className="overflow-hidden">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      {link.type === "classroom" ? (
-                        <Video className="h-5 w-5 text-blue-600" />
-                      ) : (
-                        <BookOpen className="h-5 w-5 text-green-600" />
-                      )}
-                      {link.title}
-                    </CardTitle>
-                    <p className="text-sm text-gray-500">{link.teacherName}</p>
-                  </CardHeader>
-                  <CardContent className="p-6">
-                    <Button variant="outline" className="w-full" asChild>
-                      <a href={link.url} target="_blank" rel="noopener noreferrer">
-                        Open Link <ArrowRight className="ml-2 h-4 w-4" />
-                      </a>
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))
-            ) : (
-              <div className="col-span-3 text-center py-12 text-gray-500">
-                No class links available yet.
-              </div>
+           {!linksLoaded ? (
+  <div className="animate-pulse flex gap-4">
+    <div className="h-20 w-full bg-slate-100 rounded-3xl" />
+  </div>
+) : classLinks.length === 0 ? (
+  <div className="p-8 border-2 border-dashed border-slate-100 rounded-[2rem] text-center">
+    <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">
+      No active links for {profile?.grade} yet
+    </p>
+  </div>
+) : (
+  <div className="grid gap-4">
+    {classLinks.map(link => (
+      <LinkCard key={link.id} link={link} />
+    ))}
+  </div>
             )}
           </div>
         )}

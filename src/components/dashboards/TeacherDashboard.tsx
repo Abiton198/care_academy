@@ -71,11 +71,11 @@ interface ClassLink {
   id: string;
   title: string;
   url: string;
-  type: string;
-  grade: string;
-  teacherId: string;
-  teacherName: string;
-  createdAt: any;
+  type: string;        // e.g., "classroom", "resource", "zoom"
+  grade: string;       // e.g., "Primary", "A-Level", or "all"
+  teacherId: string;   // The UID of the teacher
+  teacherName: string; // The flattened name (e.g., "Adel Tops")
+  createdAt: any;      // Firestore Timestamp
 }
 
 interface Conversation {
@@ -248,24 +248,30 @@ const handleUpdateResource = async (id: string) => {
   );
 
 const handleAddResource = async () => {
-    if (!newResource.title || !newResource.url) return alert("Title and URL are required");
-    try {
-      await addDoc(collection(db, "class_links"), {
-        title: newResource.title,
-        url: newResource.url,
-        type: newResource.type,
-        grade: newResource.targetGrade,
-        teacherId: user?.uid,
-        teacherName: `${user?.personalInfo?.firstName} ${user?.personalInfo?.lastName}`,
-        createdAt: serverTimestamp()
-      });
-      // Clear inputs after success
-      setNewResource({ ...newResource, title: "", url: "" });
-    } catch (err) {
-      console.error("Error adding resource:", err);
-    }
-  };
+  if (!newResource.title || !newResource.url) return alert("Title and URL are required");
 
+  // 1. Correctly extract the name from the nested personalInfo map
+  const firstName = user?.personalInfo?.firstName || "";
+  const lastName = user?.personalInfo?.lastName || "";
+  const fullName = `${firstName} ${lastName}`.trim() || "Educator";
+
+  try {
+    await addDoc(collection(db, "class_links"), {
+      title: newResource.title,
+      url: newResource.url,
+      type: newResource.type,
+      grade: newResource.targetGrade,
+      teacherId: user?.uid,
+      // 2. Use the field name 'teacherName' to match your audit trail requirements
+      teacherName: fullName, 
+      createdAt: serverTimestamp()
+    });
+
+    setNewResource({ ...newResource, title: "", url: "" });
+  } catch (err) {
+    console.error("Error adding resource:", err);
+  }
+};
   /* ======================================================
      4. CHAT & MESSAGING LOGIC
   ===================================================== */
