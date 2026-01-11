@@ -267,22 +267,23 @@ useEffect(() => {
 
  /* ---------------- Stats & Filtering ---------------- */
 const stats = useMemo(() => {
-  // Count enrolled students
   const enrolled = students.filter(s => s.status === "enrolled");
   
-  // Count teachers by checking the main teachers array AND the pending list
-  const approvedTeachers = teachers.filter(t => t.status === "approved").length;
-  
+  // Ensure we check for the string "approved" exactly
+  const approvedTeachersCount = teachers.filter(t => t.status === "approved").length;
+    
+  // We check 'students' for "pending" AND 'pendingTeachers' (which comes from the users listener)
+  const totalPendingRequests = students.filter(s => s.status === "pending").length + pendingTeachers.length;
+
   return {
     totalStudents: enrolled.length,
     campus: enrolled.filter(s => s.learningMode === "Campus").length,
     virtual: enrolled.filter(s => (s.learningMode || "Virtual") === "Virtual").length,
-    totalTeachers: approvedTeachers,
+    totalTeachers: approvedTeachersCount,
     unpaid: enrolled.filter(s => !s.paymentReceived).length,
-    // Real-time addition of both student and teacher pending counts
-    pendingApps: students.filter(s => s.status === "pending").length + pendingTeachers.length,
+    pendingApps: totalPendingRequests,
   };
-}, [students, teachers, pendingTeachers]); // Added pendingTeachers here
+}, [students, teachers, pendingTeachers]);
 
  const filteredData = useMemo(() => {
   const searchLower = searchTerm.toLowerCase();
@@ -311,6 +312,22 @@ const stats = useMemo(() => {
 
   const handleLogout = async () => { await logout(); navigate("/"); };
 
+  useEffect(() => {
+  // Listener 1: All Teacher Applications (For Approved Stats)
+  const unsubApps = onSnapshot(collection(db, "teacherApplications"), (snap) => {
+    const apps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    setTeachers(apps); 
+  });
+
+  // Listener 2: Users with 'submitted' status (For Pending Stats)
+  const q = query(collection(db, "users"), where("applicationStatus", "==", "submitted"));
+  const unsubUsers = onSnapshot(q, (snap) => {
+    // This updates pendingTeachers.length, which triggers the 'Requests' stat
+    setPendingTeachers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  });
+
+  return () => { unsubApps(); unsubUsers(); };
+}, []);
 
   return (
     <div className="min-h-screen bg-[#f8fafc] p-4 md:p-8">

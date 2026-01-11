@@ -194,38 +194,34 @@ const TeacherDashboard: React.FC = () => {
      3. RESOURCE ENGINE (CRUD & AUDIT TRAIL)
   ===================================================== */
   useEffect(() => {
-    if (!user) return;
-    const q = query(
-      collection(db, "class_links"), 
-      where("teacherId", "==", user.uid),
-      orderBy("createdAt", "desc")
-    );
+  // Ensure we have a valid UID before trying to query
+  if (!user?.uid) return;
+
+  const q = query(
+    collection(db, "class_links"), 
+    where("teacherId", "==", user.uid),
+    orderBy("createdAt", "desc")
+  );
+  
+  const unsub = onSnapshot(q, (snap) => {
+    const fetchedLinks = snap.docs.map(d => ({ 
+      id: d.id, 
+      ...d.data() 
+    } as ClassLink));
     
-    const unsub = onSnapshot(q, (snap) => {
-      setResources(snap.docs.map(d => ({ id: d.id, ...d.data() } as ClassLink)));
-    });
-    return () => unsub();
-  }, [user]);
+    setResources(fetchedLinks);
+    console.log("Audit Trail Updated:", fetchedLinks.length, "links found.");
+  }, (error) => {
+    // This will catch the 'Missing Index' error in your console
+    console.error("Firestore Subscription Error:", error);
+  });
 
-  const handleAddResource = async () => {
-    if (!newResource.title || !newResource.url) return alert("Title and URL are required");
-    try {
-      await addDoc(collection(db, "class_links"), {
-        title: newResource.title,
-        url: newResource.url,
-        type: newResource.type,
-        grade: newResource.targetGrade,
-        teacherId: user?.uid,
-        teacherName: teacherFullName,
-        createdAt: serverTimestamp()
-      });
-      setNewResource({ ...newResource, title: "", url: "" });
-    } catch (err) {
-      console.error("Error adding resource:", err);
-    }
-  };
+  return () => unsub();
+}, [user?.uid]); // Bind specifically to the UID
 
-  const handleUpdateResource = async (id: string) => {
+
+// updateDoc, deleteDoc
+const handleUpdateResource = async (id: string) => {
     try {
       const resourceRef = doc(db, "class_links", id);
       await updateDoc(resourceRef, {
@@ -250,6 +246,25 @@ const TeacherDashboard: React.FC = () => {
   const filteredResources = resources.filter(r => 
     selectedGradeFilter === "all" ? true : r.grade === selectedGradeFilter
   );
+
+const handleAddResource = async () => {
+    if (!newResource.title || !newResource.url) return alert("Title and URL are required");
+    try {
+      await addDoc(collection(db, "class_links"), {
+        title: newResource.title,
+        url: newResource.url,
+        type: newResource.type,
+        grade: newResource.targetGrade,
+        teacherId: user?.uid,
+        teacherName: `${user?.personalInfo?.firstName} ${user?.personalInfo?.lastName}`,
+        createdAt: serverTimestamp()
+      });
+      // Clear inputs after success
+      setNewResource({ ...newResource, title: "", url: "" });
+    } catch (err) {
+      console.error("Error adding resource:", err);
+    }
+  };
 
   /* ======================================================
      4. CHAT & MESSAGING LOGIC

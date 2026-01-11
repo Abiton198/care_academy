@@ -305,6 +305,7 @@ const StudentDashboard: React.FC = () => {
                         <div>
                           <p className="font-medium">{slot.subject}</p>
                           <p className="text-sm text-gray-500">{slot.teacherName}</p>
+                           <p className="text-sm text-gray-500">{slot.day}</p>
                         </div>
                         <Badge variant="outline">{slot.time}</Badge>
                       </div>

@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db } from "@/lib/firebaseConfig";
@@ -12,6 +14,7 @@ import {
   orderBy,
   setDoc,
   updateDoc,
+  limit,
 } from "firebase/firestore";
 import {
   Card,
@@ -44,9 +47,8 @@ import {
   MapPin,
   Laptop,
   AlertCircle,
-  PlusCircle,
 } from "lucide-react";
-import { format } from "date-fns"; // Make sure date-fns is installed
+import { format } from "date-fns";
 
 /* ======================================================
    CONSTANTS & TYPES
@@ -74,9 +76,11 @@ interface TimetableEntry {
 }
 
 interface Announcement {
+  id: string;
   title: string;
-  subject: string;
-  updatedAt?: any;
+  body: string;
+  createdAt?: any;
+  author: string;
 }
 
 /* ======================================================
@@ -129,7 +133,8 @@ function HybridSwitch({ student }: { student: Student }) {
         </button>
       </div>
       <p className="text-[10px] uppercase tracking-widest text-gray-400 font-medium italic">
-        Term Status: <span className={currentMode === "Campus" ? "text-emerald-600" : "text-indigo-600"}>
+        Term Status:{" "}
+        <span className={currentMode === "Campus" ? "text-emerald-600" : "text-indigo-600"}>
           {currentMode} Learning Active
         </span>
       </p>
@@ -159,19 +164,21 @@ export default function ParentDashboard() {
   const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState<1 | 2>(1);
 
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+
   const sections = ["Overview", "Registration", "Payments", "Communications", "Status", "Settings"];
 
-  const [announcement, setAnnouncement] = useState<Announcement | null>(null);
-
+  // Load parent profile + real-time data
   useEffect(() => {
     if (!user?.uid) return;
 
     let unsubStudents: (() => void) | undefined;
     let unsubTimetable: (() => void) | undefined;
+    let unsubAnnouncements: (() => void) | undefined;
 
     const fetchData = async () => {
       try {
-        // Load parent profile
+        // Parent profile
         const parentSnap = await getDoc(doc(db, "parents", user.uid));
         if (parentSnap.exists()) {
           const data = parentSnap.data();
@@ -180,7 +187,8 @@ export default function ParentDashboard() {
           setContact(data.contact || "");
           setAddress(data.address || "");
           setProfileCompleted(data.profileCompleted === true);
-          if (data.profileCompleted !== true) {
+
+          if (!data.profileCompleted) {
             setShowWizard(true);
             setWizardStep(1);
           }
@@ -196,10 +204,24 @@ export default function ParentDashboard() {
           }
         });
 
-        // Real-time timetable (all for simplicity)
+        // Real-time timetable
         const qTimetable = query(collection(db, "timetable"), orderBy("day"), orderBy("time"));
         unsubTimetable = onSnapshot(qTimetable, (snap) => {
           setTimetable(snap.docs.map((d) => ({ id: d.id, ...(d.data() as TimetableEntry) })));
+        });
+
+        // Real-time announcements (latest 10)
+        const qAnn = query(
+          collection(db, "announcements"),
+          orderBy("createdAt", "desc"),
+          limit(10)
+        );
+        unsubAnnouncements = onSnapshot(qAnn, (snap) => {
+          const data = snap.docs.map((d) => ({
+            id: d.id,
+            ...d.data(),
+          })) as Announcement[];
+          setAnnouncements(data);
         });
 
         setLoading(false);
@@ -211,17 +233,10 @@ export default function ParentDashboard() {
 
     fetchData();
 
-    // Announcement listener
-    const unsubAnnouncement = onSnapshot(doc(db, "announcements", "active"), (snap) => {
-      if (snap.exists()) {
-        setAnnouncement(snap.data() as Announcement);
-      }
-    });
-
     return () => {
       unsubStudents?.();
       unsubTimetable?.();
-      unsubAnnouncement();
+      unsubAnnouncements?.();
     };
   }, [user?.uid, selectedChildId]);
 
@@ -235,12 +250,21 @@ export default function ParentDashboard() {
       alert("Please complete required fields.");
       return;
     }
+
     try {
       await setDoc(
         doc(db, "parents", user!.uid),
-        { title, fullName, contact, address, profileCompleted: true, updatedAt: new Date() },
+        {
+          title,
+          fullName,
+          contact,
+          address,
+          profileCompleted: true,
+          updatedAt: new Date(),
+        },
         { merge: true }
       );
+
       setProfileCompleted(true);
       setWizardStep(2);
       setActiveTab("Registration");
@@ -258,7 +282,7 @@ export default function ParentDashboard() {
             selectedChildId={selectedChildId}
             setSelectedChildId={setSelectedChildId}
             timetable={timetable}
-            announcement={announcement}
+            announcements={announcements}
           />
         );
       case "Registration":
@@ -345,7 +369,7 @@ export default function ParentDashboard() {
             <div className="space-y-5">
               <input
                 className="w-full border-2 border-gray-300 rounded-xl p-4"
-                placeholder="Title"
+                placeholder="Title (Mr/Mrs/Ms/Dr)"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
@@ -357,13 +381,13 @@ export default function ParentDashboard() {
               />
               <input
                 className="w-full border-2 border-gray-300 rounded-xl p-4"
-                placeholder="Contact *"
+                placeholder="Contact Number *"
                 value={contact}
                 onChange={(e) => setContact(e.target.value)}
               />
               <textarea
                 className="w-full border-2 border-gray-300 rounded-xl p-4"
-                placeholder="Address *"
+                placeholder="Residential Address *"
                 rows={3}
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
@@ -374,7 +398,7 @@ export default function ParentDashboard() {
                 Later
               </Button>
               <Button onClick={saveProfileAndContinue} className="bg-indigo-600">
-                Continue
+                Save & Continue
               </Button>
             </div>
           </div>
@@ -385,20 +409,20 @@ export default function ParentDashboard() {
 }
 
 /* ======================================================
-   OVERVIEW SECTION (FIXED LOGIC)
+   OVERVIEW SECTION
 ====================================================== */
 function OverviewSection({
   students,
   selectedChildId,
   setSelectedChildId,
   timetable,
-  announcement,
+  announcements,
 }: {
   students: Student[];
   selectedChildId: string | null;
   setSelectedChildId: (id: string) => void;
   timetable: TimetableEntry[];
-  announcement: Announcement | null;
+  announcements: Announcement[];
 }) {
   const selectedChild = useMemo(
     () => students.find((s) => s.id === selectedChildId) || null,
@@ -407,8 +431,8 @@ function OverviewSection({
 
   const hasStudents = students.length > 0;
 
-  // Calculate today's classes count
   const todayName = format(new Date(), "EEEE");
+
   const todaysClassesCount = useMemo(() => {
     if (!selectedChild) return 0;
     return timetable.filter(
@@ -421,7 +445,6 @@ function OverviewSection({
     ).length;
   }, [timetable, selectedChild, todayName]);
 
-  // Weekly classes count (filtered for selected child)
   const weeklyClassesCount = useMemo(() => {
     if (!selectedChild) return 0;
     return timetable.filter(
@@ -432,6 +455,8 @@ function OverviewSection({
         )
     ).length;
   }, [timetable, selectedChild]);
+
+  const latestAnnouncement = announcements[0];
 
   return (
     <div className="space-y-10">
@@ -463,7 +488,7 @@ function OverviewSection({
               onClick={() => window.open(`/student-dashboard/${selectedChild.id}`, "_blank")}
               className="bg-emerald-600 hover:bg-emerald-700 h-12"
             >
-              <ExternalLink className="w-5 h-5 mr-2" /> Portal
+              <ExternalLink className="w-5 h-5 mr-2" /> Child Portal
             </Button>
           </div>
         )}
@@ -516,8 +541,78 @@ function OverviewSection({
         </Card>
       </div>
 
-      {/* Announcement / Empty State */}
-      {!hasStudents ? (
+      {/* Announcements */}
+      {announcements.length > 0 ? (
+        <div className="space-y-8">
+          {/* Featured: Latest Announcement */}
+          <div className="bg-white border-2 border-slate-100 shadow-sm rounded-[3rem] p-10 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-3 h-full bg-indigo-600"></div>
+            <div className="flex items-center gap-2 text-indigo-600 font-black text-[10px] uppercase tracking-[0.3em] mb-6">
+              <span className="w-8 h-[2px] bg-indigo-600"></span>
+              Latest Briefing
+            </div>
+            <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight uppercase leading-none">
+              {latestAnnouncement.title}
+            </h2>
+            <p className="text-slate-600 text-lg leading-relaxed whitespace-pre-wrap font-medium">
+              {latestAnnouncement.body}
+            </p>
+            <div className="mt-10 pt-6 border-t border-slate-50 flex justify-between items-center text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+              <span>
+                Issued:{" "}
+                {latestAnnouncement.createdAt?.seconds
+                  ? format(new Date(latestAnnouncement.createdAt.seconds * 1000), "dd MMM yyyy")
+                  : "Just now"}
+              </span>
+              <span className="text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">
+                {latestAnnouncement.author}
+              </span>
+            </div>
+          </div>
+
+          {/* Archive */}
+          {announcements.length > 1 && (
+            <div className="space-y-4">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] px-6">
+                Previous Briefings
+              </h3>
+              <div className="grid gap-4">
+                {announcements.slice(1).map((msg) => (
+                  <div
+                    key={msg.id}
+                    className="bg-slate-50/50 border border-slate-100 rounded-[2rem] p-6 hover:bg-white transition-all group"
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="font-black text-slate-800 uppercase text-sm tracking-tight">
+                        {msg.title}
+                      </h4>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">
+                        {msg.createdAt?.seconds
+                          ? format(new Date(msg.createdAt.seconds * 1000), "dd MMM")
+                          : ""}
+                      </span>
+                    </div>
+                    <p className="text-slate-500 text-xs line-clamp-2 font-medium">{msg.body}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="bg-indigo-50 border-2 border-dashed border-indigo-200 rounded-[3rem] p-12 text-center">
+          <AlertCircle className="mx-auto text-indigo-300 mb-4" size={48} />
+          <h2 className="text-2xl font-black text-indigo-900 uppercase tracking-tight">
+            No Announcements Yet
+          </h2>
+          <p className="text-indigo-600/70 max-w-md mx-auto mt-2 font-medium">
+            Principal updates will appear here when available.
+          </p>
+        </div>
+      )}
+
+      {/* No Students State */}
+      {!hasStudents && (
         <div className="bg-indigo-50 border-2 border-dashed border-indigo-200 rounded-[3rem] p-12 text-center">
           <AlertCircle className="mx-auto text-indigo-300 mb-4" size={48} />
           <h2 className="text-2xl font-black text-indigo-900 uppercase tracking-tight">
@@ -527,34 +622,6 @@ function OverviewSection({
             To view timetables, access class links, and receive principal announcements, please complete your child's registration.
           </p>
         </div>
-      ) : (
-        announcement && (
-          <div className="bg-white border-2 border-slate-100 shadow-sm rounded-[3rem] p-10 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-3 h-full bg-indigo-600"></div>
-            <div className="flex items-center gap-2 text-indigo-600 font-black text-[10px] uppercase tracking-[0.3em] mb-6">
-              <span className="w-8 h-[2px] bg-indigo-600"></span>
-              Principal's Briefing
-            </div>
-            <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight uppercase leading-none">
-              {announcement.title}
-            </h2>
-            <p className="text-slate-600 text-lg leading-relaxed whitespace-pre-wrap font-medium">
-              {announcement.subject}
-            </p>
-            <div className="mt-10 pt-6 border-t border-slate-50 flex justify-between items-center text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-              <div className="flex items-center gap-4">
-                <span>
-                  Issued: {announcement.updatedAt?.seconds
-                    ? format(new Date(announcement.updatedAt.seconds * 1000), "dd MMM yyyy")
-                    : "Recent"}
-                </span>
-              </div>
-              <span className="text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">
-                Official Correspondence
-              </span>
-            </div>
-          </div>
-        )
       )}
     </div>
   );
