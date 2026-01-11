@@ -1,351 +1,310 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { auth, db } from "@/lib/firebaseConfig";
-import { signOut } from "firebase/auth";
+import { auth, db, googleProvider } from "@/lib/firebaseConfig";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
-  GoogleAuthProvider,
-  fetchSignInMethodsForEmail,
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
-  PhoneAuthProvider,
+  onAuthStateChanged,
 } from "firebase/auth";
 
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
-  doc,
-  getDoc,
-  setDoc,
-  serverTimestamp,
-} from "firebase/firestore";
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Loader2, AlertCircle, Chrome } from "lucide-react";
+
+import TeacherApplicationModal from "../dashboards/TeacherApplicationModal";
+import { updateDoc } from "firebase/firestore";
+
+const ROLES = [
+  { value: "student", label: "Student" },
+  { value: "parent", label: "Parent" },
+  { value: "teacher", label: "Teacher" },
+];
 
 export default function LoginForm() {
   const navigate = useNavigate();
+  const redirectedRef = useRef(false);
 
-  /* =========================
-     AUTH GUARDS
-  ========================= */
-  const [authInProgress, setAuthInProgress] = useState(false);
-  const hasNavigatedRef = useRef(false);
-
-  /* =========================
-     FORM STATE
-  ========================= */
+  const [tab, setTab] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [selectedRole, setSelectedRole] = useState("");
 
-  const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [confirmation, setConfirmation] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const [role, setRole] = useState<string | null>(null);
-  const [accountExists, setAccountExists] = useState<boolean | null>(null);
-  const [method, setMethod] = useState<"email" | "phone">("email");
+  const [showTeacherModal, setShowTeacherModal] = useState(false);
+  const [newTeacherUid, setNewTeacherUid] = useState<string | null>(null);
 
-  /* =========================
-     RECAPTCHA
-  ========================= */
-  useEffect(() => {
-    if (!(window as any).recaptchaVerifier) {
-      (window as any).recaptchaVerifier = new RecaptchaVerifier(
-        auth,
-        "recaptcha-container",
-        { size: "invisible" }
-      );
-    }
-  }, []);
-
-  /* =========================
-     CHECK EMAIL
-  ========================= */
-  const checkEmail = async (email: string) => {
-    if (!email) return;
-    const methods = await fetchSignInMethodsForEmail(auth, email);
-    setAccountExists(methods.length > 0);
-  };
-
-  /* =========================
-     EMAIL AUTH
-  ========================= */
-  const handleEmail = async () => {
-    if (authInProgress) return;
-
-    if (accountExists === false && !role) {
-      alert("Select role to continue");
+  /* =====================================================
+     AUTH STATE LISTENER (ONE SOURCE OF REDIRECT)
+     ===================================================== */
+useEffect(() => {
+  const unsub = onAuthStateChanged(auth, async (user) => {
+    if (!user || authLoading || redirectedRef.current) {
+      setLoading(false);
       return;
     }
 
     try {
-      setAuthInProgress(true);
+      const userRef = doc(db, "users", user.uid);
+      const snap = await getDoc(userRef);
 
-      const cred = accountExists
-        ? await signInWithEmailAndPassword(auth, email, password)
-        : await createUserWithEmailAndPassword(auth, email, password);
+      if (snap.exists()) {
+        const data = snap.data();
+        const role = data.role?.toLowerCase().trim();
 
-      await postAuth(cred.user);
-    } catch (err) {
-      console.error(err);
-      alert("Authentication failed");
-    } finally {
-      setAuthInProgress(false);
-    }
-  };
+        // LOGGING FOR VERIFICATION
+        console.log("Current User UID:", user.uid);
+        console.log("Detected Firestore Role:", role);
 
-  /* =========================
-     GOOGLE AUTH
-  ========================= */
-  const handleGoogle = async () => {
-    if (authInProgress) return;
+        if (role === "teacher") {
+          if (data.applicationStatus === "pending") {
+            setNewTeacherUid(user.uid);
+            setShowTeacherModal(true);
+            setLoading(false);
+            return;
+          }
+          redirectedRef.current = true;
+          // Explicitly push to the TEACHER path
+          window.location.href = "/teacher-dashboard"; 
+          return;
+        }
 
-    if (accountExists === false && !role) {
-      alert("Select role to continue");
-      return;
-    }
+        if (role === "parent") {
+          redirectedRef.current = true;
+          window.location.href = "/parent-dashboard";
+          return;
+        }
 
-    try {
-      setAuthInProgress(true);
-      const result = await signInWithPopup(auth, new GoogleAuthProvider());
-      await postAuth(result.user);
-    } catch (err: any) {
-      if (err.code !== "auth/cancelled-popup-request") {
-        console.error(err);
+        // Default handle for others
+        navigate(`/${role}-dashboard`, { replace: true });
       }
+    } catch (err) {
+      console.error("Auth Listener Error:", err);
     } finally {
-      setAuthInProgress(false);
+      setLoading(false);
     }
-  };
+  });
 
-  /* =========================
-     PHONE AUTH
-  ========================= */
-  const sendOtp = async () => {
-    if (!phone || authInProgress) return;
-    const appVerifier = (window as any).recaptchaVerifier;
-    const result = await signInWithPhoneNumber(auth, phone, appVerifier);
-    setConfirmation(result);
-  };
+  return () => unsub();
+}, [navigate, authLoading]);
 
-  const verifyOtp = async () => {
-    if (!confirmation || authInProgress) return;
+  /* =====================================================
+     EMAIL / PASSWORD AUTH
+     ===================================================== */
+const handleSubmit = async () => {
+  if (authLoading || (tab === "signup" && !selectedRole)) return;
+  setError(null);
+  setAuthLoading(true);
 
-    if (!role) {
-      alert("Select role to continue");
-      return;
-    }
+  try {
+    const isSignup = tab === "signup";
+    const cred = isSignup
+      ? await createUserWithEmailAndPassword(auth, email.trim(), password)
+      : await signInWithEmailAndPassword(auth, email.trim(), password);
 
-    try {
-      setAuthInProgress(true);
-      const cred = PhoneAuthProvider.credential(
-        confirmation.verificationId,
-        otp
-      );
-      const userCred = await auth.signInWithCredential(cred);
-      await postAuth(userCred.user);
-    } finally {
-      setAuthInProgress(false);
-    }
-  };
-
-  /* =========================
-     POST AUTH (CORE FIX)
-  ========================= */
-  const postAuth = async (user: any) => {
-    if (hasNavigatedRef.current) return;
-    hasNavigatedRef.current = true;
-
+    const user = cred.user;
     const userRef = doc(db, "users", user.uid);
-    const snap = await getDoc(userRef);
 
-    let finalRole: string;
-
-    if (snap.exists()) {
-      finalRole = snap.data().role;
-    } else {
-      finalRole = role!;
+    if (isSignup) {
+      // 1. Create the Firestore document first
       await setDoc(userRef, {
         uid: user.uid,
-        role: finalRole,
-        email: user.email ?? null,
-        phone: user.phoneNumber ?? null,
-        applicationStatus:
-          finalRole === "teacher" ? "not_submitted" : null,
+        email: user.email,
+        role: selectedRole,
+        applicationStatus: selectedRole === "teacher" ? "pending" : "approved",
         createdAt: serverTimestamp(),
       });
+
+      // 2. Handle Teacher Signup (Show Modal, No Redirect)
+      if (selectedRole === "teacher") {
+        setNewTeacherUid(user.uid);
+        setShowTeacherModal(true);
+        setAuthLoading(false);
+        setLoading(false); // Stop global loading
+        return; // CRITICAL: Stop here so navigate() isn't called
+      }
+
+      // 3. Handle Parent/Student Signup (Immediate Redirect)
+      redirectedRef.current = true;
+      navigate(`/${selectedRole}-dashboard`, { replace: true });
+    } else {
+      // Sign-in flow: Let the useEffect listener handle the redirect
+      // because the document already exists in Firestore.
     }
-
-    navigate(`/${finalRole}-dashboard`, { replace: true });
-  };
-
-  /* =========================
-     CONTINUE TO DASHBOARD
-  ========================= */
-  
-  const continueToDashboard = async () => {
-  if (!auth.currentUser) return;
-
-  const userRef = doc(db, "users", auth.currentUser.uid);
-  const snap = await getDoc(userRef);
-
-  if (!snap.exists()) {
-    alert("User profile not found");
-    return;
+  } catch (err: any) {
+    console.error("Auth Error:", err);
+    setError(err.message || "Authentication failed");
+    setAuthLoading(false);
   }
-
-  const userRole = snap.data().role;
-
-  if (!userRole) {
-    alert("User role missing");
-    return;
-  }
-
-  navigate(`/${userRole}-dashboard`, { replace: true });
 };
 
 
-  /* =========================
+  /* =====================================================
+     GOOGLE AUTH
+     ===================================================== */
+ const handleGoogle = async () => {
+  if (authLoading) return;
+
+  // Guard: Role selection required for new users
+  if (tab === "signup" && !selectedRole) {
+    setError("Please select a role before continuing with Google");
+    return;
+  }
+
+  setError(null);
+  setAuthLoading(true);
+
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    const user = result.user;
+    const ref = doc(db, "users", user.uid);
+    const snap = await getDoc(ref);
+
+    if (!snap.exists()) {
+      // Create new record with the SELECTED role
+      await setDoc(ref, {
+        uid: user.uid,
+        email: user.email,
+        role: selectedRole,
+        applicationStatus: selectedRole === "teacher" ? "pending" : "approved",
+        createdAt: serverTimestamp(),
+      });
+      // The useEffect listener above will now pick this up and handle the redirect/modal
+    } else {
+      // User exists - let the useEffect listener handle the redirect 
+      // based on their existing Firestore role
+    }
+  } catch (err: any) {
+    setError(err.message || "Google sign-in failed");
+    setAuthLoading(false);
+  }
+};
+
+const handleTeacherSubmitted = async () => {
+  if (!newTeacherUid) return;
+
+  try {
+    // 1. Move status from 'pending' to 'submitted'
+    const userRef = doc(db, "users", newTeacherUid);
+    await updateDoc(userRef, {
+      applicationStatus: "submitted",
+      profileCompleted: true,
+      submittedAt: serverTimestamp(),
+    });
+
+    // 2. Close modal and send to their new dashboard
+    setShowTeacherModal(false);
+    navigate("/teacher-dashboard", { replace: true });
+  } catch (err) {
+    console.error("Submission Error:", err);
+  }
+};
+
+  /* =====================================================
      UI
-  ========================= */
+     ===================================================== */
   return (
-    <div className="max-w-md mx-auto p-6 relative">
-      <div id="recaptcha-container" />
+    <>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 to-blue-50 p-4">
+        <Card className="w-full max-w-md rounded-3xl shadow-xl">
+          <CardHeader className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-center py-8">
+            <CardTitle className="text-3xl font-bold">Care Academy</CardTitle>
+            <CardDescription className="text-indigo-100">
+              Secure Portal Access
+            </CardDescription>
+          </CardHeader>
 
-    <div className="flex justify-between items-center mb-4">
-        {/* ← Cancel */}
-        <button
-          onClick={async () => {
-            await signOut(auth);
-            navigate("/", { replace: true });
-          }}
-          disabled={authInProgress}
-          className="flex items-center gap-1 text-sm text-gray-600 hover:text-black"
-        >
-          ← Cancel
-        </button>
+          <CardContent className="p-8 space-y-6">
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
-        {/* Continue → */}
-        <button
-          onClick={continueToDashboard}
-          disabled={authInProgress}
-          className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium"
-        >
-          Continue →
-        </button>
-</div>
+            <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
+              <TabsList className="grid grid-cols-2 bg-indigo-100 rounded-xl">
+                <TabsTrigger value="signin">Sign In</TabsTrigger>
+                <TabsTrigger value="signup">Sign Up</TabsTrigger>
+              </TabsList>
 
+<form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
+  <TabsContent value="signin" className="space-y-4 mt-6">
+    <Label>Email</Label>
+    <Input 
+      autoComplete="username"
+      value={email} 
+      onChange={(e) => setEmail(e.target.value)} 
+    />
+    <Label>Password</Label>
+    <Input 
+      type="password" 
+      autoComplete="current-password"
+      value={password} 
+      onChange={(e) => setPassword(e.target.value)} 
+    />
+    <Button type="submit" className="w-full" disabled={authLoading}>
+      {authLoading ? <Loader2 className="animate-spin" /> : "Sign In"}
+    </Button>
+  </TabsContent>
+</form>
 
+              <TabsContent value="signup" className="space-y-4 mt-6">
+                <Input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                <Select value={selectedRole} onValueChange={setSelectedRole}>
+                  <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
+                  <SelectContent>
+                    {ROLES.map((r) => (
+                      <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button className="w-full" onClick={handleSubmit} disabled={!selectedRole || authLoading}>
+                  Create Account
+                </Button>
+              </TabsContent>
+            </Tabs>
 
-      <h2 className="text-xl font-bold text-center mb-4">
-        Sign in to your account
-      </h2>
-
-      {/* ROLE — ONLY FOR NEW USERS */}
-      {accountExists === false && (
-        <div className="flex gap-2 justify-center mb-4">
-          {["student", "teacher", "parent", "principal"].map((r) => (
-            <button
-              key={r}
-              onClick={() => setRole(r)}
-              className={`px-3 py-1 rounded ${
-                role === r ? "bg-blue-600 text-white" : "bg-gray-200"
-              }`}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* METHOD */}
-      <div className="flex gap-2 justify-center mb-4">
-        <button onClick={() => setMethod("email")}>Email</button>
-        <button onClick={() => setMethod("phone")}>Phone</button>
+            <Button variant="outline" className="w-full" onClick={handleGoogle}>
+              <Chrome className="mr-2 h-4 w-4" /> Continue with Google
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* EMAIL */}
-      {method === "email" && (
-        <>
-          <input
-            type="email"
-            placeholder="Email"
-            className="w-full border p-2 mb-2"
-            value={email}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              checkEmail(e.target.value);
-            }}
-          />
-
-          {accountExists !== null && (
-            <input
-              type="password"
-              placeholder="Password"
-              className="w-full border p-2 mb-2"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          )}
-
-          {accountExists !== null && (
-            <button
-              onClick={handleEmail}
-              className="w-full bg-blue-600 text-white py-2"
-            >
-              {accountExists ? "Sign In" : "Sign Up"}
-            </button>
-          )}
-        </>
-      )}
-
-      {/* PHONE */}
-      {method === "phone" && (
-        <>
-          <input
-            type="tel"
-            placeholder="+27831234567"
-            className="w-full border p-2 mb-2"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-
-          {!confirmation ? (
-            <button
-              onClick={sendOtp}
-              className="w-full bg-blue-600 text-white py-2"
-            >
-              Continue
-            </button>
-          ) : (
-            <>
-              <input
-                placeholder="OTP"
-                className="w-full border p-2 mb-2"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-              />
-              <button
-                onClick={verifyOtp}
-                className="w-full bg-green-600 text-white py-2"
-              >
-                Verify
-              </button>
-            </>
-          )}
-        </>
-      )}
-
-      {/* GOOGLE */}
-      <div className="mt-4">
-        <button
-          onClick={handleGoogle}
-          className="w-full bg-red-500 text-white py-2"
-        >
-          Continue with Google
-        </button>
-      </div>
-    </div>
+      <TeacherApplicationModal
+          open={showTeacherModal}
+          applicationId={newTeacherUid}
+          onSubmitted={handleTeacherSubmitted} // This must call the navigate function
+          onClose={() => setShowTeacherModal(false)}
+        />
+    </>
   );
 }

@@ -1,14 +1,17 @@
-// firebase.js
-
-// Import Firebase SDKs
+// firebaseConfig.js
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { 
+  getAuth, 
+  GoogleAuthProvider,
+  createUserWithEmailAndPassword,
+  fetchSignInMethodsForEmail, 
+  signInWithPopup, 
+  signInWithEmailAndPassword 
+} from "firebase/auth";
 import { getStorage } from "firebase/storage";
 
-
-// ✅ Firebase config from Vite environment variables
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -19,29 +22,39 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-// 🔎 Log only in development to check env values
-if (import.meta.env.DEV) {
-  console.log("Firebase Config:", firebaseConfig);
-}
-
-// ✅ Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// ✅ Initialize Analytics only in browser
-let analytics;
-if (typeof window !== "undefined" && firebaseConfig.measurementId) {
-  try {
-    analytics = getAnalytics(app);
-  } catch (err) {
-    console.warn("Analytics not initialized:", err);
-  }
-}
-
-// ✅ Initialize other services
-const db = getFirestore(app);
-const auth = getAuth(app);
-const storage = getStorage(app);
-
-// ✅ Export
+// Initialize Services
+export const db = getFirestore(app);
+export const auth = getAuth(app);
+export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
-export { app, analytics, db, auth, storage, getAuth };
+
+/* ======================================================
+   CAMBRIDGE PORTAL AUTH HELPERS
+   ====================================================== */
+
+// Wrapper for Registration
+export const registerUser = async (email, password) => {
+  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+  return userCredential.user;
+};
+
+// Wrapper for Google Sign In
+export const loginWithGoogle = async () => {
+  const result = await signInWithPopup(auth, googleProvider);
+  return result.user;
+};
+
+// Wrapper for Email Login (The one your LoginForm needs)
+export const loginWithEmail = async (email, password) => {
+  const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  return userCredential.user;
+};
+
+// Wrapper for Checking Existing Methods
+export const checkEmailMethods = async (email) => {
+  return await fetchSignInMethodsForEmail(auth, email);
+};
+
+export { app };

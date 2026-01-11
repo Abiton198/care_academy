@@ -6,7 +6,7 @@ import { auth, db } from "@/lib/firebaseConfig";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 
 /* ============================================================
-   Types
+   TYPES
 ============================================================ */
 export type UserRole = "parent" | "teacher" | "principal" | "admin";
 
@@ -19,100 +19,72 @@ export interface AppUser {
 }
 
 /* ============================================================
-   Context
+   CONTEXT
 ============================================================ */
-const AuthContext = createContext<{
+interface AuthContextType {
   user: AppUser | null;
   loading: boolean;
   logout: () => Promise<void>;
-}>({
+}
+
+const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   logout: async () => {},
 });
 
 /* ============================================================
-   Provider
+   PROVIDER
 ============================================================ */
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  /* ============================================================
+     AUTH STATE LISTENER
+  ============================================================ */
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-      setLoading(true);
-      
-      if (!firebaseUser) {
-        setUser(null);
-        setLoading(false);
-        return;
-      }
+const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+  setLoading(true);
 
-      const uid = firebaseUser.uid;
-      const email = firebaseUser.email?.toLowerCase() || null;
+  if (!firebaseUser) {
+    setUser(null);
+    setLoading(false);
+    return;
+  }
 
-      try {
-        /* ====================================================
-           1. PARALLEL ROLE CHECK
-           Checks all possible role collections at once
-        ==================================================== */
-        const [tSnap, pSnap, aSnap, uSnap] = await Promise.all([
-          getDoc(doc(db, "teachers", uid)),
-          getDoc(doc(db, "principals", uid)),
-          getDoc(doc(db, "admins", uid)),
-          getDoc(doc(db, "users", uid))
-        ]);
+  try {
+    // 1. Check the 'users' collection FIRST
+    const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
 
-        if (tSnap.exists()) {
-          const data = tSnap.data();
-          setUser({
-            uid,
-            email,
-            role: "teacher",
-            applicationStatus: data.applicationStatus,
-            classActivated: data.classActivated,
-          });
-        } else if (pSnap.exists()) {
-          setUser({ uid, email, role: "principal" });
-        } else if (aSnap.exists()) {
-          setUser({ uid, email, role: "admin" });
-        } else if (uSnap.exists()) {
-          const data = uSnap.data();
-          setUser({ uid, email, role: data.role || "parent" });
-        } else {
-          /* ====================================================
-             2. BRAND NEW USER → DEFAULT TO PARENT
-          ==================================================== */
-          const newUserRef = doc(db, "users", uid);
-          await setDoc(newUserRef, { 
-            uid, 
-            email, 
-            role: "parent", 
-            createdAt: serverTimestamp() 
-          });
-          setUser({ uid, email, role: "parent" });
-        }
-      } catch (error: any) {
-        console.error("AuthProvider Error:", error.message);
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    });
-
-    return () => unsub();
+    if (userDoc.exists()) {
+      const data = userDoc.data();
+      setUser({
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        role: data.role, // This will be "teacher"
+        applicationStatus: data.applicationStatus,
+      });
+    } else {
+      // 2. Only if the document literally doesn't exist yet, 
+      // we wait. DO NOT SET DEFAULT ROLE HERE.
+      // This allows the LoginForm enough time to create the record.
+      console.log("Waiting for profile creation...");
+    }
+  } catch (err) {
+    console.error("Auth error:", err);
+  } finally {
+    setLoading(false);
+  }
+});
   }, []);
 
   /* ============================================================
-     Logout function
+     LOGOUT
   ============================================================ */
   const logout = async () => {
-    try {
-      await signOut(auth);
-      setUser(null);
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
+    await signOut(auth);
+    setUser(null);
   };
 
   return (
@@ -123,6 +95,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 };
 
 /* ============================================================
-   Hook
+   HOOK
 ============================================================ */
 export const useAuth = () => useContext(AuthContext);

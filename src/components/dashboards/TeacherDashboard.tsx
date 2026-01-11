@@ -31,7 +31,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 /* Icons */
 import {
   Loader2, LogOut, Edit2, Save, ExternalLink, Video, Check, X, 
-  Sparkles, BookOpen, Send, MessageCircle, Users, PlusCircle, Trash2
+  Sparkles, BookOpen, Send, MessageCircle, Users, PlusCircle, Trash2,
+  Clock
 } from "lucide-react";
 
 /* ======================================================
@@ -131,6 +132,8 @@ const TeacherDashboard: React.FC = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const teacherFullName = `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim();
+  const [status, setStatus] = useState<string | null>(null);
+
 
   /* ======================================================
      1. AUTHENTICATION & PROFILE DATA
@@ -325,6 +328,20 @@ const TeacherDashboard: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (!user) return;
+
+    // Real-time listener to the user's status
+    const unsub = onSnapshot(doc(db, "users", user.uid), (snap) => {
+      if (snap.exists()) {
+        setStatus(snap.data().applicationStatus);
+      }
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, [user]);
+
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
 
   return (
@@ -354,6 +371,19 @@ const TeacherDashboard: React.FC = () => {
             <TabsTrigger value="timetable" className="px-8 py-3 font-bold">Timetable</TabsTrigger>
             <TabsTrigger value="profile" className="px-8 py-3 font-bold">My Profile</TabsTrigger>
           </TabsList>
+
+{/* STATUS BANNER */}
+        {status === "submitted" && (
+          <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-[2rem] flex items-center gap-6 mb-8 animate-in slide-in-from-top-4">
+            <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-lg">
+              <Clock size={24} />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-amber-900 uppercase tracking-tight">Application Under Review</h2>
+              <p className="text-sm text-amber-700 font-medium">The Principal is currently verifying your SACE credentials. Full portal access will unlock upon approval.</p>
+            </div>
+          </div>
+        )}
 
           {/* DASHBOARD OVERVIEW */}
           <TabsContent value="overview">

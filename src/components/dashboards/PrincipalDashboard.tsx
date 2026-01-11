@@ -8,10 +8,10 @@ import {
   doc,
   updateDoc,
   serverTimestamp,
-  setDoc,
+  addDoc,
   query,
   where,
-  getDocs,
+  getDoc,
   writeBatch,
   orderBy
 } from "firebase/firestore";
@@ -23,13 +23,18 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useNavigate } from "react-router-dom";
 import TimetableManager from "@/lib/TimetableManager";
+import TeacherReviewModal from "@/components/dashboards/TeacherReviewModal";
+
 import {
-  LogOut, Search, Eye, Users, CheckCircle, ChevronDown, ChevronUp, MapPin, 
-  Laptop, GraduationCap, Megaphone, Calendar, DollarSign, SendHorizontal
+  LogOut, Search, Eye, Users, CheckCircle, ChevronDown, ChevronUp, 
+  Laptop, GraduationCap, Megaphone, Calendar, DollarSign, SendHorizontal,
+  UserCheck, ShieldCheck, FileText, Briefcase, Loader2
 } from "lucide-react";
 
 /* ---------------- Types ---------------- */
@@ -42,16 +47,27 @@ interface Student {
   learningMode?: "Campus" | "Virtual";
   paymentReceived?: boolean;
   parentId?: string;
+  parentEmail?: string;
+  subjects?: string[];
 }
 
 interface Teacher {
   id: string;
   uid?: string;
-  personalInfo?: { firstName?: string; lastName?: string; email?: string; };
-  status?: "pending" | "approved" | "rejected";
+  personalInfo?: { 
+    firstName?: string; 
+    lastName?: string; 
+    email?: string; 
+    yearsOfExperience?: number;
+    gradePhase?: string;
+  };
+  subjects?: { name: string }[];
+  status?: "pending" | "submitted" | "approved" | "rejected";
+  documents?: Record<string, string[]>;
 }
 
 const PrincipalDashboard: React.FC = () => {
+  /* ---------------- State ---------------- */
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,6 +75,7 @@ const PrincipalDashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState<"students" | "teachers">("students");
   const [paymentFilter, setPaymentFilter] = useState("all");
+  
   const [timetableExpanded, setTimetableExpanded] = useState(false);
   const [announcementExpanded, setAnnouncementExpanded] = useState(false);
   const [announcementTitle, setAnnouncementTitle] = useState("");
@@ -72,36 +89,69 @@ const PrincipalDashboard: React.FC = () => {
   const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
   const [pendingAmount, setPendingAmount] = useState<number>(0);
 
+  const [pendingTeachers, setPendingTeachers] = useState<any[]>([]);
+  const [selectedTeacherApp, setSelectedTeacherApp] = useState<any | null>(null);
+
   const { logout } = useAuth();
   const navigate = useNavigate();
 
   /* ---------------- Real-time Listeners ---------------- */
-  useEffect(() => {
-    const unsubStudents = onSnapshot(collection(db, "students"), (snap) => {
-      setStudents(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Student) })));
-    });
-    const unsubTeachers = onSnapshot(collection(db, "teacherApplications"), (snap) => {
-      setTeachers(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Teacher) })));
-      setLoading(false);
-    });
-    return () => { unsubStudents(); unsubTeachers(); };
-  }, []);
+/* Updated useEffect for PrincipalDashboard.tsx */
+useEffect(() => {
+  // 1. Listen for Students
+  const unsubStudents = onSnapshot(collection(db, "students"), (snap) => {
+    setStudents(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Student) })));
+  });
+
+  // 2. Listen for Users with role 'teacher' and status 'submitted'
+  const teacherUsersQuery = query(
+    collection(db, "users"), 
+    where("role", "==", "teacher"),
+    where("applicationStatus", "==", "submitted")
+  );
+
+  const unsubPendingTeachers = onSnapshot(teacherUsersQuery, async (snap) => {
+    const pendingList = await Promise.all(
+      snap.docs.map(async (userDoc) => {
+        const userData = userDoc.data();
+        
+        // Fetch the actual application details using the lastSubmissionId
+        if (userData.lastSubmissionId) {
+          const appDoc = await getDoc(doc(db, "teacherApplications", userData.lastSubmissionId));
+          return {
+            id: appDoc.id,
+            uid: userDoc.id,
+            ...appDoc.data(),
+            email: userData.email, // Use email from user doc
+            personalInfo: appDoc.data()?.personalInfo || {}
+          };
+        }
+        return null;
+      })
+    );
+    
+    // Filter out any nulls and update state
+    setPendingTeachers(pendingList.filter(t => t !== null));
+    setLoading(false);
+  });
+
+  return () => {
+    unsubStudents();
+    unsubPendingTeachers();
+  };
+}, []);
 
   /* ---------------- Student Finance Listener ---------------- */
   useEffect(() => {
     if (selectedType === "student" && selectedItem?.id && showModal) {
-      // Query invoices specifically for this student
       const q = query(
         collection(db, "invoices"),
         where("studentId", "==", selectedItem.id),
         orderBy("createdAt", "desc")
       );
-
       const unsub = onSnapshot(q, (snap) => {
         const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setPaymentHistory(docs);
-        
-        // Calculate pending total safely
         const total = docs
           .filter(d => d.status === "pending")
           .reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
@@ -111,130 +161,173 @@ const PrincipalDashboard: React.FC = () => {
     }
   }, [selectedItem, selectedType, showModal]);
 
+  /* ---------------- Approval Handlers ---------------- */
+  const handleApproveStudent = async (studentId: string) => {
+    try {
+      await updateDoc(doc(db, "students", studentId), {
+        status: "enrolled",
+        enrolledAt: serverTimestamp()
+      });
+      alert("Student enrollment approved.");
+    } catch (err) { console.error(err); }
+  };
+
+  // Teacher Approval with Batched Updates
+  const handleApproveTeacher = async (teacherAppId: string, teacherUid: string) => {
+  try {
+    const batch = writeBatch(db);
+
+    // 1. Update the Application document
+    const appRef = doc(db, "teacherApplications", teacherAppId);
+    batch.update(appRef, { 
+      status: "approved",
+      verifiedAt: serverTimestamp() 
+    });
+
+    // 2. Update the User document (This unlocks their dashboard)
+    const userRef = doc(db, "users", teacherUid);
+    batch.update(userRef, { 
+      applicationStatus: "approved",
+      role: "teacher" // Ensure role is strictly set
+    });
+
+    await batch.commit();
+    alert("Teacher credentials verified. Full access granted.");
+  } catch (err) {
+    console.error("Approval Error:", err);
+    alert("Failed to approve teacher.");
+  }
+};
+
   /* ---------------- Finance Handlers ---------------- */
-  
   const clearSingleInvoice = async (invoiceId: string, student: any) => {
     try {
       const batch = writeBatch(db);
-      const invoiceRef = doc(db, "invoices", invoiceId);
-      
-      batch.update(invoiceRef, { 
+      batch.update(doc(db, "invoices", invoiceId), { 
         status: "paid", 
         clearedAt: serverTimestamp(),
         clearedBy: "Principal" 
       });
-
-      // Check if this was the last pending invoice for this child
       const otherPending = paymentHistory.filter(inv => inv.id !== invoiceId && inv.status === "pending");
-      
       if (otherPending.length === 0) {
-        const studentRef = doc(db, "students", student.id);
-        batch.update(studentRef, { 
-          paymentReceived: true,
-          lastPaymentDate: serverTimestamp()
-        });
+        batch.update(doc(db, "students", student.id), { paymentReceived: true });
       }
-
       await batch.commit();
-    } catch (err) {
-      console.error("Payment clear failed:", err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   const generateMonthlyInvoices = async () => {
-    if (!window.confirm("Generate monthly invoices for all enrolled students?")) return;
+    if (!window.confirm("Run global billing cycle?")) return;
     setIsPublishing(true);
-
     try {
       const batch = writeBatch(db);
-      const monthName = new Date().toLocaleString('default', { month: 'long' });
-      const currentYear = new Date().getFullYear();
-      
-      // Prevent duplicates: find students who already have a pending invoice for this cycle
-      const invSnap = await getDocs(query(collection(db, "invoices"), where("status", "==", "pending")));
-      const alreadyBilledIds = new Set(invSnap.docs.map(doc => doc.data().studentId));
-
+      const monthYear = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
       let count = 0;
-      const processedThisLoop = new Set();
-
       students.forEach((s) => {
-        if (s.status === "enrolled" && !alreadyBilledIds.has(s.id) && !processedThisLoop.has(s.id)) {
-          processedThisLoop.add(s.id);
-          count++;
-
+        if (s.status === "enrolled") {
           const invRef = doc(collection(db, "invoices"));
           batch.set(invRef, {
             parentId: s.parentId || "unknown",
             studentId: s.id,
             studentNames: `${s.firstName} ${s.lastName}`,
-            amount: 1200, // 💡 Number type (no quotes)
-            category: `${monthName} ${currentYear} Tuition`,
+            amount: 1200,
+            category: `${monthYear} Tuition`,
             status: "pending",
             createdAt: serverTimestamp(),
           });
-
-          // Flick student status to "Owing" (Red)
-          batch.update(doc(db, "students", s.id), { 
-            paymentReceived: false,
-            lastInvoiceDate: serverTimestamp() 
-          });
+          batch.update(doc(db, "students", s.id), { paymentReceived: false });
+          count++;
         }
       });
-
-      if (count > 0) {
-        await batch.commit();
-        alert(`Successfully generated ${count} invoices.`);
-      } else {
-        alert("No new students required billing.");
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsPublishing(false);
-    }
+      if (count > 0) await batch.commit();
+      alert(`Billed ${count} students.`);
+    } catch (err) { console.error(err); } finally { setIsPublishing(false); }
   };
 
-  /* ---------------- Analytics & Filters ---------------- */
-  const stats = useMemo(() => ({
-    totalStudents: students.length,
-    campus: students.filter(s => s.learningMode === "Campus").length,
-    virtual: students.filter(s => (s.learningMode || "Virtual") === "Virtual").length,
-    totalTeachers: teachers.filter(t => t.status === "approved").length,
-    unpaid: students.filter(s => !s.paymentReceived).length,
-    pendingApps: teachers.filter(t => t.status === "pending").length,
-  }), [students, teachers]);
-
-  const filteredData = useMemo(() => {
-    if (viewMode === "students") {
-      return students.filter(s => {
-        const matchesSearch = `${s.firstName} ${s.lastName}`.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesPay = paymentFilter === "all" ? true : (paymentFilter === "paid" ? s.paymentReceived : !s.paymentReceived);
-        return matchesSearch && matchesPay;
+  /* ---------------- Announcement & Timetable ---------------- */
+  const handlePublishAnnouncement = async () => {
+    if (!announcementTitle || !announcementBody) return alert("Fill all fields");
+    setIsPublishing(true);
+    try {
+      await addDoc(collection(db, "announcements"), {
+        title: announcementTitle,
+        body: announcementBody,
+        author: "Principal",
+        createdAt: serverTimestamp(),
+        target: "all"
       });
-    }
-    return teachers.filter(t => `${t.personalInfo?.firstName}`.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [viewMode, students, teachers, searchTerm, paymentFilter]);
+      setAnnouncementTitle(""); setAnnouncementBody("");
+      alert("Broadcast live.");
+    } catch (err) { console.error(err); } finally { setIsPublishing(false); }
+  };
 
-  const handleLogout = async () => { await logout(); navigate("/login"); };
+  const saveTimetableSlot = async (slotData: any) => {
+    await addDoc(collection(db, "timetable"), { ...slotData, updatedAt: serverTimestamp() });
+  };
+
+ /* ---------------- Stats & Filtering ---------------- */
+const stats = useMemo(() => {
+  // Count enrolled students
+  const enrolled = students.filter(s => s.status === "enrolled");
+  
+  // Count teachers by checking the main teachers array AND the pending list
+  const approvedTeachers = teachers.filter(t => t.status === "approved").length;
+  
+  return {
+    totalStudents: enrolled.length,
+    campus: enrolled.filter(s => s.learningMode === "Campus").length,
+    virtual: enrolled.filter(s => (s.learningMode || "Virtual") === "Virtual").length,
+    totalTeachers: approvedTeachers,
+    unpaid: enrolled.filter(s => !s.paymentReceived).length,
+    // Real-time addition of both student and teacher pending counts
+    pendingApps: students.filter(s => s.status === "pending").length + pendingTeachers.length,
+  };
+}, [students, teachers, pendingTeachers]); // Added pendingTeachers here
+
+ const filteredData = useMemo(() => {
+  const searchLower = searchTerm.toLowerCase();
+
+  if (viewMode === "students") {
+    return students.filter(s => {
+      const fullName = `${s.firstName} ${s.lastName}`.toLowerCase();
+      const matchesSearch = fullName.includes(searchLower);
+      const matchesPay = paymentFilter === "all" 
+        ? true 
+        : (paymentFilter === "paid" ? s.paymentReceived : !s.paymentReceived);
+      
+      return matchesSearch && matchesPay && s.status === "enrolled";
+    });
+  }
+
+  // Teacher View: Combine active teachers and pending ones for the search
+  return teachers.filter(t => {
+    const teacherName = `${t.personalInfo?.firstName} ${t.personalInfo?.lastName}`.toLowerCase();
+    const matchesSearch = teacherName.includes(searchLower);
+    // Show them in the main list if they are approved or currently under review
+    return matchesSearch && (t.status === "approved" || t.status === "submitted");
+  });
+}, [viewMode, students, teachers, searchTerm, paymentFilter]);
+
+
+  const handleLogout = async () => { await logout(); navigate("/"); };
+
 
   return (
-    <div className="min-h-screen bg-[#f1f5f9] p-4 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen bg-[#f8fafc] p-4 md:p-8">
+      <div className="max-w-7xl mx-auto space-y-8 pb-24">
         
         {/* Header */}
-        <header className="flex flex-col md:flex-row justify-between items-center bg-white/70 backdrop-blur-md p-6 rounded-[2.5rem] shadow-xl border border-white/50">
+        <header className="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
-              <GraduationCap size={32} />
-            </div>
+            <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg"><GraduationCap size={32} /></div>
             <div>
-              <h1 className="text-2xl font-black text-slate-900 leading-tight">Care Academy Console</h1>
-              <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.2em]">Administration Panel</p>
+              <h1 className="text-2xl font-black text-slate-900">Care Academy Admin</h1>
+              <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Principal Dashboard</p>
             </div>
           </div>
           <div className="flex gap-4">
             <Button onClick={generateMonthlyInvoices} className="bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-black shadow-lg">
-              <DollarSign className="mr-2" size={18} /> RUN BILLING
+              <DollarSign className="mr-2" size={18} /> GLOBAL BILLING
             </Button>
             <Button variant="ghost" className="rounded-2xl font-bold text-slate-500 hover:bg-rose-50 hover:text-rose-600" onClick={handleLogout}>
               <LogOut size={18} className="mr-2" /> Sign Out
@@ -242,15 +335,61 @@ const PrincipalDashboard: React.FC = () => {
           </div>
         </header>
 
-        {/* Stats */}
+        {/* Analytics Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard label="Enrollment" value={stats.totalStudents} sub="Active Learners" color="bg-indigo-600" icon={<Users/>} />
-          <StatCard label="Finance" value={stats.unpaid} sub="Unpaid Accounts" color="bg-rose-500" icon={<DollarSign/>} />
-          <StatCard label="Staff" value={stats.totalTeachers} sub="Approved Teachers" color="bg-emerald-500" icon={<CheckCircle/>} />
-          <StatCard label="Hybrid" value={stats.campus + stats.virtual} sub="Campus & Virtual" color="bg-amber-500" icon={<Laptop/>} />
+          <StatCard label="Learners" value={stats.totalStudents} sub="Active Enrollment" color="bg-indigo-600" icon={<Users/>} />
+          <StatCard label="Accounts" value={stats.unpaid} sub="Payments Pending" color="bg-rose-500" icon={<DollarSign/>} />
+          <StatCard label="Faculty" value={stats.totalTeachers} sub="Approved Staff" color="bg-emerald-500" icon={<CheckCircle/>} />
+          <StatCard label="Requests" value={stats.pendingApps} sub="Needs Review" color="bg-amber-500" icon={<ShieldCheck/>} />
         </div>
 
-        {/* Table Section */}
+        {/* NEW: Pending Student Approvals Section */}
+        {students.filter(s => s.status === "pending").length > 0 && (
+          <section className="bg-rose-50/50 p-6 rounded-[3rem] border-2 border-dashed border-rose-200 animate-in fade-in duration-700">
+            <h3 className="text-[10px] font-black text-rose-600 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+              <ShieldCheck size={14} /> Critical: Pending Student Applications
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {students.filter(s => s.status === "pending").map(student => (
+                <div key={student.id} className="bg-white p-4 rounded-2xl shadow-sm border border-rose-100 flex justify-between items-center">
+                  <div>
+                    <p className="font-black text-slate-800 text-xs uppercase">{student.firstName} {student.lastName}</p>
+                    <p className="text-[9px] font-bold text-slate-400 italic">{student.grade}</p>
+                  </div>
+                  <Button onClick={() => handleApproveStudent(student.id)} size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white font-black text-[9px] rounded-lg px-4">APPROVE</Button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* NEW: Pending Teacher Verifications Section */}
+        {pendingTeachers.length > 0 && (
+  <section className="bg-indigo-50/50 p-6 rounded-[3rem] border-2 border-dashed border-indigo-200 animate-in fade-in duration-700 mt-8">
+    <h3 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+      <ShieldCheck size={14} /> Critical: Pending Teacher Verifications
+    </h3>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {pendingTeachers.map(teacher => (
+        <div key={teacher.id} className="bg-white p-4 rounded-2xl shadow-sm border border-indigo-100 flex justify-between items-center">
+          <div>
+            <p className="font-black text-slate-800 text-xs uppercase">{teacher.personalInfo.firstName} {teacher.personalInfo.lastName}</p>
+            <p className="text-[9px] font-bold text-slate-400 italic">{teacher.email}</p>
+          </div>
+          <Button 
+            onClick={() => setSelectedTeacherApp(teacher)} 
+            size="sm" 
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[9px] rounded-lg px-4"
+          >
+            REVIEW
+          </Button>
+        </div>
+      ))}
+    </div>
+  </section>
+)}
+
+        {/* Main Registry Table */}
         <Card className="border-none shadow-2xl rounded-[3rem] bg-white overflow-hidden">
           <CardHeader className="p-8 bg-slate-50/30">
             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
@@ -261,13 +400,13 @@ const PrincipalDashboard: React.FC = () => {
               <div className="flex gap-3 w-full md:w-auto">
                 <div className="relative flex-1">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                  <Input placeholder="Search records..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-12 h-12 rounded-2xl border-none bg-slate-100/80" />
+                  <Input placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-12 h-12 rounded-2xl border-none bg-slate-100/80" />
                 </div>
                 {viewMode === "students" && (
                   <Select value={paymentFilter} onValueChange={setPaymentFilter}>
                     <SelectTrigger className="w-36 h-12 rounded-2xl bg-slate-100/80 border-none font-black text-xs uppercase"><SelectValue/></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Finance: All</SelectItem>
+                      <SelectItem value="all">All Finance</SelectItem>
                       <SelectItem value="paid">Paid</SelectItem>
                       <SelectItem value="pending">Owing</SelectItem>
                     </SelectContent>
@@ -281,36 +420,33 @@ const PrincipalDashboard: React.FC = () => {
               <thead className="bg-slate-50">
                 <tr className="text-[11px] font-black uppercase text-slate-400">
                   <th className="px-8 py-5 text-left">Identity</th>
-                  <th className="px-8 py-5 text-left">Mode</th>
-                  <th className="px-8 py-5 text-left">Status</th>
-                  <th className="px-8 py-5 text-right">Action</th>
+                  <th className="px-8 py-5 text-left">Academic Level</th>
+                  <th className="px-8 py-5 text-left">Account Status</th>
+                  <th className="px-8 py-5 text-right">Dossier</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {filteredData.map((item: any) => (
-                  <tr key={item.id} className="hover:bg-slate-50/80 transition-all">
+                  <tr key={item.id} className="hover:bg-indigo-50/20 transition-all">
                     <td className="px-8 py-6">
                       <div className="font-black text-slate-800 text-sm">
                         {viewMode === "students" ? `${item.firstName} ${item.lastName}` : `${item.personalInfo?.firstName} ${item.personalInfo?.lastName}`}
                       </div>
-                      <div className="text-[10px] text-slate-400 font-bold">ID: {item.id.slice(0,10)}</div>
+                      <div className="text-[9px] text-slate-400 font-bold uppercase">{item.parentEmail || item.personalInfo?.email}</div>
                     </td>
-                    <td className="px-8 py-6">
-                       <Badge variant="secondary" className="rounded-xl px-3 py-1 text-[10px] font-bold">
-                         {item.learningMode || "Virtual"}
-                       </Badge>
+                    <td className="px-8 py-6 text-xs font-bold text-slate-500">
+                       {viewMode === "students" ? item.grade : `${item.personalInfo?.gradePhase} Specialty`}
                     </td>
                     <td className="px-8 py-6">
                       {viewMode === "students" ? (
-                        <div className={`text-[10px] font-black px-3 py-1.5 rounded-xl flex items-center gap-2 w-fit ${item.paymentReceived ? "text-emerald-700 bg-emerald-100" : "text-rose-700 bg-rose-100"}`}>
-                           <span className={`w-2 h-2 rounded-full ${item.paymentReceived ? "bg-emerald-500" : "bg-rose-500 animate-pulse"}`}></span>
+                        <Badge className={`rounded-lg px-3 py-1 text-[9px] font-black ${item.paymentReceived ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"}`}>
                            {item.paymentReceived ? "CLEARED" : "OWING"}
-                        </div>
-                      ) : <Badge>{item.status || "pending"}</Badge>}
+                        </Badge>
+                      ) : <Badge className="bg-indigo-100 text-indigo-600 uppercase text-[9px] font-black">{item.status || "active"}</Badge>}
                     </td>
                     <td className="px-8 py-6 text-right">
-                      <Button variant="ghost" size="icon" onClick={() => {setSelectedItem(item); setSelectedType(viewMode === "students" ? "student" : "teacher"); setShowModal(true);}}>
-                        <Eye size={20}/>
+                      <Button variant="ghost" size="icon" className="hover:bg-white hover:shadow-md rounded-xl" onClick={() => {setSelectedItem(item); setSelectedType(viewMode === "students" ? "student" : "teacher"); setShowModal(true);}}>
+                        <Eye size={20} className="text-indigo-600"/>
                       </Button>
                     </td>
                   </tr>
@@ -319,65 +455,127 @@ const PrincipalDashboard: React.FC = () => {
             </table>
           </CardContent>
         </Card>
+
+        {/* Management: Announcements & Timetable */}
+        <div className="grid grid-cols-1 gap-8">
+          <Card className="border-none shadow-2xl rounded-[3rem] bg-white overflow-hidden">
+            <CardHeader className="p-8 cursor-pointer hover:bg-slate-50 flex flex-row items-center justify-between" onClick={() => setAnnouncementExpanded(!announcementExpanded)}>
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center"><Megaphone size={24} /></div>
+                <CardTitle className="text-xl font-black text-slate-800">School Broadcast System</CardTitle>
+              </div>
+              {announcementExpanded ? <ChevronUp /> : <ChevronDown />}
+            </CardHeader>
+            {announcementExpanded && (
+              <CardContent className="p-8 pt-0 space-y-4 animate-in slide-in-from-top-4 duration-300">
+                <Input placeholder="Announcement Title" value={announcementTitle} onChange={(e) => setAnnouncementTitle(e.target.value)} className="rounded-xl border-slate-100 bg-slate-50 font-bold" />
+                <Textarea placeholder="Write message details..." value={announcementBody} onChange={(e) => setAnnouncementBody(e.target.value)} className="rounded-xl border-slate-100 bg-slate-50 min-h-[100px]" />
+                <Button disabled={isPublishing} onClick={handlePublishAnnouncement} className="w-full bg-slate-900 text-white rounded-xl font-black h-12">
+                   {isPublishing ? "Publishing..." : "SEND TO ALL USERS"} <SendHorizontal className="ml-2" size={18} />
+                </Button>
+              </CardContent>
+            )}
+          </Card>
+
+          <Card className="border-none shadow-2xl rounded-[3rem] bg-white overflow-hidden">
+            <CardHeader className="p-8 cursor-pointer hover:bg-slate-50 flex flex-row items-center justify-between" onClick={() => setTimetableExpanded(!timetableExpanded)}>
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center"><Calendar size={24} /></div>
+                <CardTitle className="text-xl font-black text-slate-800">Timetable Scheduler</CardTitle>
+              </div>
+              {timetableExpanded ? <ChevronUp /> : <ChevronDown />}
+            </CardHeader>
+            {timetableExpanded && (
+              <CardContent className="p-8 pt-0 animate-in slide-in-from-top-4 duration-300">
+                <TimetableManager onSave={saveTimetableSlot} />
+              </CardContent>
+            )}
+          </Card>
+        </div>
       </div>
 
-      {/* Profile Dialog */}
+      {/* Record Dossier Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-2xl rounded-[3rem] p-0 overflow-hidden border-none shadow-2xl">
-          <div className="bg-slate-900 p-8 text-white">
+        <DialogContent className="max-w-3xl rounded-[3rem] p-0 overflow-hidden border-none shadow-2xl">
+          <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
             <DialogHeader>
-              <h2 className="text-3xl font-black italic">Record Dossier</h2>
-              <p className="text-indigo-300 font-bold text-xs uppercase tracking-widest">{selectedType} information</p>
+              <h2 className="text-3xl font-black italic tracking-tighter">Academic Dossier</h2>
+              <p className="text-indigo-400 font-bold text-[10px] uppercase tracking-[0.3em]">{selectedType} record profile</p>
             </DialogHeader>
+            {selectedType === "teacher" ? <Briefcase size={32} className="text-indigo-500 opacity-50"/> : <Users size={32} className="text-indigo-500 opacity-50"/>}
           </div>
           
           <div className="p-8">
-            <Tabs defaultValue="info">
-              <TabsList className="grid w-full grid-cols-2 mb-8 bg-slate-100 rounded-2xl p-1">
-                <TabsTrigger value="info" className="font-black uppercase text-xs">Overview</TabsTrigger>
-                <TabsTrigger value="finance" className="font-black uppercase text-xs">{selectedType === "student" ? "Finance" : "Review"}</TabsTrigger>
+            <Tabs defaultValue="overview">
+              <TabsList className="grid w-full grid-cols-2 mb-8 bg-slate-100 rounded-2xl p-1 h-12">
+                <TabsTrigger value="overview" className="font-black uppercase text-[10px]">Overview</TabsTrigger>
+                <TabsTrigger value="action" className="font-black uppercase text-[10px]">{selectedType === "student" ? "Finance" : "Review Docs"}</TabsTrigger>
               </TabsList>
               
-              <TabsContent value="info" className="grid grid-cols-2 gap-4 animate-in fade-in duration-300">
-                <InfoBox label="Full Name" value={selectedType === "student" ? `${selectedItem?.firstName} ${selectedItem?.lastName}` : "Staff Member"} />
-                <InfoBox label="Contact" value={selectedItem?.parentEmail || "N/A"} />
-                <InfoBox label="Status" value={selectedItem?.status || "Active"} />
-                <InfoBox label="Grade" value={selectedItem?.grade || "N/A"} />
+             <TabsContent value="overview" className="grid grid-cols-2 gap-4 animate-in fade-in duration-500">
+                <InfoBox 
+                  label="Full Name" 
+                  value={
+                    selectedType === "student" 
+                      ? `${selectedItem?.firstName ?? ""} ${selectedItem?.lastName ?? ""}`.trim() 
+                      : `${selectedItem?.personalInfo?.firstName ?? selectedItem?.firstName ?? ""} ${selectedItem?.personalInfo?.lastName ?? selectedItem?.lastName ?? ""}`.trim()
+                  } 
+                />
+                <InfoBox 
+                  label="Contact Email" 
+                  value={selectedItem?.personalInfo?.email || selectedItem?.email || selectedItem?.parentEmail || "N/A"} 
+                />
+                <InfoBox 
+                  label="Grade/Phase" 
+                  value={selectedItem?.personalInfo?.gradePhase || selectedItem?.grade || "N/A"} 
+                />
+                <InfoBox 
+                  label="Registry Status" 
+                  value={selectedItem?.status || selectedItem?.applicationStatus || "Active"} 
+                />
+                
+                {selectedType === "teacher" && (
+                  <div className="col-span-2 space-y-2 mt-2">
+                    <Label className="text-[10px] font-black text-slate-400 uppercase">Specializations</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedItem?.subjects && selectedItem.subjects.length > 0 ? (
+                        selectedItem.subjects.map((s: any, i: number) => (
+                          <Badge key={i} className="bg-indigo-50 text-indigo-600 border-indigo-100 rounded-lg">
+                            {s.name || s}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">No subjects listed</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </TabsContent>
 
-              <TabsContent value="finance" className="space-y-6 animate-in fade-in duration-300">
+
+              <TabsContent value="action" className="animate-in fade-in duration-500">
                 {selectedType === "student" ? (
                   <div className="space-y-6">
                     <div className="flex justify-between items-center bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
                       <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Outstanding Amount</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Arrears</p>
                         <h3 className="text-3xl font-black text-rose-600">R{(Number(pendingAmount) || 0).toFixed(2)}</h3>
                       </div>
                       <Badge className={selectedItem?.paymentReceived ? "bg-emerald-500" : "bg-rose-500"}>
                         {selectedItem?.paymentReceived ? "Cleared" : "Payment Due"}
                       </Badge>
                     </div>
-
-                    <div className="bg-white border border-slate-100 rounded-[2rem] overflow-hidden shadow-sm">
+                    <div className="max-h-[200px] overflow-y-auto border border-slate-100 rounded-2xl">
                       <table className="w-full text-left">
-                        <thead className="bg-slate-50 border-b">
-                          <tr className="text-[9px] font-black text-slate-400 uppercase">
-                            <th className="p-4">Invoice</th>
-                            <th className="p-4 text-right">Amount</th>
-                            <th className="p-4 text-right">Action</th>
-                          </tr>
-                        </thead>
                         <tbody className="divide-y divide-slate-50">
                           {paymentHistory.map((inv) => (
                             <tr key={inv.id} className="text-xs">
-                              <td className="p-4 font-bold text-slate-800 uppercase">{inv.category}</td>
+                              <td className="p-4 font-bold text-slate-800">{inv.category}</td>
                               <td className="p-4 text-right font-black">R{(Number(inv.amount) || 0).toFixed(2)}</td>
                               <td className="p-4 text-right">
                                 {inv.status === "pending" ? (
-                                  <Button size="sm" onClick={() => clearSingleInvoice(inv.id, selectedItem)} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-xl text-[9px] font-black h-8 px-4 border border-emerald-100">
-                                    CLEAR
-                                  </Button>
-                                ) : <div className="text-emerald-500 font-black flex items-center justify-end gap-1"><CheckCircle size={12}/> PAID</div>}
+                                  <Button size="sm" onClick={() => clearSingleInvoice(inv.id, selectedItem)} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-xl text-[9px] font-black h-8 px-4">CLEAR</Button>
+                                ) : <CheckCircle size={16} className="text-emerald-500 ml-auto"/>}
                               </td>
                             </tr>
                           ))}
@@ -386,13 +584,37 @@ const PrincipalDashboard: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="p-10 text-center text-slate-400 font-bold italic">Reviewing staff credentials...</div>
+                  <div className="space-y-6">
+                    <div className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100">
+                      <h4 className="text-[10px] font-black text-indigo-600 uppercase mb-4 flex items-center gap-2"><FileText size={14}/> Credential Documents</h4>
+                      <div className="grid grid-cols-1 gap-2">
+                        {selectedItem?.documents && Object.entries(selectedItem.documents).map(([key, urls]: any) => (
+                          <a key={key} href={urls[0]} target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-white rounded-xl border border-indigo-200 hover:border-indigo-400 transition-colors">
+                            <span className="text-[10px] font-black text-slate-600 uppercase">{key}</span>
+                            <Eye size={14} className="text-indigo-500" />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                    {selectedItem?.status === "submitted" && (
+                      <Button onClick={() => handleApproveTeacher(selectedItem.id, selectedItem.uid)} className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-lg">AUTHORIZE STAFF PROFILE</Button>
+                    )}
+                  </div>
                 )}
               </TabsContent>
             </Tabs>
           </div>
         </DialogContent>
       </Dialog>
+
+      <TeacherReviewModal 
+        application={selectedTeacherApp}
+        onClose={() => setSelectedTeacherApp(null)}
+        onApprove={(appId, uid) => {
+          handleApproveTeacher(appId, uid);
+          setSelectedTeacherApp(null);
+        }}
+      />
     </div>
   );
 };
@@ -400,9 +622,7 @@ const PrincipalDashboard: React.FC = () => {
 /* ---------------- Helper Components ---------------- */
 const StatCard = ({ label, value, sub, icon, color }: any) => (
   <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-white flex items-center gap-5">
-    <div className={`w-14 h-14 ${color} rounded-2xl flex items-center justify-center text-white shadow-lg`}>
-      {icon}
-    </div>
+    <div className={`w-14 h-14 ${color} rounded-2xl flex items-center justify-center text-white shadow-lg`}>{icon}</div>
     <div>
       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</p>
       <h3 className="text-2xl font-black text-slate-900">{value}</h3>
@@ -414,11 +634,8 @@ const StatCard = ({ label, value, sub, icon, color }: any) => (
 const InfoBox = ({ label, value }: any) => (
   <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
     <p className="text-[9px] font-black text-slate-400 uppercase mb-1">{label}</p>
-    <p className="text-sm font-bold text-slate-800">{value}</p>
+    <p className="text-sm font-bold text-slate-800">{value || "N/A"}</p>
   </div>
 );
 
 export default PrincipalDashboard;
-
-// student approval card still need to be done - showing pending applications only
-// teacher profile view still needs to be done

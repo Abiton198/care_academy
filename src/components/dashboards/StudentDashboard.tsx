@@ -1,425 +1,394 @@
-"use client";
+/* =============================================================================
+   StudentDashboard.tsx – Secure Student Portal (React + TS + Firebase)
+   Features:
+   • Real-time Firestore sync for timetable & class links
+   • Personalized overview with stats
+   • Tabbed navigation: Overview, Timetable, Links
+   • Robust loading states & error handling
+   • Clean, responsive UI with ShadCN components
+   • Full auth integration via AuthProvider
+   ============================================================================= */
 
-/* ======================================================
-   IMPORTS
-====================================================== */
-import React, { useEffect, useState, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { db } from "@/lib/firebaseConfig";
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { db } from "@/lib/firebaseConfig"; // ← Make sure this file exists and exports db
 import {
-  doc,
-  onSnapshot,
   collection,
+  getDocs,
+  onSnapshot,
   query,
   where,
   orderBy,
 } from "firebase/firestore";
 
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "@/components/ui/card";
+/* UI Components (ShadCN – assume you have these installed) */
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 /* Icons */
 import {
-  Calendar,
-  Clock,
-  BookOpen,
-  Video,
-  Link as LinkIcon,
-  Home,
-  LogOut,
+  Loader2,
   Users,
-  Sparkles,
+  LogOut,
+  ArrowRight,
+  Video,
+  BookOpen,
+  Calendar as CalendarIcon,
+  AlertCircle,
 } from "lucide-react";
 
-/* ======================================================
-   TYPES
-====================================================== */
-interface Student {
+/* Auth */
+import { useAuth } from "../auth/AuthProvider";
+
+// =============================================================================
+// TYPES
+// =============================================================================
+interface StudentProfile {
   id: string;
   firstName: string;
   grade: string;
-  subjects: string[];
+  email?: string;
+  linkedParentEmail?: string;
 }
 
 interface TimetableEntry {
   id: string;
   day: string;
   time: string;
-  grade: string;
   subject: string;
   teacherName: string;
-  curriculum: "CAPS" | "Cambridge";
-  zoomLink?: string | null;
-  classroomLink?: string | null;
+  grade: string;
+  curriculum: "Cambridge";
 }
 
 interface ClassLink {
   id: string;
   title: string;
   url: string;
-  type: "classroom" | "resource"; // Matching your Firestore "type"
-  grade: string;
+  type: "classroom" | "resource";
   teacherName: string;
+  grade: string;
   createdAt: any;
 }
 
-/* ======================================================
-   MAIN COMPONENT
-====================================================== */
+// =============================================================================
+// MAIN COMPONENT
+// =============================================================================
 const StudentDashboard: React.FC = () => {
-  const { studentId } = useParams<{ studentId: string }>();
   const navigate = useNavigate();
+  const { user, loading: authLoading, logout } = useAuth();
 
-  const [student, setStudent] = useState<Student | null>(null);
+  /* ---------------- PROFILE ---------------- */
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
+  /* ---------------- DATA ---------------- */
   const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
-  const [activeTab, setActiveTab] = useState<"overview" | "timetable" | "links">("overview");
   const [classLinks, setClassLinks] = useState<ClassLink[]>([]);
 
-  /* ======================================================
-     FETCH STUDENT PROFILE
-  ===================================================== */
-  useEffect(() => {
-    if (!studentId) return;
+  const [timetableLoaded, setTimetableLoaded] = useState(false);
+  const [linksLoaded, setLinksLoaded] = useState(false);
 
-    const unsub = onSnapshot(doc(db, "students", studentId), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setStudent({
-          id: snap.id,
-          firstName: data.firstName || "Student",
-          grade: data.grade || "",
-          subjects: Array.isArray(data.subjects) ? data.subjects : [],
+  /* ---------------- UI ---------------- */
+  const [activeTab, setActiveTab] = useState<"overview" | "timetable" | "links">("overview");
+
+  // ===========================================================================
+  // 1. LOAD STUDENT PROFILE (ONCE AUTH IS RESOLVED)
+  // ===========================================================================
+ useEffect(() => {
+  if (authLoading || !user) return;
+
+  const loadStudentProfile = async () => {
+    try {
+      // 1. Query by parentId (This matches your Firestore structure)
+      const q = query(
+        collection(db, "students"), 
+        where("parentId", "==", user.uid),
+        where("status", "==", "enrolled") // Only show if they are approved
+      );
+
+      const snap = await getDocs(q);
+      
+      if (!snap.empty) {
+        // Taking the first student found for this parent
+        const docSnap = snap.docs[0];
+        const data = docSnap.data();
+        
+        setProfile({
+          id: docSnap.id,
+          firstName: data.firstName,
+          grade: data.grade,
+          email: data.parentEmail, // Using parent email as a fallback
         });
+      } else {
+        setProfileError("No enrolled student found for this account.");
       }
-    });
-
-    return () => unsub();
-  }, [studentId]);
-
-  /* ======================================================
-     FETCH TIMETABLE – REAL-TIME + FLEXIBLE MATCHING
-  ===================================================== */
-  useEffect(() => {
-    if (!student?.grade || student.subjects.length === 0) {
-      setTimetable([]);
-      return;
+    } catch (err: any) {
+      console.error("Profile load error:", err);
+      setProfileError("Failed to sync with the Student Registry.");
+    } finally {
+      setProfileLoaded(true);
     }
+  };
+
+  loadStudentProfile();
+}, [user, authLoading]);
+
+  // ===========================================================================
+  // 2. REAL-TIME TIMETABLE (ONCE PROFILE LOADS)
+  // ===========================================================================
+  useEffect(() => {
+    if (!profile?.grade) return;
+
+    setTimetableLoaded(false);
 
     const q = query(
       collection(db, "timetable"),
-      where("grade", "==", student.grade),
-      orderBy("day"),
-      orderBy("time")
+      where("grade", "==", profile.grade),
+      where("curriculum", "==", "Cambridge")
     );
 
-    const unsub = onSnapshot(q, (snap) => {
-      const allSlots = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as TimetableEntry),
-      }));
-
-      // Flexible matching: "Mathematics" matches "Mathematics (IGCSE)"
-      const filtered = allSlots.filter((slot) =>
-        student.subjects.some((sub) =>
-          slot.subject.toLowerCase().includes(sub.toLowerCase().replace(" (igcse)", ""))
-        )
-      );
-
-      setTimetable(filtered);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const entries = snap.docs.map((d) => ({ id: d.id, ...d.data() } as TimetableEntry));
+        setTimetable(entries);
+        setTimetableLoaded(true);
+      },
+      (err) => {
+        console.error("Timetable error:", err);
+        setTimetableLoaded(true);
+      }
+    );
 
     return () => unsub();
-  }, [student]);
+  }, [profile?.grade]);
 
-/* ======================================================
-   2. FETCH CLASS LINKS (REAL-TIME)
-===================================================== */
-useEffect(() => {
-  // Ensure we have the student's grade before querying
-  if (!student?.grade) return;
+  // ===========================================================================
+  // 3. REAL-TIME CLASS LINKS (ONCE PROFILE LOADS)
+  // ===========================================================================
+  useEffect(() => {
+    if (!profile?.grade) return;
 
-  // Query: Fetch links for specific grade OR "all"
-  const linksQuery = query(
-    collection(db, "class_links"),
-    where("grade", "in", [student.grade, "all"]),
-    orderBy("createdAt", "desc")
-  );
+    setLinksLoaded(false);
 
-  const unsub = onSnapshot(linksQuery, (snap) => {
-    const fetchedLinks = snap.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Omit<ClassLink, "id">),
-    }));
-    setClassLinks(fetchedLinks);
-  }, (error) => {
-    console.error("Error fetching class links:", error);
-  });
+    const q = query(
+      collection(db, "class_links"),
+      where("grade", "in", [profile.grade, "all"]),
+      orderBy("createdAt", "desc")
+    );
 
-  return () => unsub();
-}, [student?.grade]);
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const links = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ClassLink));
+        setClassLinks(links);
+        setLinksLoaded(true);
+      },
+      (err) => {
+        console.error("Class links error:", err);
+        setLinksLoaded(true);
+      }
+    );
 
+    return () => unsub();
+  }, [profile?.grade]);
 
-  /* ======================================================
-     GROUP TIMETABLE BY DAY
-  ===================================================== */
+  // ===========================================================================
+  // 4. DERIVED DATA (GROUPING + STATS)
+  // ===========================================================================
   const groupedTimetable = useMemo(() => {
-    const groups: Record<string, TimetableEntry[]> = {};
-    timetable.forEach((slot) => {
-      if (!groups[slot.day]) groups[slot.day] = [];
-      groups[slot.day].push(slot);
-    });
-    return Object.entries(groups);
+    const daysOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+    const grouped = timetable.reduce((acc, entry) => {
+      if (!acc[entry.day]) acc[entry.day] = [];
+      acc[entry.day].push(entry);
+      return acc;
+    }, {} as Record<string, TimetableEntry[]>);
+
+    return daysOrder
+      .filter((day) => grouped[day])
+      .map((day) => ({ day, slots: grouped[day].sort((a, b) => a.time.localeCompare(b.time)) }));
   }, [timetable]);
 
-  /* ======================================================
-     DYNAMIC STATS
-  ===================================================== */
-  const weeklyLessonsCount = timetable.length;
+  const stats = useMemo(() => {
+    const todayDay = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date());
+    return {
+      todayClasses: timetable.filter((entry) => entry.day === todayDay).length,
+      weeklyClasses: timetable.length,
+      totalLinks: classLinks.length,
+    };
+  }, [timetable, classLinks]);
 
-  const today = new Date().toLocaleString("en-us", { weekday: "long" });
-  const todayLessons = timetable.filter((slot) => slot.day === today);
-  const nextClassToday = todayLessons.sort((a, b) => a.time.localeCompare(b.time))[0];
-
-  /* ======================================================
-     RENDER
-  ===================================================== */
-  if (!student) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-100 to-purple-100">
-        <div className="text-center">
-          <Sparkles className="w-16 h-16 text-indigo-600 mx-auto mb-4 animate-pulse" />
-          <p className="text-xl text-gray-700">Loading your dashboard...</p>
-        </div>
-      </div>
-    );
+  // ===========================================================================
+  // 5. LOADING + ERROR STATES (PREVENT BLANK SCREEN)
+  // ===========================================================================
+  if (authLoading || !profileLoaded) {
+    return <LoadingScreen message="Loading your portal..." />;
   }
 
+  if (profileError) {
+    return <ErrorScreen message={profileError} onRetry={() => window.location.reload()} />;
+  }
+
+  if (!profile) {
+    return <ErrorScreen message="No profile found. Contact admin." onRetry={() => window.location.reload()} />;
+  }
+
+  // ===========================================================================
+  // 6. RENDER DASHBOARD
+  // ===========================================================================
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-lg sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
+      <header className="bg-white shadow sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Users className="w-10 h-10 text-indigo-600" />
+            <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-2xl">
+              {profile.firstName[0]}
+            </div>
             <div>
-              <h1 className="text-3xl font-bold text-indigo-900">
-                {student.firstName}'s Dashboard
-              </h1>
-              <p className="text-sm text-gray-600">
-                Grade {student.grade} • {student.subjects.length} subjects
-              </p>
+              <h1 className="text-2xl font-bold">Welcome, {profile.firstName}</h1>
+              <p className="text-sm text-gray-500">Grade {profile.grade} • Cambridge</p>
             </div>
           </div>
-
-          <div className="flex gap-3">
-            <Button variant="outline" size="lg" onClick={() => navigate("/parent-dashboard")}>
-              <Home className="w-5 h-5 mr-2" /> Parent Portal
-            </Button>
-            <Button variant="destructive" size="lg" onClick={() => navigate("/")}>
-              <LogOut className="w-5 h-5 mr-2" /> Logout
-            </Button>
-          </div>
+          <Button variant="ghost" onClick={async () => { await logout(); navigate("/login"); }}>
+            <LogOut className="mr-2 h-4 w-4" /> Logout
+          </Button>
         </div>
 
         {/* Tabs */}
-        <nav className="bg-gradient-to-r from-indigo-600 to-purple-700 text-white shadow-md">
-          <div className="max-w-7xl mx-auto flex">
-            <button
-              onClick={() => setActiveTab("overview")}
-              className={`flex-1 py-5 text-lg font-semibold transition-all flex items-center justify-center gap-3 ${
-                activeTab === "overview" ? "bg-white/20 shadow-inner" : "hover:bg-white/10"
-              }`}
-            >
-              <BookOpen className="w-6 h-6" /> OVERVIEW
-            </button>
-            <button
-              onClick={() => setActiveTab("timetable")}
-              className={`flex-1 py-5 text-lg font-semibold transition-all flex items-center justify-center gap-3 ${
-                activeTab === "timetable" ? "bg-white/20 shadow-inner" : "hover:bg-white/10"
-              }`}
-            >
-              <Calendar className="w-6 h-6" /> TIMETABLE
-            </button>
-            <button
-              onClick={() => setActiveTab("links")}
-              className={`flex-1 py-5 text-lg font-semibold transition-all flex items-center justify-center gap-3 ${
-                activeTab === "links" ? "bg-white/20 shadow-inner" : "hover:bg-white/10"
-              }`}
-            >
-              <LinkIcon className="w-6 h-6" /> CLASS LINKS
-            </button>
+        <nav className="border-t">
+          <div className="max-w-7xl mx-auto px-6 flex gap-8">
+            {["overview", "timetable", "links"].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab as typeof activeTab)}
+                className={`py-4 text-sm font-medium ${
+                  activeTab === tab
+                    ? "border-b-2 border-indigo-600 text-indigo-600"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
           </div>
         </nav>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto p-8 space-y-10">
-
-        {/* OVERVIEW TAB */}
+      <main className="max-w-7xl mx-auto px-6 py-10">
         {activeTab === "overview" && (
-          <div className="space-y-8">
-            <Card className="shadow-2xl border-0 bg-gradient-to-br from-indigo-100 to-purple-100">
-              <CardHeader>
-                <CardTitle className="text-3xl flex items-center gap-4 text-indigo-900">
-                  <Sparkles className="w-10 h-10 text-yellow-500" /> Welcome Back, {student.firstName}!
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-lg text-gray-700">
-                  You have <strong>{weeklyLessonsCount} classes</strong> scheduled this week.
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* Subject Cards */}
-            <div className="grid md:grid-cols-3 gap-8">
-              {student.subjects.map((subject) => {
-                const count = timetable.filter((slot) =>
-                  slot.subject.toLowerCase().includes(subject.toLowerCase().replace(" (igcse)", ""))
-                ).length;
-
-                return (
-                  <Card
-                    key={subject}
-                    className="shadow-xl hover:shadow-2xl transition bg-gradient-to-br from-teal-50 to-cyan-100"
-                  >
-                    <CardContent className="p-8 text-center">
-                      <h3 className="text-2xl font-bold text-teal-900 mb-3">{subject}</h3>
-                      <p className="text-5xl font-extrabold text-cyan-700">{count}</p>
-                      <p className="text-lg text-teal-800 mt-2">classes this week</p>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
+          <div className="grid md:grid-cols-3 gap-6 mb-10">
+            <StatCard icon={CalendarIcon} title="Today's Classes" value={stats.todayClasses} />
+            <StatCard icon={BookOpen} title="Weekly Lessons" value={stats.weeklyClasses} />
+            <StatCard icon={Video} title="Class Links" value={stats.totalLinks} />
           </div>
         )}
 
-        {/* TIMETABLE TAB */}
         {activeTab === "timetable" && (
           <div className="space-y-8">
             {groupedTimetable.length > 0 ? (
-              groupedTimetable.map(([day, slots]) => (
-                <Card key={day} className="shadow-2xl overflow-hidden border-0">
-                  <CardHeader className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
-                    <CardTitle className="text-2xl flex items-center gap-4">
-                      <Calendar className="w-8 h-8" /> {day}
-                    </CardTitle>
+              groupedTimetable.map(({ day, slots }) => (
+                <Card key={day} className="overflow-hidden">
+                  <CardHeader className="bg-slate-900 text-white">
+                    <CardTitle>{day}</CardTitle>
                   </CardHeader>
-                  <CardContent className="p-6">
-                    <div className="space-y-6">
-                      {slots.map((slot) => (
-                        <div
-                          key={slot.id}
-                          className="p-6 bg-gradient-to-r from-white to-indigo-50 rounded-xl shadow-md hover:shadow-lg transition"
-                        >
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <h4 className="text-xl font-bold text-indigo-900">{slot.subject}</h4>
-                              <p className="text-lg text-purple-800 mt-1">
-                                with <span className="font-semibold">{slot.teacherName}</span>
-                              </p>
-                              <div className="flex items-center gap-4 mt-3 text-sm text-gray-700">
-                                <span className="flex items-center gap-1">
-                                  <Clock className="w-4 h-4" /> {slot.time}
-                                </span>
-                                <Badge variant={slot.curriculum === "CAPS" ? "default" : "secondary"}>
-                                  {slot.curriculum}
-                                </Badge>
-                              </div>
-                            </div>
-                          </div>
+                  <CardContent className="p-6 space-y-4">
+                    {slots.map((slot) => (
+                      <div
+                        key={slot.id}
+                        className="flex justify-between items-center p-4 bg-gray-50 rounded-lg"
+                      >
+                        <div>
+                          <p className="font-medium">{slot.subject}</p>
+                          <p className="text-sm text-gray-500">{slot.teacherName}</p>
                         </div>
-                      ))}
-                    </div>
+                        <Badge variant="outline">{slot.time}</Badge>
+                      </div>
+                    ))}
                   </CardContent>
                 </Card>
               ))
             ) : (
-              <Card className="p-20 text-center shadow-2xl">
-                <Calendar className="w-24 h-24 text-gray-300 mx-auto mb-6" />
-                <h3 className="text-3xl font-bold text-gray-700 mb-4">No Classes Scheduled</h3>
-                <p className="text-xl text-gray-600">
-                  Your weekly timetable will appear here once classes are assigned.
-                </p>
-              </Card>
+              <div className="text-center py-12 text-gray-500">
+                No timetable entries found for your grade yet.
+              </div>
             )}
           </div>
         )}
 
-        {/* CLASS LINKS TAB */}
-       {activeTab === "links" && (
-  <div className="space-y-8">
-    <Card className="shadow-2xl border-0">
-      <CardHeader className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white">
-        <CardTitle className="text-4xl font-bold flex items-center gap-5">
-          <LinkIcon className="w-12 h-12" /> Your Class Links
-        </CardTitle>
-        <p className="text-xl mt-3 text-teal-100">
-          Access your live Zoom classes and study materials
-        </p>
-      </CardHeader>
-      <CardContent className="p-10">
-        {classLinks.length > 0 ? (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {classLinks.map((link) => (
-              <Card
-                key={link.id}
-                className="shadow-xl hover:shadow-2xl transition-all duration-300 border-0 overflow-hidden group"
-              >
-                {/* Visual indicator based on type */}
-                <div className={`h-3 ${link.type === 'classroom' ? 'bg-blue-500' : 'bg-emerald-500'}`} />
-                
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <CardTitle className="text-2xl text-slate-900">{link.title}</CardTitle>
-                      <p className="text-sm text-slate-500 mt-1">Teacher: {link.teacherName}</p>
-                    </div>
-                    {link.grade === "all" && (
-                      <Badge className="bg-amber-100 text-amber-700 border-none font-bold">General</Badge>
-                    )}
-                  </div>
-                </CardHeader>
-
-                <CardContent className="p-6">
-                  <Button
-                    asChild
-                    className={`w-full py-8 text-xl font-black shadow-lg transition-transform active:scale-95 ${
-                      link.type === 'classroom' 
-                      ? 'bg-blue-600 hover:bg-blue-700' 
-                      : 'bg-emerald-600 hover:bg-emerald-700'
-                    }`}
-                  >
-                    <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-3">
-                      {link.type === 'classroom' ? <Video size={28} /> : <BookOpen size={28} />}
-                      {link.type === 'classroom' ? 'JOIN LIVE CLASS' : 'VIEW RESOURCES'}
-                    </a>
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-24">
-            <LinkIcon className="w-24 h-24 text-slate-200 mx-auto mb-6" />
-            <h3 className="text-2xl font-bold text-slate-400">No links available for Grade {student.grade}</h3>
-            <p className="text-slate-500 mt-2">Links will appear here when your teacher publishes them.</p>
-          </div>
-        )}
-              </CardContent>
-            </Card>
+        {activeTab === "links" && (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {classLinks.length > 0 ? (
+              classLinks.map((link) => (
+                <Card key={link.id} className="overflow-hidden">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      {link.type === "classroom" ? (
+                        <Video className="h-5 w-5 text-blue-600" />
+                      ) : (
+                        <BookOpen className="h-5 w-5 text-green-600" />
+                      )}
+                      {link.title}
+                    </CardTitle>
+                    <p className="text-sm text-gray-500">{link.teacherName}</p>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <Button variant="outline" className="w-full" asChild>
+                      <a href={link.url} target="_blank" rel="noopener noreferrer">
+                        Open Link <ArrowRight className="ml-2 h-4 w-4" />
+                      </a>
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <div className="col-span-3 text-center py-12 text-gray-500">
+                No class links available yet.
+              </div>
+            )}
           </div>
         )}
       </main>
     </div>
   );
 };
+
+// =============================================================================
+// Helper Components
+// =============================================================================
+const LoadingScreen = ({ message }: { message: string }) => (
+  <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+    <Loader2 className="h-12 w-12 animate-spin text-indigo-600" />
+    <p className="mt-4 text-gray-600 font-medium">{message}</p>
+  </div>
+);
+
+const ErrorScreen = ({ message, onRetry }: { message: string; onRetry: () => void }) => (
+  <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+    <AlertCircle className="h-12 w-12 text-red-500" />
+    <p className="mt-4 text-gray-600 text-center max-w-md">{message}</p>
+    <Button onClick={onRetry} className="mt-6">
+      Try Again
+    </Button>
+  </div>
+);
+
+const StatCard = ({ icon: Icon, title, value }: { icon: React.ElementType; title: string; value: number }) => (
+  <Card className="border-none shadow-md">
+    <CardContent className="p-6 flex items-center gap-4">
+      <div className="p-4 rounded-full bg-indigo-100">
+        <Icon className="h-6 w-6 text-indigo-600" />
+      </div>
+      <div>
+        <p className="text-sm text-gray-500 font-medium">{title}</p>
+        <p className="text-3xl font-bold">{value}</p>
+      </div>
+    </CardContent>
+  </Card>
+);
 
 export default StudentDashboard;
