@@ -37,7 +37,7 @@ interface Student {
   firstName: string;
   lastName: string;
   grade: string;
-  curriculum: "Cambridge";
+  curriculum: "British Curriculum";
   subjects: string[];
   status?: string;
 }
@@ -49,14 +49,14 @@ const GRADES = [
 ];
 
 // Split subjects by stage to ensure age-appropriate registration
-const CAMBRIDGE_SUBJECTS = {
+const British_Curriculum_SUBJECTS = {
   Primary: [
-    "Cambridge Primary English",
-    "Cambridge Primary Mathematics",
-    "Cambridge Primary Science",
-    "Cambridge Primary Global Perspectives",
-    "Cambridge Primary Digital Literacy",
-    "Cambridge Primary Art & Design",
+    "British Curriculum Primary English",
+    "British Curriculum Primary Mathematics",
+    "British Curriculum Primary Science",
+    "British Curriculum Primary Global Perspectives",
+    "British Curriculum Primary Digital Literacy",
+    "British Curriculum Primary Art & Design",
     "Coding"
   ],
   Secondary: [
@@ -102,8 +102,8 @@ export default function RegistrationSection() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [grade, setGrade] = useState("");
-  // FIXED: Default to "Cambridge" to match CURRICULUM_SUBJECTS key
-  const [curriculum] = useState<"Cambridge">("Cambridge");
+  // FIXED: Default to "British Curriculum" to match CURRICULUM_SUBJECTS key
+  const [curriculum] = useState<"British Curriculum">("British Curriculum");
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -236,8 +236,8 @@ export default function RegistrationSection() {
 
   // Helper to determine if we show Primary or Secondary subjects
   const getSubjectList = () => {
-    if (grade.startsWith("Stage")) return CAMBRIDGE_SUBJECTS.Primary;
-    return CAMBRIDGE_SUBJECTS.Secondary;
+    if (grade.startsWith("Stage")) return British_Curriculum_SUBJECTS.Primary;
+    return British_Curriculum_SUBJECTS.Secondary;
   };
 
   if (loading) return (
@@ -258,7 +258,7 @@ export default function RegistrationSection() {
           <ArrowLeft size={16} /> Back
         </Button>
         <div className="text-center">
-          <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">Cambridge Student Registry</h2>
+          <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">British Curriculum Student Registry</h2>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Academic Year 2026</p>
         </div>
         <Button variant="ghost" size="icon" onClick={() => navigate("/parent-dashboard")}>
@@ -355,7 +355,7 @@ export default function RegistrationSection() {
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Curriculum</Label>
-                      <Input className="rounded-xl bg-slate-50 font-bold" value="Cambridge International" disabled />
+                      <Input className="rounded-xl bg-slate-50 font-bold" value="British Curriculum International" disabled />
                     </div>
                   </div>
 

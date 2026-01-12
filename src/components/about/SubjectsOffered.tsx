@@ -27,14 +27,14 @@ const SubjectsOffered: React.FC = () => {
         >
           <div className="space-y-4">
             <span className="bg-emerald-500 px-4 py-1 rounded-full text-xs font-black tracking-widest">
-              Cambridge International
+              British Curriculum International
             </span>
             <h2 className="text-3xl md:text-5xl font-black leading-tight">
               All levels <br />
-              <span className="text-yellow-300">Cambridge Pathway</span>
+              <span className="text-yellow-300">British Curriculum Pathway</span>
             </h2>
             <p className="text-lg text-indigo-100 max-w-3xl mx-auto">
-              Cambridge Primary, Lower Secondary, IGCSE and AS/A Levels —  
+              British Curriculum Primary, Lower Secondary, IGCSE and AS/A Levels —  
               delivered through our world-class hybrid learning platform.
             </p>
             <div className="pt-4">
@@ -51,7 +51,7 @@ const SubjectsOffered: React.FC = () => {
         {/* Introduction */}
         <div className="text-center space-y-4">
           <h1 className="text-4xl md:text-6xl font-black text-gray-900">
-            Cambridge Subjects Offered
+            British Curriculum Subjects Offered
           </h1>
           <p className="text-lg text-gray-600 max-w-3xl mx-auto">
             A structured international curriculum designed for academic excellence,
@@ -59,18 +59,18 @@ const SubjectsOffered: React.FC = () => {
           </p>
         </div>
 
-        {/* Primary (Cambridge Primary 1–7) */}
+        {/* Primary (British Curriculum Primary 1–7) */}
         <div className="bg-white rounded-[3rem] p-8 md:p-12 shadow-xl border border-emerald-100">
           <div className="flex flex-col md:flex-row gap-10 items-center">
             <div className="flex-1 space-y-6">
               <div className="inline-flex items-center gap-2 bg-emerald-100 text-emerald-700 px-4 py-1 rounded-full font-bold text-sm">
-                <Heart size={16} /> Cambridge Primary
+                <Heart size={16} /> British Curriculum Primary
               </div>
               <h2 className="text-3xl font-bold text-gray-800">
                 Strong Academic Foundations
               </h2>
               <p className="text-gray-600">
-                Cambridge Primary builds confidence in core skills while developing
+                British Curriculum Primary builds confidence in core skills while developing
                 curiosity, creativity and independent thinking.
               </p>
               <div className="grid grid-cols-2 gap-4">
@@ -92,7 +92,7 @@ const SubjectsOffered: React.FC = () => {
               <BookOpen size={48} className="mx-auto text-emerald-600 mb-4" />
               <h4 className="font-bold text-emerald-900">Grades 1 – 7</h4>
               <p className="text-xs text-emerald-700 mt-2 italic">
-                Cambridge Primary Programme
+                British Curriculum Primary Programme
               </p>
             </div>
           </div>
@@ -102,7 +102,7 @@ const SubjectsOffered: React.FC = () => {
         <div className="space-y-12">
           <div className="text-center">
             <h2 className="text-3xl font-bold text-gray-900 italic">
-              Cambridge Secondary & IGCSE Streams
+              British Curriculum Secondary & IGCSE Streams
             </h2>
             <p className="text-gray-500 mt-2">
               Preparing students for top South African and international universities.
@@ -170,9 +170,9 @@ const SubjectsOffered: React.FC = () => {
         <div className="bg-gradient-to-r from-indigo-600 to-purple-700 rounded-[3rem] p-10 text-white flex items-center gap-8 shadow-2xl">
           <Globe size={60} className="text-yellow-300 animate-pulse" />
           <div>
-            <h3 className="text-2xl font-bold">Cambridge Hybrid Learning</h3>
+            <h3 className="text-2xl font-bold">British Curriculum Hybrid Learning</h3>
             <p className="text-indigo-100 max-w-2xl">
-              All Cambridge subjects are available on-campus or online through
+              All British Curriculum subjects are available on-campus or online through
               live interactive lessons and a structured LMS.
             </p>
           </div>
@@ -181,7 +181,7 @@ const SubjectsOffered: React.FC = () => {
         {/* Final CTA */}
         <div className="text-center py-1 space-y-6">
           <h2 className="text-3xl font-black text-gray-900 ">
-            Begin Your Cambridge Journey
+            Begin Your British Curriculum Journey
           </h2>
           </div>
           

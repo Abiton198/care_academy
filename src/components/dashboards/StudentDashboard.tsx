@@ -65,7 +65,7 @@ interface TimetableEntry {
   subject: string;
   teacherName: string;
   grade: string;
-  curriculum: "Cambridge";
+  curriculum: "British Curriculum";
 }
 
 interface ClassLink {
@@ -180,7 +180,7 @@ const LinkCard = ({ link }: { link: ClassLink }) => (
     const q = query(
       collection(db, "timetable"),
       where("grade", "==", profile.grade),
-      where("curriculum", "==", "Cambridge")
+      where("curriculum", "==", "British Curriculum")
     );
 
     const unsub = onSnapshot(
@@ -293,10 +293,10 @@ const LinkCard = ({ link }: { link: ClassLink }) => (
             </div>
             <div>
               <h1 className="text-2xl font-bold">Welcome, {profile.firstName}</h1>
-              <p className="text-sm text-gray-500">Grade {profile.grade} • Cambridge</p>
+              <p className="text-sm text-gray-500">Grade {profile.grade} • British Curriculum</p>
             </div>
           </div>
-          <Button variant="ghost" onClick={async () => { await logout(); navigate("/login"); }}>
+          <Button variant="ghost" onClick={async () => { await logout(); navigate("/"); }}>
             <LogOut className="mr-2 h-4 w-4" /> Logout
           </Button>
         </div>

@@ -33,7 +33,7 @@ const FeesStructure: React.FC = () => {
             Transparent & <span className="text-emerald-600">Affordable</span> Fees
           </h1>
           <p className="mt-3 text-lg text-gray-600 max-w-3xl mx-auto">
-            Our mission is to provide world-class Cambridge and Christian-based education 
+            Our mission is to provide world-class British Curriculum and Christian-based education 
             at a price that makes sense for modern families. 
             <strong> Classes start 26 January 2026.</strong>
           </p>

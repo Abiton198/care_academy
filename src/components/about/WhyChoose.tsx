@@ -30,14 +30,14 @@ const WhyChoose: React.FC = () => {
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl"></div>
           <div className="relative z-10 text-center space-y-4">
             <span className="bg-yellow-400 text-indigo-950 px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest">
-              Cambridge  • Hybrid
+              British Curriculum  • Hybrid
             </span>
             <h2 className="text-3xl md:text-5xl font-black leading-tight">
               A School That <br /> <span className="text-yellow-300">Adapts to Your Life</span>
             </h2>
             <p className="text-lg md:text-xl text-indigo-100 max-w-3xl mx-auto leading-relaxed">
               Care Academy is built for modern families. Whether you choose 
-              <strong> Cambridge International</strong>, your child receives 
+              <strong> British Curriculum International</strong>, your child receives 
               a stable, recognised education — <strong>anywhere in the world</strong>.
             </p>
             <div className="pt-4">
@@ -74,12 +74,12 @@ const WhyChoose: React.FC = () => {
             </p>
           </div>
 
-          {/* Cambridge Logic */}
+          {/* British Curriculum Logic */}
           <div className="p-8 bg-white rounded-3xl shadow-xl border-t-8 border-blue-500">
             <Globe className="text-blue-600 mb-6" size={36} />
-            <h2 className="text-xl font-bold mb-3">Cambridge, Done Properly</h2>
+            <h2 className="text-xl font-bold mb-3">British Curriculum, Done Properly</h2>
             <p className="text-gray-600 text-sm leading-relaxed">
-              Cambridge students follow the full international curriculum, while writing 
+              British Curriculum students follow the full international curriculum, while writing 
               exams at <strong>approved local exam centres</strong> near their home — 
               no overseas travel, no disruption.
             </p>
@@ -148,7 +148,7 @@ const WhyChoose: React.FC = () => {
             Enrol for 2026 <ArrowRight />
           </Link>
           <p className="mt-6 text-gray-500 text-sm">
-            Cambridge • All levels • Registration Open
+            British Curriculum • All levels • Registration Open
           </p>
         </div>
 

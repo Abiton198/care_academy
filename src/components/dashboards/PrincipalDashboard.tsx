@@ -92,8 +92,9 @@ const PrincipalDashboard: React.FC = () => {
   const [pendingTeachers, setPendingTeachers] = useState<any[]>([]);
   const [selectedTeacherApp, setSelectedTeacherApp] = useState<any | null>(null);
 
-  const { logout } = useAuth();
   const navigate = useNavigate();
+  const { user, loading: authLoading, logout } = useAuth();
+
 
   /* ---------------- Real-time Listeners ---------------- */
 /* Updated useEffect for PrincipalDashboard.tsx */
@@ -310,7 +311,7 @@ const stats = useMemo(() => {
 }, [viewMode, students, teachers, searchTerm, paymentFilter]);
 
 
-  const handleLogout = async () => { await logout(); navigate("/"); };
+
 
   useEffect(() => {
   // Listener 1: All Teacher Applications (For Approved Stats)
@@ -329,6 +330,7 @@ const stats = useMemo(() => {
   return () => { unsubApps(); unsubUsers(); };
 }, []);
 
+  /* ---------------- Render ---------------- */
   return (
     <div className="min-h-screen bg-[#f8fafc] p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-8 pb-24">
@@ -346,9 +348,12 @@ const stats = useMemo(() => {
             <Button onClick={generateMonthlyInvoices} className="bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-black shadow-lg">
               <DollarSign className="mr-2" size={18} /> GLOBAL BILLING
             </Button>
-            <Button variant="ghost" className="rounded-2xl font-bold text-slate-500 hover:bg-rose-50 hover:text-rose-600" onClick={handleLogout}>
-              <LogOut size={18} className="mr-2" /> Sign Out
+        
+        {/* logout button */}
+            <Button variant="ghost" onClick={async () => { await logout(); navigate("/"); }}>
+                   <LogOut className="mr-2 h-4 w-4" /> Logout
             </Button>
+
           </div>
         </header>
 

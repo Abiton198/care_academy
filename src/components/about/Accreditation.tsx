@@ -54,7 +54,7 @@ const Accreditation: React.FC = () => {
             <p className="text-slate-600 leading-relaxed">
               Care Academy is currently linked to <strong>established independent institutions in Gqeberha (Port Elizabeth)</strong>. 
               This partnership allows us to facilitate student registrations for official 
-              <strong> Cambridge International</strong> examinations through registered centers.
+              <strong> British Curriculum International</strong> examinations through registered centers.
             </p>
           </div>
 
@@ -94,7 +94,7 @@ const Accreditation: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {[
-              { step: "01", title: "Learning", desc: "Expert online/campus delivery of CAPS/Cambridge syllabi." },
+              { step: "01", title: "Learning", desc: "Expert online/campus delivery of CAPS/British Curriculum syllabi." },
               { step: "02", title: "Identification", desc: "We find the nearest registered exam center to your location." },
               { step: "03", title: "Registration", desc: "Step-by-step guidance on entry fees and deadlines." },
               { step: "04", title: "Examination", desc: "Write your formal finals at a secure, accredited venue." }

@@ -36,7 +36,7 @@ export default function TeacherApplicationModal({
         <div className="sticky top-0 bg-white z-10 p-6 border-b border-slate-50 flex justify-between items-center">
           <div>
             <h2 className="text-xl font-black text-slate-900">Professional Application</h2>
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-tighter">Cambridge Educator Registry</p>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-tighter">British Curriculum Educator Registry</p>
           </div>
           <button 
             onClick={handleForcedExit}

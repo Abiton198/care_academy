@@ -53,7 +53,7 @@ const TeachingStaff: React.FC = () => {
         <div className="text-center space-y-4">
           <h1 className="text-4xl md:text-6xl font-black text-gray-900 tracking-tight">Meet Our Specialist Educators</h1>
           <p className="text-lg text-gray-600 max-w-3xl mx-auto italic">
-            "SACE-registered experts with 12+ years of experience in CAPS & Cambridge, 
+            "SACE-registered experts with 12+ years of experience in CAPS & British Curriculum, 
             united by a mission to nurture character and academic brilliance."
           </p>
         </div>
@@ -76,7 +76,7 @@ const TeachingStaff: React.FC = () => {
               </div>
             </div>
             <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-              18 years of experience. Specialist in <strong>Cambridge IGCSE & AS-Level</strong> Chemistry
+              18 years of experience. Specialist in <strong>British Curriculum IGCSE & AS-Level</strong> Chemistry
             </p>
             <ul className="text-xs space-y-2 text-gray-500 font-medium border-t pt-4">
               <li className="flex items-center gap-2 italic">BA in Chemistry (NMU)</li>
@@ -99,7 +99,7 @@ const TeachingStaff: React.FC = () => {
               </div>
             </div>
             <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-              <strong>Cambridge Examiner</strong> . Expert in building mathematical confidence in senior phases.
+              <strong>British Curriculum Examiner</strong> . Expert in building mathematical confidence in senior phases.
             </p>
             <ul className="text-xs space-y-2 text-gray-500 font-medium border-t pt-4">
               <li className="flex items-center gap-2 italic">15+ Years Experience</li>
@@ -185,7 +185,7 @@ const TeachingStaff: React.FC = () => {
           <div className="p-8 bg-indigo-50 rounded-[2.5rem]">
             <Award size={48} className="mx-auto text-indigo-600 mb-4" />
             <h3 className="font-black text-indigo-900 mb-2">Excellence</h3>
-            <p className="text-sm text-indigo-700">Only Cambridge experts with proven academic records.</p>
+            <p className="text-sm text-indigo-700">Only British Curriculum experts with proven academic records.</p>
           </div>
           <div className="p-8 bg-purple-50 rounded-[2.5rem]">
             <Heart size={48} className="mx-auto text-purple-600 mb-4" />

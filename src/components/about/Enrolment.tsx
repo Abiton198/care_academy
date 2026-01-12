@@ -31,7 +31,7 @@ const Enrolment: React.FC = () => {
               School Opens: <span className="text-yellow-300">26 January 2026</span>
             </h2>
             <p className="mt-4 text-xl text-indigo-100 max-w-2xl mx-auto">
-              Lower to Senior Level • Cambridge • 
+              Lower to Senior Level • British Curriculum • 
               <span className="block font-bold text-white">Virtual or Physical Campus — You Decide!</span>
             </p>
           </div>
@@ -117,7 +117,7 @@ const Enrolment: React.FC = () => {
             <h2 className="text-3xl font-black text-gray-800 mb-6">Why Our Hybrid Model Works</h2>
             <ul className="space-y-4">
               {[
-                "Global Recognition: Cambridge & CAPS qualification pathways.",
+                "Global Recognition: British Curriculum & CAPS qualification pathways.",
                 "Termly Flexibility: Adapt your school life to your family needs.",
                 "Expert Faculty: Specialist teachers for every subject.",
                 "Small Classes: Personalized attention in every lesson.",

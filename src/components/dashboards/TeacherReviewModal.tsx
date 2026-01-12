@@ -54,7 +54,7 @@ export default function TeacherReviewModal({ application, onClose, onApprove }: 
               </div>
               <div className="bg-slate-50 p-4 rounded-2xl">
                 <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Experience</p>
-                <p className="font-bold text-slate-800">{application.personalInfo.yearsOfExperience} Years (Cambridge)</p>
+                <p className="font-bold text-slate-800">{application.personalInfo.yearsOfExperience} Years (British Curriculum)</p>
               </div>
             </div>
 

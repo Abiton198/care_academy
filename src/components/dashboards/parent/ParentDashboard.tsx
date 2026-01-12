@@ -72,7 +72,7 @@ interface TimetableEntry {
   day: string;
   time: string;
   teacherName: string;
-  curriculum: "CAPS" | "Cambridge";
+  curriculum: "CAPS" | "British Curriculum";
 }
 
 interface Announcement {
@@ -507,7 +507,7 @@ function OverviewSection({
           </CardHeader>
           <CardContent>
             <p className="text-6xl font-black tracking-tighter">{weeklyClassesCount}</p>
-            <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase">Cambridge Curriculum</p>
+            <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase">British Curriculum Curriculum</p>
           </CardContent>
         </Card>
 
@@ -616,7 +616,7 @@ function OverviewSection({
         <div className="bg-indigo-50 border-2 border-dashed border-indigo-200 rounded-[3rem] p-12 text-center">
           <AlertCircle className="mx-auto text-indigo-300 mb-4" size={48} />
           <h2 className="text-2xl font-black text-indigo-900 uppercase tracking-tight">
-            No Cambridge Registrations Found
+            No British Curriculum Registrations Found
           </h2>
           <p className="text-indigo-600/70 max-w-md mx-auto mt-2 font-medium">
             To view timetables, access class links, and receive principal announcements, please complete your child's registration.
