@@ -47,6 +47,7 @@ const ROLES = [
   { value: "student", label: "Student" },
   { value: "parent", label: "Parent" },
   { value: "teacher", label: "Teacher" },
+  { value: "principal", label: "Principal" },
 ];
 
 export default function LoginForm() {
@@ -64,56 +65,84 @@ export default function LoginForm() {
 
   const [showTeacherModal, setShowTeacherModal] = useState(false);
   const [newTeacherUid, setNewTeacherUid] = useState<string | null>(null);
-
+  
+  
   /* =====================================================
-     AUTH STATE LISTENER (SINGLE REDIRECT SOURCE)
-     ===================================================== */
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user || authLoading || redirectedRef.current) {
+  AUTH STATE LISTENER (SINGLE REDIRECT SOURCE)
+  ===================================================== */
+  /* =====================================================
+   AUTH STATE LISTENER (SAFE REDIRECTS)
+   ===================================================== */
+useEffect(() => {
+  const unsub = onAuthStateChanged(auth, async (user) => {
+    if (!user || authLoading || redirectedRef.current) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const userRef = doc(db, "users", user.uid);
+      const snap = await getDoc(userRef);
+
+      // If they are logged in but have no Firestore record yet, stay on login
+      if (!snap.exists()) {
         setLoading(false);
         return;
       }
 
-      try {
-        const userRef = doc(db, "users", user.uid);
-        const snap = await getDoc(userRef);
+      const data = snap.data();
+      const role = data.role?.toLowerCase();
 
-        if (!snap.exists()) return;
-
-        const data = snap.data();
-        const role = data.role?.toLowerCase();
-
-        if (role === "teacher") {
-          if (data.applicationStatus === "pending") {
-            setNewTeacherUid(user.uid);
-            setShowTeacherModal(true);
-            setLoading(false);
-            return;
-          }
-
-          redirectedRef.current = true;
-          window.location.href = "/teacher-dashboard";
-          return;
-        }
-
-        if (role === "parent") {
-          redirectedRef.current = true;
-          window.location.href = "/parent-dashboard";
-          return;
-        }
-
-        redirectedRef.current = true;
-        navigate(`/${role}-dashboard`, { replace: true });
-      } catch (err) {
-        console.error("Auth listener error:", err);
-      } finally {
+      // 🛑 SAFETY GUARD: Prevent /-dashboard errors
+      if (!role) {
+        console.error("User document found but no role assigned!");
+        setError("Account configuration error. Please contact the administrator.");
         setLoading(false);
+        setAuthLoading(false);
+        return;
       }
-    });
 
-    return () => unsub();
-  }, [navigate, authLoading]);
+      // 1. Principal Redirect
+      if (role === "principal") {
+        redirectedRef.current = true;
+        window.location.href = "/principal-dashboard";
+        return;
+      }
+
+      // 2. Teacher Redirect (with Application Check)
+      if (role === "teacher") {
+        if (data.applicationStatus === "pending") {
+          setNewTeacherUid(user.uid);
+          setShowTeacherModal(true);
+          setLoading(false);
+          return;
+        }
+        redirectedRef.current = true;
+        window.location.href = "/teacher-dashboard";
+        return;
+      }
+
+      // 3. Parent Redirect
+      if (role === "parent") {
+        redirectedRef.current = true;
+        window.location.href = "/parent-dashboard";
+        return;
+      }
+
+      // 4. Fallback for Students or others
+      redirectedRef.current = true;
+      navigate(`/${role}-dashboard`, { replace: true });
+
+    } catch (err) {
+      console.error("Auth listener error:", err);
+      setError("Failed to verify user permissions.");
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  return () => unsub();
+}, [navigate, authLoading]);
 
   /* =====================================================
      EMAIL / PASSWORD AUTH
@@ -176,6 +205,12 @@ export default function LoginForm() {
     setAuthLoading(true);
 
     try {
+      // 🔥 ADD THIS LINE HERE:
+      // This forces the "Choose an account" screen even if already logged in
+      googleProvider.setCustomParameters({
+        prompt: 'select_account'
+      });
+
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
 

@@ -395,8 +395,13 @@ const stats = useMemo(() => {
       {pendingTeachers.map(teacher => (
         <div key={teacher.id} className="bg-white p-4 rounded-2xl shadow-sm border border-indigo-100 flex justify-between items-center">
           <div>
-            <p className="font-black text-slate-800 text-xs uppercase">{teacher.personalInfo.firstName} {teacher.personalInfo.lastName}</p>
-            <p className="text-[9px] font-bold text-slate-400 italic">{teacher.email}</p>
+            {/* Safe Access using ?. and fallbacks */}
+            <p className="font-black text-slate-800 text-xs uppercase">
+              {teacher?.personalInfo?.firstName ?? "Unknown"} {teacher?.personalInfo?.lastName ?? "Teacher"}
+            </p>
+            <p className="text-[9px] font-bold text-slate-400 italic">
+              {teacher?.email ?? teacher?.personalInfo?.email ?? "No Email Provided"}
+            </p>
           </div>
           <Button 
             onClick={() => setSelectedTeacherApp(teacher)} 

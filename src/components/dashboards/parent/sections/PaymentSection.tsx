@@ -111,53 +111,71 @@ const finalTotal = baseAmount + PROCESSING_FEE;
     form.submit();
   };
 
-  /* ---------------- Invoice Generation Logic ---------------- */
-  const handlePrintInvoice = async () => {
+ /* ---------------- Invoice Generation Logic ---------------- */
+const handlePrintInvoice = async () => {
   const printContent = invoiceRef.current;
-  if (!printContent || !user) return;
+  // Ensure we have the necessary data before proceeding
+  if (!printContent || !user || targetStudents.length === 0) {
+    alert("Please select at least one student and ensure all data is loaded.");
+    return;
+  }
 
-  // 1. Create a dynamic category name for the DB
-  let dynamicCategory = "School Fees";
-  if (paymentType === "tuition") dynamicCategory = "Monthly Tuition";
-  else if (paymentType === "registration") dynamicCategory = "Registration Fee";
-  else if (paymentType === "both" || paymentType === "all") dynamicCategory = "Tuition + Registration";
+  // 1. Determine the category based on user selection
+  const categoryMap: Record<string, string> = {
+    tuition: "Monthly Tuition",
+    registration: "Registration Fee",
+    both: "Tuition + Registration",
+    all: "Tuition + Registration"
+  };
+  const dynamicCategory = categoryMap[paymentType] || "School Fees";
 
   try {
     const batch = writeBatch(db);
     const newInvoiceRef = doc(collection(db, "invoices"));
+    
+    // Generate a human-readable invoice number
+    const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`;
 
     // 2. Prepare the database entry
     batch.set(newInvoiceRef, {
+      invoiceId: invoiceNumber,
       parentId: user.uid,
-      studentId: selectedStudentId, // "all" or specific ID
+      // Store IDs in an array so Principal can query individual student finances
+      targetStudentIds: targetStudents.map(s => s.id), 
+      studentNames: targetStudents.map(s => `${s.firstName} ${s.lastName}`).join(", "),
       amount: Number(finalTotal),   
       category: dynamicCategory,
-      status: "pending",
+      status: "pending", // This triggers the 'Red' status in Principal's stats
       createdAt: serverTimestamp(),
-      studentNames: targetStudents.map(s => `${s.firstName} ${s.lastName}`).join(", "),
+      updatedAt: serverTimestamp(),
       breakdown: {
-        tuition: calcTuition,
-        registration: calcReg,
-        adminFee: PROCESSING_FEE
+        tuition: Number(calcTuition),
+        registration: Number(calcReg),
+        adminFee: Number(PROCESSING_FEE)
       }
     });
 
-    // 3. Mark students as "Owing" (Turning their status Red in the Principal Dashboard)
+    // 3. Update Student Registry Status
+    // This ensures the Principal's "Unpaid" stat increments in real-time
     targetStudents.forEach((student) => {
       const studentDocRef = doc(db, "students", student.id);
       batch.update(studentDocRef, { 
         paymentReceived: false,
-        lastInvoiceDate: serverTimestamp()
+        lastInvoiceDate: serverTimestamp(),
+        outstandingBalance: true // Helper flag for quick filtering
       });
     });
 
+    // 4. Commit to Firestore
     await batch.commit();
     
-    // 4. Trigger the Print dialog
+    // 5. Trigger UI Feedback & Print
+    console.log(`Invoice ${invoiceNumber} generated successfully.`);
     window.print();
+    
   } catch (e) {
-    console.error("Invoice Error:", e);
-    alert("Could not save invoice to history.");
+    console.error("Invoice Save Error:", e);
+    alert("System error: The invoice was not saved to the database.");
   }
 };
 
