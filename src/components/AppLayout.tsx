@@ -98,7 +98,7 @@ const AppContent: React.FC = () => {
           </h1>
 
           <p className="text-lg md:text-xl max-w-3xl mb-10 text-blue-100 leading-relaxed font-light">
-            A <strong>premier hybrid academy</strong> offering Cambridge International education. 
+            A <strong>premier hybrid academy</strong> offering British Curriculum International education. 
             We blend world-class academic support with character-building 
             instruction for ALL phases.
           </p>
@@ -127,7 +127,7 @@ const AppContent: React.FC = () => {
           {/* Highlights Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl text-left text-blue-50/80 mb-12">
             {[
-              "Cambridge-aligned Curriculum",
+              "British Curriculum-aligned Curriculum",
               "Christian Core Values",
               "Experienced Subject Specialists",
               "Individualized Mentoring",
@@ -235,7 +235,7 @@ const AppLayout: React.FC = () => {
       <div className="min-h-screen flex flex-col font-sans antialiased">
         <AppContent />
         <footer className="bg-gray-950 text-white/40 text-center py-6 text-[10px] tracking-widest uppercase border-t border-white/5">
-          © {new Date().getFullYear()} Cambridge Hybrid Christian Academy • Excellence Reformed
+          © {new Date().getFullYear()} British Curriculum Hybrid Christian Academy • Excellence Reformed
         </footer>
       </div>
     </AuthProvider>
