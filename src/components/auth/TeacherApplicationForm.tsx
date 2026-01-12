@@ -37,7 +37,7 @@ import { X, GraduationCap, FileText, User, Loader2, CheckCircle2 } from "lucide-
 ====================================================== */
 interface Subject {
   name: string;
-  curriculum: "Cambridge";
+  curriculum: "British Curriculum";
 }
 
 interface FormData {
@@ -61,7 +61,7 @@ interface TeacherApplicationFormProps {
   onSubmitted?: () => void;      // Triggers the transition to the Dashboard
 }
 
-const CAMBRIDGE_SUBJECTS = [
+const British_Curriculum_SUBJECTS = [
   "Mathematics (IGCSE)", "Physics (IGCSE)", "Chemistry (IGCSE)",
   "Biology (IGCSE)", "Computer Science (IGCSE)", "English Language (IGCSE)",
   "Business Studies (IGCSE)", "Economics (IGCSE)", "Geography (IGCSE)", "History (IGCSE)", "Coding (IGCSE)",
@@ -112,7 +112,7 @@ export default function TeacherApplicationForm({
     if (!form.subjects.some((s) => s.name === subjectName)) {
       setForm((prev) => ({
         ...prev,
-        subjects: [...prev.subjects, { name: subjectName, curriculum: "Cambridge" }],
+        subjects: [...prev.subjects, { name: subjectName, curriculum: "British Curriculum" }],
       }));
     }
   };
@@ -140,7 +140,7 @@ export default function TeacherApplicationForm({
   }
 
   if (form.subjects.length === 0) {
-    setError("Please select at least one Cambridge subject.");
+    setError("Please select at least one British Curriculum subject.");
     return;
   }
 
@@ -151,7 +151,7 @@ export default function TeacherApplicationForm({
     const applicationPayload = {
       uid: activeUid,
       email: activeEmail,
-      personalInfo: { ...form, email: activeEmail, curriculum: "Cambridge" },
+      personalInfo: { ...form, email: activeEmail, curriculum: "British Curriculum" },
       subjects: form.subjects,
       status: "pending",
       updatedAt: serverTimestamp(),
@@ -241,9 +241,9 @@ export default function TeacherApplicationForm({
             </div>
             <div>
               <CardTitle className="text-xl font-black text-slate-800 uppercase tracking-tight">
-                Cambridge Academic Registry
+                British Curriculum Academic Registry
               </CardTitle>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Teacher Application • SACE Verified</p>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Teacher Application</p>
             </div>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-rose-50 hover:text-rose-500 transition-colors">
@@ -260,7 +260,7 @@ export default function TeacherApplicationForm({
             </div>
             <h3 className="text-3xl font-black text-slate-900">Application Filed</h3>
             <p className="mt-4 text-slate-500 max-w-md mx-auto leading-relaxed">
-              Your Cambridge teaching credentials have been securely transmitted. 
+              Your British Curriculum teaching credentials have been securely transmitted. 
               The Principal will review your status and subjects within 48 hours.
             </p>
             <Loader2 className="mt-8 animate-spin text-indigo-600" />
@@ -290,7 +290,7 @@ export default function TeacherApplicationForm({
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-500 ml-1">Cambridge Teaching Experience (Years)</Label>
+                    <Label className="text-xs font-bold text-slate-500 ml-1">British Curriculum Teaching Experience (Years)</Label>
                     <Input type="number" className="rounded-xl border-slate-200" value={form.yearsOfExperience || ""} onChange={(e) => handleChange("yearsOfExperience", parseInt(e.target.value) || 0)} required />
                   </div>
                 </div>
@@ -311,11 +311,11 @@ export default function TeacherApplicationForm({
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-500 ml-1">Add Cambridge Subjects</Label>
+                    <Label className="text-xs font-bold text-slate-500 ml-1">Add British Curriculum Subjects</Label>
                     <Select onValueChange={addSubject}>
                       <SelectTrigger className="rounded-xl border-slate-200"><SelectValue placeholder="Search subjects..." /></SelectTrigger>
                       <SelectContent>
-                        {CAMBRIDGE_SUBJECTS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        {British_Curriculum_SUBJECTS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
