@@ -19,5 +19,9 @@
   to = "/index.html"
   status = 200
 
-/sw.js
-  Cache-Control: no-cache, no-store, must-revalidate
+# ✅ CORRECT way to handle sw.js in a .toml file:
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Content-Type = "application/javascript"

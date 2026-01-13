@@ -386,23 +386,30 @@ const stats = useMemo(() => {
         )}
 
         {/* NEW: Pending Teacher Verifications Section */}
-        {pendingTeachers.length > 0 && (
+       {pendingTeachers.length > 0 && (
   <section className="bg-indigo-50/50 p-6 rounded-[3rem] border-2 border-dashed border-indigo-200 animate-in fade-in duration-700 mt-8">
     <h3 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
       <ShieldCheck size={14} /> Critical: Pending Teacher Verifications
     </h3>
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {pendingTeachers.map(teacher => (
-        <div key={teacher.id} className="bg-white p-4 rounded-2xl shadow-sm border border-indigo-100 flex justify-between items-center">
+      {pendingTeachers.map((teacher) => (
+        <div 
+          key={teacher.id} 
+          className="bg-white p-4 rounded-2xl shadow-sm border border-indigo-100 flex justify-between items-center"
+        >
           <div>
-            {/* Safe Access using ?. and fallbacks */}
+            {/* ✅ Safe Name Access: Using optional chaining and nullish coalescing */}
             <p className="font-black text-slate-800 text-xs uppercase">
-              {teacher?.personalInfo?.firstName ?? "Unknown"} {teacher?.personalInfo?.lastName ?? "Teacher"}
+              {teacher?.personalInfo?.firstName ?? "Unknown"}{" "}
+              {teacher?.personalInfo?.lastName ?? "Teacher"}
             </p>
+            
+            {/* ✅ Safe Email Access: Checks root email first, then nested email */}
             <p className="text-[9px] font-bold text-slate-400 italic">
               {teacher?.email ?? teacher?.personalInfo?.email ?? "No Email Provided"}
             </p>
           </div>
+          
           <Button 
             onClick={() => setSelectedTeacherApp(teacher)} 
             size="sm" 
