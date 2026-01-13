@@ -5,8 +5,6 @@ import { useNavigate } from "react-router-dom";
 
 import { auth, db, googleProvider } from "@/lib/firebaseConfig";
 import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   signInWithPopup,
   onAuthStateChanged,
 } from "firebase/auth";
@@ -44,7 +42,6 @@ import { Loader2, AlertCircle, Chrome, X } from "lucide-react";
 import TeacherApplicationModal from "../dashboards/TeacherApplicationModal";
 
 const ROLES = [
-  { value: "student", label: "Student" },
   { value: "parent", label: "Parent" },
   { value: "teacher", label: "Teacher" },
   { value: "principal", label: "Principal" },
@@ -67,9 +64,6 @@ export default function LoginForm() {
   const [newTeacherUid, setNewTeacherUid] = useState<string | null>(null);
   
   
-  /* =====================================================
-  AUTH STATE LISTENER (SINGLE REDIRECT SOURCE)
-  ===================================================== */
   /* =====================================================
    AUTH STATE LISTENER (SAFE REDIRECTS)
    ===================================================== */
@@ -144,52 +138,8 @@ useEffect(() => {
   return () => unsub();
 }, [navigate, authLoading]);
 
-  /* =====================================================
-     EMAIL / PASSWORD AUTH
-     ===================================================== */
-  const handleSubmit = async () => {
-    if (authLoading || (tab === "signup" && !selectedRole)) return;
-
-    setError(null);
-    setAuthLoading(true);
-
-    try {
-      const isSignup = tab === "signup";
-
-      const cred = isSignup
-        ? await createUserWithEmailAndPassword(auth, email.trim(), password)
-        : await signInWithEmailAndPassword(auth, email.trim(), password);
-
-      const user = cred.user;
-      const userRef = doc(db, "users", user.uid);
-
-      if (isSignup) {
-        await setDoc(userRef, {
-          uid: user.uid,
-          email: user.email,
-          role: selectedRole,
-          applicationStatus:
-            selectedRole === "teacher" ? "pending" : "approved",
-          createdAt: serverTimestamp(),
-        });
-
-        if (selectedRole === "teacher") {
-          setNewTeacherUid(user.uid);
-          setShowTeacherModal(true);
-          setAuthLoading(false);
-          return;
-        }
-
-        redirectedRef.current = true;
-        navigate(`/${selectedRole}-dashboard`, { replace: true });
-      }
-    } catch (err: any) {
-      console.error("Auth error:", err);
-      setError(err.message || "Authentication failed");
-      setAuthLoading(false);
-    }
-  };
-
+ 
+ 
   /* =====================================================
      GOOGLE AUTH
      ===================================================== */
@@ -300,93 +250,77 @@ useEffect(() => {
 
     </CardHeader>
 
-          <CardContent className="p-8 space-y-6">
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+              <CardContent className="p-8 space-y-6">
+                  {error && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
 
-            <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
-              <TabsList className="grid grid-cols-2 bg-indigo-100 rounded-xl">
-                <TabsTrigger value="signin">Sign In</TabsTrigger>
-                <TabsTrigger value="signup">Sign Up</TabsTrigger>
-              </TabsList>
+                  <form>
+                    
+                    <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
+                      <TabsList className="grid grid-cols-2 bg-indigo-100 rounded-xl">
+                        <TabsTrigger value="signin">Sign In</TabsTrigger>
+                        <TabsTrigger value="signup">Sign Up</TabsTrigger>
+                      </TabsList>
 
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSubmit();
-                }}
-              >
-                <TabsContent value="signin" className="space-y-4 mt-6">
-                  <Label>Email</Label>
-                  <Input
-                    autoComplete="username"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                  <Label>Password</Label>
-                  <Input
-                    type="password"
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                  <Button type="submit" className="w-full" disabled={authLoading}>
-                    {authLoading ? (
-                      <Loader2 className="animate-spin" />
-                    ) : (
-                      "Sign In"
-                    )}
+                      {/* SIGN IN TAB */}
+                      <TabsContent value="signin" className="space-y-4 mt-6">
+                     
+                        <Button type="submit" className="w-full" disabled={authLoading}>
+                          {authLoading ? <Loader2 className="animate-spin" /> : "Sign In"}
+                        </Button>
+                      </TabsContent>
+
+                      {/* SIGN UP TAB */}
+                      <TabsContent value="signup" className="space-y-4 mt-6">
+                     
+                        <Select value={selectedRole} onValueChange={setSelectedRole}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select role" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ROLES.map((r) => (
+                              <SelectItem key={r.value} value={r.value}>
+                                {r.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="submit"
+                          className="w-full"
+                          disabled={!selectedRole || authLoading}
+                        >
+                          {authLoading ? <Loader2 className="animate-spin" />: "Sign Up"}
+                        </Button>
+                      </TabsContent>
+                    </Tabs>
+                  </form>
+
+                  <div className="relative py-4">
+                    <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-white px-2 text-muted-foreground"> continue with</span>
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    type="button"
+                    className="w-full"
+                    onClick={handleGoogle}
+                  >
+                   <img 
+                      src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" 
+                      alt="Google" 
+                      className="mr-3 h-5 w-5" 
+                    />
+                    Google Account
                   </Button>
-                </TabsContent>
-              </form>
-
-              <TabsContent value="signup" className="space-y-4 mt-6">
-                <Input
-                  placeholder="Email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-                <Input
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                <Select value={selectedRole} onValueChange={setSelectedRole}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ROLES.map((r) => (
-                      <SelectItem key={r.value} value={r.value}>
-                        {r.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  className="w-full"
-                  onClick={handleSubmit}
-                  disabled={!selectedRole || authLoading}
-                >
-                  Create Account
-                </Button>
-              </TabsContent>
-            </Tabs>
-
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={handleGoogle}
-            >
-              <Chrome className="mr-2 h-4 w-4" />
-              Continue with Google
-            </Button>
-          </CardContent>
+                </CardContent>
         </Card>
       </div>
 
