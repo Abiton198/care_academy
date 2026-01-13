@@ -341,7 +341,7 @@ export default function TeacherApplicationForm({
             <div className="space-y-4">
               <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em]">03. Required Documentation (PDF/JPG)</h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <DocInput label="SACE / Qualifications" onChange={(f) => handleFileChange("qualification", f)} />
+                <DocInput label="Qualifications" onChange={(f) => handleFileChange("qualification", f)} />
                 <DocInput label="Professional CV" onChange={(f) => handleFileChange("cv", f)} />
                 <DocInput label="Identity Document" onChange={(f) => handleFileChange("idDoc", f)} />
               </div>

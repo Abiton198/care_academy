@@ -401,7 +401,7 @@ const handleAddResource = async () => {
             </div>
             <div>
               <h2 className="text-lg font-black text-amber-900 uppercase tracking-tight">Application Under Review</h2>
-              <p className="text-sm text-amber-700 font-medium">The Principal is currently verifying your SACE credentials. Full portal access will unlock upon approval.</p>
+              <p className="text-sm text-amber-700 font-medium">The Principal is currently verifying your credentials. Full portal access will unlock upon approval.</p>
             </div>
           </div>
         )}
