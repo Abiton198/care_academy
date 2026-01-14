@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: care_academy_live # This forces all 'run' steps to start here
+        working-directory: care_academy_live # This forces all 'run' 
     steps:
       - uses: actions/checkout@v4
 
