@@ -1,0 +1,31 @@
+name: Deploy Care Academy to Firebase Hosting
+on:
+  push:
+    branches:
+      - main  # Or 'master' depending on your default branch name
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Build Web App
+        run: |
+          cd care_academy_live
+          flutter pub get
+          flutter build web --release --no-wasm-dry-run
+
+      - name: Deploy to Firebase
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_CARE_ACADEMY_208D6 }}'
+          projectId: care-academy-208d6
+          entryPoint: care_academy_live

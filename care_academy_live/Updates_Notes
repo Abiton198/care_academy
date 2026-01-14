@@ -1,0 +1,3 @@
+Next time I make any changes - just make following comands to deploy the changes in firebase
+flutter build web --release --no-wasm-dry-run ==== 1
+firebase deploy --only hosting ==== 2
