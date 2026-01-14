@@ -17,13 +17,10 @@ jobs:
           cache: true
 
       - name: Build Web App
-        # We build inside the subfolder, then MOVE the result to the root 
-        # so the Firebase Action can definitely find it.
         run: |
           cd care_academy_live
           flutter pub get
           flutter build web --release --no-wasm-dry-run
-          cp -r build/web ../build_web_output
 
       - name: Deploy to Firebase
         uses: FirebaseExtended/action-hosting-deploy@v0
@@ -31,5 +28,4 @@ jobs:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_CARE_ACADEMY_208D6 }}'
           projectId: care-academy-208d6
-          # We tell the deployer to look inside the subfolder for firebase.json
-          entryPoint: ./care_academy_live
+          # No entryPoint here - it will use the firebase.json at the root
