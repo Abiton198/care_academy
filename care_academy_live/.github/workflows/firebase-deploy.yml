@@ -2,11 +2,14 @@ name: Deploy Care Academy to Firebase Hosting
 on:
   push:
     branches:
-      - main  # Or 'master' depending on your default branch name
+      - main
 
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: care_academy_live # This forces all 'run' steps to start here
     steps:
       - uses: actions/checkout@v4
 
@@ -18,7 +21,6 @@ jobs:
 
       - name: Build Web App
         run: |
-          cd care_academy_live
           flutter pub get
           flutter build web --release --no-wasm-dry-run
 
