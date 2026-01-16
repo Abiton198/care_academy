@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { db } from "@/lib/firebaseConfig";
 import {
   collection,
@@ -34,8 +34,12 @@ import {
   Sparkles, BookOpen, Send, MessageCircle, Users, PlusCircle, Trash2,
   Clock
 } from "lucide-react";
+/* Signaling Logic (WebRTC) */
+import { Signaling } from "@/lib/signaling";
 
-/* ======================================================
+
+
+/* =====================================================
    TYPES & INTERFACES
 ====================================================== */
 interface TeacherProfile {
@@ -131,13 +135,30 @@ const TeacherDashboard: React.FC = () => {
   const [totalUnread, setTotalUnread] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Derived State
   const teacherFullName = `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim();
   const [status, setStatus] = useState<string | null>(null);
 
+  // WebRTC State
+  const [isMuted, setIsMuted] = useState(false);
+  const [videoOff, setVideoOff] = useState(false);
+  const [isSharingScreen, setIsSharingScreen] = useState(false);
+
 
   /* ======================================================
-     1. AUTHENTICATION & PROFILE DATA
-  ===================================================== */
+     NEW: LIVE SESSION STATE
+  ====================================================== */
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [isLive, setIsLive] = useState(false);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const [isTeacher, set_isTeacher] = useState(true); // Assuming this dashboard is for teachers
+  const [_isHandRaised, set_isHandRaised] = useState(false);
+  // Inside your component
+const signaling = useMemo(() => new Signaling(), []);
+const [connectionStatus, setConnectionStatus] = useState<'searching' | 'connected' | 'disconnected'>('searching');
+
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => { u ? setUser(u) : navigate("/"); });
     return () => unsub();
@@ -363,6 +384,121 @@ const handleAddResource = async () => {
     return () => unsub();
   }, [user]);
 
+/* ======================================================
+     NEW: WEBRTC BRIDGE (EFFECT)
+  ====================================================== */
+  const toggleHandRaise = async () => {
+    if (!activeSessionId || !user) return;
+    
+    // In our signaling logic, the participant ID is stored
+    const participantRef = doc(db, "rooms", activeSessionId, "participants", user.uid);
+    
+    await updateDoc(participantRef, {
+      isHandRaised: !_isHandRaised, // Toggle local state
+      lastUpdated: serverTimestamp()
+    });
+    
+    set_isHandRaised(!_isHandRaised);
+  };
+
+// 2. The LOGIC to start the call
+useEffect(() => {
+  let timer: NodeJS.Timeout | null = null;
+  let isMounted = true; // Prevents updating state if component unmounts
+
+  const startLiveClass = async () => {
+    // 1. Wait for DOM refs to attach (prevents the "srcObject of null" error)
+    // We retry up to 5 times over 500ms
+    let retries = 0;
+    while (!localVideoRef.current || !remoteVideoRef.current) {
+      if (retries > 5) {
+        console.error("Video refs failed to mount.");
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+      retries++;
+    }
+
+    if (!isLive || !activeSessionId || !isMounted) return;
+
+    try {
+      // 2. Hardware Initialization
+      console.log("Initializing hardware for session:", activeSessionId);
+      await signaling.openUserMedia(localVideoRef.current, remoteVideoRef.current);
+      
+      // 3. Create the Signaling Room in Firestore
+      await signaling.createRoom(activeSessionId);
+
+      // 4. Start Connection Monitoring
+      timer = setInterval(() => {
+        if (!signaling.peerConnection) return;
+        
+        const state = signaling.peerConnection.iceConnectionState;
+        console.log("WebRTC State:", state);
+
+        if (state === 'connected' || state === 'completed') {
+          setConnectionStatus('connected');
+        } else if (state === 'failed' || state === 'closed') {
+          setConnectionStatus('disconnected');
+        } else {
+          setConnectionStatus('searching');
+        }
+      }, 2000);
+
+      console.log("Classroom successfully live.");
+    } catch (error) {
+      console.error("Failed to start class:", error);
+      if (isMounted) {
+        setIsLive(false);
+        alert("Camera access failed. Please ensure no other app is using it.");
+      }
+    }
+  };
+
+  if (isLive && activeSessionId) {
+    startLiveClass();
+  }
+
+  // 5. Consolidated Cleanup
+  return () => {
+    isMounted = false;
+    if (timer) clearInterval(timer);
+    
+    // Only hang up if we are actually ending the session
+    if (isLive || !activeSessionId) {
+      console.log("Cleaning up live session...");
+      signaling.hangUp();
+    }
+  };
+}, [isLive, activeSessionId, signaling]); // Removed signaling.peerConnection from deps
+
+  /* ======================================================   
+// TOGGLE HELPERS - MUTE & VIDEO
+*====================================================== */
+
+const toggleMute = () => {
+  const audioTrack = localVideoRef.current?.srcObject as MediaStream;
+  audioTrack.getAudioTracks()[0].enabled = !isMuted;
+  setIsMuted(!isMuted);
+};
+
+const toggleVideo = () => {
+  const videoTrack = localVideoRef.current?.srcObject as MediaStream;
+  videoTrack.getVideoTracks()[0].enabled = videoOff;
+  setVideoOff(!videoOff);
+};
+
+const handleScreenShare = async () => {
+  if (!isSharingScreen) {
+    await signaling.startScreenShare(localVideoRef.current!);
+    setIsSharingScreen(true);
+  } else {
+    // Revert back to camera
+    await signaling.openUserMedia(localVideoRef.current!, remoteVideoRef.current!);
+    setIsSharingScreen(false);
+  }
+};
+
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
 
   return (
@@ -514,6 +650,7 @@ const handleAddResource = async () => {
                       <PlusCircle className="mr-2 h-5 w-5" /> PUBLISH LINK
                     </Button>
                   </div>
+                  
                 </CardContent>
               </Card>
 
@@ -535,26 +672,46 @@ const handleAddResource = async () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
+
+                      {/* LIVE CLASS BUTTON */}
                       {filteredResources.map((item) => {
                         const isEditing = editingResourceId === item.id;
                         return (
-                          <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="px-8 py-6">
-                              {isEditing ? (
-                                <select 
-                                  className="text-xs font-bold border rounded-lg p-2"
-                                  value={editResourceData.grade}
-                                  onChange={e => setEditResourceData({...editResourceData, grade: e.target.value})}
-                                >
-                                  <option value="all">All Grades</option>
-                                  {availableGrades.map(g => <option key={g} value={g}>{g}</option>)}
-                                </select>
-                              ) : (
-                                <Badge className={`${item.grade === 'all' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-600 text-white'} border-none text-[10px] font-black px-3 py-1`}>
-                                  {item.grade === 'all' ? 'GLOBAL' : `GRADE ${item.grade}`}
-                                </Badge>
-                              )}
-                            </td>
+                          <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">                      
+                                <td className="px-8 py-6 text-right">
+                                  <div className="flex justify-end gap-3">
+                                    {/* NEW: JOIN LIVE CLASS BUTTON */}
+                                    {item.type === "classroom" && (
+                                      <Button 
+                                        size="sm" 
+                                        className="bg-indigo-600 hover:bg-indigo-700 animate-pulse"
+                                        onClick={() => {
+                                          setActiveSessionId(item.id);
+                                          setIsLive(true);
+                                          // Here you would trigger your signaling.joinRoom logic
+                                        }}
+                                      >
+                                        <Video size={16} className="mr-2" /> JOIN LIVE
+                                      </Button>
+                                    )}
+                                    
+                                    {isEditing ? (
+                                      <>
+                                        <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600" onClick={() => handleUpdateResource(item.id)}>
+                                          <Check size={16} />
+                                        </Button>
+                                        <Button size="sm" variant="ghost" onClick={() => setEditingResourceId(null)}>
+                                          <X size={16} />
+                                        </Button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <button onClick={() => { setEditingResourceId(item.id); setEditResourceData(item); }} className="p-2 text-slate-400 hover:text-indigo-600"><Edit2 size={16}/></button>
+                                        <button onClick={() => handleDeleteResource(item.id)} className="p-2 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
                             <td className="px-8 py-6">
                               {isEditing ? (
                                 <Input className="h-9 text-sm font-bold" value={editResourceData.title} onChange={e => setEditResourceData({...editResourceData, title: e.target.value})} />
@@ -723,8 +880,183 @@ const handleAddResource = async () => {
           {totalUnread > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-7 h-7 rounded-full flex items-center justify-center border-4 border-white font-black">{totalUnread}</span>}
         </button>
       </div>
+{/* ======================================================
+     LIVE CLASSROOM OVERLAY (Teacher View)
+     Features: WebRTC Video, Screen Share, Chat, Roster
+====================================================== */}
+{isLive && (
+  <div className="fixed inset-0 z-[100] bg-slate-950 flex flex-col animate-in fade-in duration-300">
+    
+    {/* TOP HEADER */}
+    <div className="h-16 px-8 flex items-center justify-between bg-slate-900/50 border-b border-white/5">
+      <div className="flex items-center gap-4">
+        <div className={`w-3 h-3 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-red-500 animate-pulse'}`} />
+        <h2 className="text-white font-black text-sm uppercase tracking-widest">
+          LIVE: {resources.find(r => r.id === activeSessionId)?.title || "Classroom"}
+        </h2>
+      </div>
+
+      <Button 
+        variant="destructive" 
+        size="sm" 
+        className="rounded-xl font-bold px-6"
+        onClick={() => {
+          signaling.hangUp();
+          setIsLive(false);
+          setActiveSessionId(null);
+        }}
+      >
+        LEAVE CLASS
+      </Button>
+    </div>
+
+    {/* MAIN STAGE */}
+    <div className="flex-1 p-6 flex gap-6 overflow-hidden">
+      
+      <div className="flex-[3] relative bg-slate-900 rounded-[2.5rem] overflow-hidden group border-4 border-white/5">
+        
+        {/* Remote Student Video */}
+        <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+
+        {/* SIDE MIC INDICATOR: Floats on the left side of the video */}
+        <div className="absolute left-6 top-1/2 -translate-y-1/2 flex flex-col items-center gap-2">
+          <div 
+            onClick={toggleMute}
+            className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 backdrop-blur-md border ${
+              isMuted 
+              ? 'bg-red-500/20 border-red-500/50 text-red-500' 
+              : 'bg-emerald-500/20 border-emerald-500/50 text-emerald-500'
+            }`}
+          >
+            {/* Replace with Mic/MicOff icons from lucide-react if imported */}
+            <Users size={24} className={isMuted ? 'opacity-50' : 'animate-pulse'} />
+          </div>
+          <span className="text-[9px] font-black text-white/40 uppercase tracking-tighter">
+            {isMuted ? 'Muted' : 'On Air'}
+          </span>
+        </div>
+        
+        {/* Waiting Message */}
+        {connectionStatus !== 'connected' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-xl z-10">
+             <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
+             <p className="text-white/40 font-black uppercase tracking-widest text-[10px]">Awaiting Connection</p>
+          </div>
+        )}
+
+        {/* BOTTOM CONTROL DOCK WITH TEXT LABELS */}
+        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-8 bg-slate-900/90 backdrop-blur-2xl px-10 py-4 rounded-[2.5rem] border border-white/10 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-4 group-hover:translate-y-0 shadow-2xl z-50">
+          
+          {/* MUTE ACTION */}
+          <div className="flex flex-col items-center gap-1.5">
+            <Button 
+              onClick={toggleMute} 
+              className={`w-12 h-12 rounded-2xl transition-all ${isMuted ? 'bg-red-600' : 'bg-white/10'}`}
+            >
+              <Users size={20} />
+            </Button>
+            <span className="text-[8px] font-bold text-white/50 uppercase tracking-widest">{isMuted ? 'Unmute' : 'Mute'}</span>
+          </div>
+          
+          {/* VIDEO ACTION */}
+          <div className="flex flex-col items-center gap-1.5">
+            <Button 
+              onClick={toggleVideo} 
+              className={`w-12 h-12 rounded-2xl transition-all ${videoOff ? 'bg-red-600' : 'bg-white/10'}`}
+            >
+              <Video size={20} />
+            </Button>
+            <span className="text-[8px] font-bold text-white/50 uppercase tracking-widest">{videoOff ? 'Cam On' : 'Cam Off'}</span>
+          </div>
+
+          <div className="w-px h-10 bg-white/10" />
+
+          {/* SCREEN SHARE ACTION */}
+          <div className="flex flex-col items-center gap-1.5">
+            <Button 
+              onClick={handleScreenShare}
+              className={`w-12 h-12 rounded-2xl transition-all ${isSharingScreen ? 'bg-emerald-500' : 'bg-white/10'}`}
+            >
+              <ExternalLink size={20} />
+            </Button>
+            <span className="text-[8px] font-bold text-white/50 uppercase tracking-widest">
+              {isSharingScreen ? 'Stop' : 'Share'}
+            </span>
+          </div>
+        </div>
+
+        {/* Teacher Self-Preview */}
+        <div className="absolute top-8 right-8 w-44 h-28 bg-black rounded-3xl border-2 border-white/10 shadow-2xl overflow-hidden z-20">
+          <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover scale-x-[-1]" />
+          {videoOff && <div className="absolute inset-0 bg-slate-900 flex items-center justify-center text-[8px] text-white/20 font-black uppercase tracking-widest">No Feed</div>}
+        </div>
+
+      </div>
+
+      {/* B. SIDEBAR: Participants & Chat */}
+      <div className="w-96 flex flex-col gap-4">
+        
+        {/* Participant Roster: Tracks students in the room */}
+        <div className="h-1/3 bg-white/5 rounded-[2rem] p-6 border border-white/10 flex flex-col overflow-hidden">
+          <p className="text-white/40 text-[10px] font-black uppercase tracking-widest mb-4 flex items-center justify-between">
+            Online Students <Users size={12} />
+          </p>
+          <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
+             {students.slice(0, 5).map(s => (
+               <div key={s.id} className="flex items-center justify-between bg-white/5 p-3 rounded-2xl border border-white/5">
+                 <div className="flex items-center gap-3">
+                   <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                   <span className="text-white/80 text-xs font-bold">{s.firstName}</span>
+                 </div>
+                 {/* This badge would ideally be driven by a 'handRaised' property in Firestore */}
+                 <Badge className="bg-orange-500 text-[8px] animate-bounce">✋ HAND RAISED</Badge>
+               </div>
+             ))}
+          </div>
+        </div>
+
+        {/* Live Chat: Teacher/Student messaging */}
+        <div className="flex-1 bg-white/5 rounded-[2rem] p-6 border border-white/10 flex flex-col overflow-hidden">
+          <p className="text-white/40 text-[10px] font-black uppercase tracking-widest mb-4">Class Dialogue</p>
+          <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2 custom-scrollbar">
+            {messages.map((msg) => (
+              <div key={msg.id} className="flex flex-col">
+                <span className="text-[10px] font-bold text-indigo-400 uppercase">
+                  {msg.sender === user?.uid ? "You (Teacher)" : "Student"}
+                </span>
+                <p className={`text-sm p-3 rounded-2xl mt-1 ${
+                  msg.sender === user?.uid 
+                    ? "bg-indigo-600/20 text-indigo-100 rounded-tr-none" 
+                    : "bg-white/5 text-white/80 rounded-tl-none"
+                }`}>
+                  {msg.text}
+                </p>
+              </div>
+            ))}
+            <div ref={scrollRef} />
+          </div>
+
+          {/* Chat Input Area */}
+          <div className="flex gap-2 bg-white/5 p-2 rounded-2xl border border-white/10 focus-within:border-indigo-500/50 transition-all">
+            <input 
+              type="text" 
+              value={newMessage} 
+              onChange={(e) => setNewMessage(e.target.value)} 
+              onKeyDown={(e) => e.key === 'Enter' && sendChatMessage()}
+              placeholder="Type message..." 
+              className="bg-transparent text-white text-sm flex-1 outline-none px-2" 
+            />
+            <Button size="icon" onClick={sendChatMessage} className="bg-indigo-600 hover:bg-indigo-700 rounded-xl">
+              <Send size={16} />
+            </Button>
+          </div>
+        </div>
+
+      </div>  
+    </div>
+  </div>
+)}
     </div>
   );
 };
-
 export default TeacherDashboard;

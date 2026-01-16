@@ -3,6 +3,7 @@ import {
   collection, doc, setDoc, onSnapshot, updateDoc, getDoc, addDoc, serverTimestamp, deleteDoc 
 } from "firebase/firestore";
 
+
 export class Signaling {
   private configuration = {
     iceServers: [
@@ -26,15 +27,24 @@ export class Signaling {
   }
 
   // --- MEDIA SETUP ---
-  async openUserMedia(localVideo: HTMLVideoElement, remoteVideo: HTMLVideoElement): Promise<MediaStream> {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    localVideo.srcObject = stream;
-    this.localStream = stream;
-    
-    this.remoteStream = new MediaStream();
-    remoteVideo.srcObject = this.remoteStream;
-    return stream;
+async openUserMedia(localVideo: HTMLVideoElement, remoteVideo: HTMLVideoElement) {
+  // Add this safety check:
+  if (!localVideo || !remoteVideo) {
+    throw new Error("Cannot open media: Video elements are null.");
   }
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: true,
+    audio: true,
+  });
+
+  this.localStream = stream;
+  localVideo.srcObject = stream; // This is where line 32 was failing
+  this.remoteStream = new MediaStream();
+  remoteVideo.srcObject = this.remoteStream;
+}
+
+
 
   // --- ROOM CREATION (TEACHER) ---
   async createRoom(roomId: string): Promise<void> {
@@ -83,6 +93,44 @@ export class Signaling {
 
     this.listenForIceCandidates(roomRef, "remoteCandidates");
   }
+
+  
+//  --- CHAT FUNCTIONALITY ---
+async sendMessage(roomId: string, senderName: string, text: string) {
+  const chatRef = collection(doc(db, 'rooms', roomId), 'chat');
+  await addDoc(chatRef, {
+    senderName,
+    text,
+    timestamp: serverTimestamp(),
+  });
+}
+
+// --- SCREEN SHARING FUNCTIONALITY ---
+async startScreenShare(videoElement: HTMLVideoElement) {
+  try {
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: true
+    });
+    
+    // Replace the video track in the existing PeerConnection
+    const videoTrack = screenStream.getVideoTracks()[0];
+    const sender = this.peerConnection?.getSenders().find(s => s.track?.kind === 'video');
+    
+    if (sender) {
+      sender.replaceTrack(videoTrack);
+    }
+    
+    videoElement.srcObject = screenStream;
+
+    // Handle user clicking "Stop Sharing" on the browser popup
+    videoTrack.onended = () => {
+      this.stopScreenShare(videoElement);
+    };
+  } catch (err) {
+    console.error("Screen share failed", err);
+  }
+}
 
   // --- JOINING ROOM (STUDENT) ---
   async joinRoom(id: string): Promise<void> {
@@ -144,13 +192,20 @@ export class Signaling {
     });
   }
 
+  // --- HANG UP / CLEAN UP ---
   async hangUp() {
-    this.localStream?.getTracks().forEach(track => track.stop());
-    this.remoteStream?.getTracks().forEach(track => track.stop());
-    this.peerConnection?.close();
-    
-    if (this.roomId && this.currentParticipantId) {
-      await deleteDoc(doc(db, 'rooms', this.roomId, 'participants', this.currentParticipantId));
-    }
+  // 1. Stop all tracks in the local stream (turns off the physical camera/mic)
+  if (this.localStream) {
+    this.localStream.getTracks().forEach(track => {
+      track.stop();
+      console.log(`${track.kind} track stopped`);
+    });
+    this.localStream = null;
   }
-}
+
+  // 2. Close the Peer Connection
+  if (this.peerConnection) {
+    this.peerConnection.close();
+    this.peerConnection = null;
+  }
+}}

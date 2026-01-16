@@ -130,3 +130,10 @@
 .markdown-preview ol {
   @apply my-4 ml-6;
 }
+
+/* Add this to your global CSS or a style tag */
+.bg-no-signal {
+  background-color: #0f172a;
+  background-image: repeating-linear-gradient(45deg, #1e293b 0, #1e293b 1px, transparent 0, transparent 50%);
+  background-size: 10px 10px;
+}
