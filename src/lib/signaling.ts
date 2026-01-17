@@ -19,6 +19,7 @@ export class Signaling {
   /* ===========================================================
      MEDIA CONTROLS
      =========================================================== */
+     
 
   toggleMic(isMuted: boolean) {
     this.localStream?.getAudioTracks().forEach(track => track.enabled = !isMuted);
@@ -33,15 +34,28 @@ export class Signaling {
       throw new Error("Cannot open media: Video elements are null.");
     }
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-      audio: true,
-    });
+    // FIX 1: Prevent flickering. If stream already exists, just re-attach and return.
+    if (this.localStream) {
+      localVideo.srcObject = this.localStream;
+      if (this.remoteStream) remoteVideo.srcObject = this.remoteStream;
+      return;
+    }
 
-    this.localStream = stream;
-    localVideo.srcObject = stream;
-    this.remoteStream = new MediaStream();
-    remoteVideo.srcObject = this.remoteStream;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
+
+      this.localStream = stream;
+      localVideo.srcObject = stream;
+      
+      this.remoteStream = new MediaStream();
+      remoteVideo.srcObject = this.remoteStream;
+    } catch (err) {
+      console.error("User media access denied:", err);
+      throw err;
+    }
   }
 
   /* ===========================================================
@@ -100,92 +114,113 @@ onSnapshot(roomRef, async (snapshot) => {
 
   // FIX: Only set remote description if we are in 'have-local-offer' state
   // and the data contains an answer we haven't processed yet.
-  if (
-    this.peerConnection?.signalingState === "have-local-offer" && 
-    data.answer
-  ) {
-    try {
-      const answer = new RTCSessionDescription(data.answer);
-      await this.peerConnection.setRemoteDescription(answer);
-      console.log("Teacher: Remote description (answer) set successfully.");
-    } catch (err) {
-      console.error("Teacher: Failed to set remote description:", err);
-    }
+// Inside the listener that picks up the Student's answer
+if (data.answer && this.peerConnection) {
+  // Check the signaling state before applying the description
+  if (this.peerConnection.signalingState === "have-local-offer") {
+    const remoteDesc = new RTCSessionDescription(data.answer);
+    await this.peerConnection.setRemoteDescription(remoteDesc);
+    console.log("Remote description set successfully!");
+  } else {
+    console.warn(
+      "Skipping setRemoteDescription: Connection is already in state", 
+      this.peerConnection.signalingState
+    );
   }
-});
+}
 
     // Listen for Student's ICE candidates (calleeCandidates)
     this.listenForRemoteCandidates(roomRef, "calleeCandidates");
-  }
+  })}
 
-  
 /* ===========================================================
      JOINING ROOM (STUDENT)
-     =========================================================== */
-  async joinRoom(id: string): Promise<void> {
-    const roomRef = doc(db, 'rooms', id);
-    const roomSnapshot = await getDoc(roomRef);
-
-    // 1. Safety Checks
-    if (!roomSnapshot.exists()) {
-        console.error("Room does not exist");
-        return;
-    }
-    
-    const data = roomSnapshot.data();
-    if (!data.offer) {
-        console.error("No offer found in room");
-        return;
-    }
-
-    this.roomId = id;
-
-    // 2. Initialize PeerConnection FIRST
-    this.peerConnection = new RTCPeerConnection(this.configuration);
-    
-    // 3. Setup ICE & Tracks (Do this before setting descriptions)
-    this.setupIceGathering(roomRef, "calleeCandidates");
-
-    this.localStream?.getTracks().forEach(track => {
-      this.peerConnection?.addTrack(track, this.localStream!);
-    });
-
-    this.peerConnection.ontrack = (event) => {
-      event.streams[0].getTracks().forEach(track => {
-        this.remoteStream?.addTrack(track);
-      });
-    };
-
-    // 4. Register Student Participant
-    const pRef = doc(collection(roomRef, 'participants'));
-    this.currentParticipantId = pRef.id;
-    await setDoc(pRef, {
-      name: 'Student',
-      role: 'student',
-      joinedAt: serverTimestamp(),
-    });
-
-    // 5. WebRTC Handshake (Offer -> Answer)
-    // We check for 'stable' because that is the default state of a new connection
-    if (this.peerConnection.signalingState === "stable") {
-      // Set the Teacher's offer as the remote description
-      await this.peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-      
-      // Create our answer
-      const answer = await this.peerConnection.createAnswer();
-      
-      // Set our answer as the local description
-      await this.peerConnection.setLocalDescription(answer);
-
-      // Save the answer to Firestore for the Teacher to find
-      await updateDoc(roomRef, { 
-        answer: { sdp: answer.sdp, type: answer.type } 
-      });
-    }
-
-    // 6. Start listening for Teacher's ICE candidates
-    this.listenForRemoteCandidates(roomRef, "callerCandidates");
+   =========================================================== */
+async joinRoom(roomId: string, userId: string, userName: string): Promise<void> {
+  
+  // 1. Safety Guard: Check if parameters exist
+  if (!roomId || !userId) {
+    console.error("Cannot join room: Missing roomId or userId");
+    return;
   }
+
+  const roomRef = doc(db, 'rooms', roomId);
+  const roomSnapshot = await getDoc(roomRef);
+
+  if (!roomSnapshot.exists()) {
+    console.error("Room does not exist in Firestore");
+    return;
+  }
+    
+  const data = roomSnapshot.data();
+  if (!data.offer) {
+    console.error("No offer found in room. Teacher might not be live yet.");
+    return;
+  }
+
+  // Set the internal roomId property
+  this.roomId = roomId;
+
+  // 2. Initialize PeerConnection
+ // inside signaling.ts -> joinRoom()
+
+// 1. Initialize the PeerConnection FIRST
+this.peerConnection = new RTCPeerConnection(this.configuration);
+
+// 2. Setup listeners and tracks immediately after initialization
+this.setupIceGathering(roomRef, "calleeCandidates");
+
+this.localStream?.getTracks().forEach(track => {
+  this.peerConnection?.addTrack(track, this.localStream!);
+});
+
+// 3. NOW you can safely check the signalingState
+if (this.peerConnection.signalingState === "stable") {
+  await this.peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+  const answer = await this.peerConnection.createAnswer();
+  await this.peerConnection.setLocalDescription(answer);
+  
+  await updateDoc(roomRef, { 
+    answer: { sdp: answer.sdp, type: answer.type } 
+  });
+}
+  // Handle incoming Teacher video/audio
+  this.peerConnection.ontrack = (event) => {
+    console.log("Receiving Teacher's stream...");
+    event.streams[0].getTracks().forEach(track => {
+      this.remoteStream?.addTrack(track);
+    });
+  };
+
+  // 4. Register Student Participant in Firestore (Online List)
+  const pRef = doc(db, "rooms", roomId, "participants", userId);
+  await setDoc(pRef, {
+    name: userName,
+    role: 'student',
+    joinedAt: serverTimestamp(),
+    isHandRaised: false
+  });
+
+  // 5. WebRTC Handshake (Set Remote Offer -> Create Local Answer)
+  if (this.peerConnection.signalingState === "stable") {
+    // Set the Teacher's offer as the remote description
+    await this.peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+    
+    // Create our answer
+    const answer = await this.peerConnection.createAnswer();
+    
+    // Set our answer as the local description
+    await this.peerConnection.setLocalDescription(answer);
+
+    // Save the answer to Firestore for the Teacher to pick up
+    await updateDoc(roomRef, { 
+      answer: { sdp: answer.sdp, type: answer.type } 
+    });
+  }
+
+  // 6. Start listening for Teacher's ICE candidates
+  this.listenForRemoteCandidates(roomRef, "callerCandidates");
+}
 
 
   /* ===========================================================
@@ -267,15 +302,32 @@ onSnapshot(roomRef, async (snapshot) => {
      =========================================================== */
 
   async hangUp() {
+    console.log("Signaling: Starting hangUp cleanup...");
+
+    // 1. Stop all hardware tracks (Turn off camera light)
     if (this.localStream) {
-      this.localStream.getTracks().forEach(track => track.stop());
+      this.localStream.getTracks().forEach(track => {
+        track.stop();
+        console.log(`Stopped ${track.kind} track`);
+      });
       this.localStream = null;
     }
+
+    // 2. Clear remote stream tracks
+    if (this.remoteStream) {
+      this.remoteStream.getTracks().forEach(track => track.stop());
+      this.remoteStream = null;
+    }
     
+    // 3. Close and nullify the Peer Connection
     if (this.peerConnection) {
+      this.peerConnection.ontrack = null;
+      this.peerConnection.onicecandidate = null;
       this.peerConnection.close();
       this.peerConnection = null;
     }
+
     this.roomId = null;
+    console.log("Signaling: Cleanup complete.");
   }
 }

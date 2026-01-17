@@ -11,6 +11,7 @@ import {
   updateDoc,
   serverTimestamp,
   getDocs,
+  getDoc,
   orderBy,
   addDoc,
   setDoc,
@@ -31,7 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 /* Icons */
 import {
   Loader2, LogOut, Edit2, Save, ExternalLink, Video, Check, X, 
-  Sparkles, BookOpen, Send, MessageCircle, Users, PlusCircle, Trash2,
+  Sparkles, BookOpen, Send, MessageCircle, Users, PlusCircle, Trash2, Settings, VideoOff,Mic, MicOff,
   Clock
 } from "lucide-react";
 /* Signaling Logic (WebRTC) */
@@ -148,6 +149,10 @@ const TeacherDashboard: React.FC = () => {
 const [classDuration, setClassDuration] = useState(40); // Default 40 mins
 const [timeLeft, setTimeLeft] = useState<number | null>(null);
 const [endTimestamp, setEndTimestamp] = useState<number | null>(null);
+const [isExtending, setIsExtending] = useState(false);
+
+// State to track students currently in the WebRTC room
+const [activeParticipants, setActiveParticipants] = useState<any[]>([]);
 
 
   /* ======================================================
@@ -163,6 +168,7 @@ const [endTimestamp, setEndTimestamp] = useState<number | null>(null);
 const signaling = useMemo(() => new Signaling(), []);
 const [connectionStatus, setConnectionStatus] = useState<'searching' | 'connected' | 'disconnected'>('searching');
 
+const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => { u ? setUser(u) : navigate("/"); });
@@ -502,6 +508,42 @@ useEffect(() => {
 }, [isLive, activeSessionId, signaling, classDuration, user?.uid]); // Removed signaling.peerConnection from deps
 
 
+useEffect(() => {
+  // Only clean up if the component ACTUALLY unmounts 
+  // or if the user explicitly stops being live.
+  return () => {
+    if (!isLive) { 
+       console.log("Cleaning up...");
+       signaling.hangUp();
+    }
+  };
+}, [isLive]); // Don't put 'signaling' in here if it changes every render
+
+
+// Update online students list
+useEffect(() => {
+  if (!isLive || !activeSessionId) {
+    setActiveParticipants([]);
+    return;
+  }
+
+  // Listen to the participants sub-collection inside the active room
+  const participantsRef = collection(db, "rooms", activeSessionId, "participants");
+  
+  const unsub = onSnapshot(participantsRef, (snap) => {
+    const list = snap.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    // Filter out the teacher so we only show students
+    const studentList = list.filter(p => p.role === 'student');
+    setActiveParticipants(studentList);
+  });
+
+  return () => unsub();
+}, [isLive, activeSessionId]);
+
   /* ======================================================   
 // TOGGLE HELPERS - MUTE & VIDEO
 *====================================================== */
@@ -572,12 +614,64 @@ useEffect(() => {
 
 // Function to add more time
 const handleExtendTime = async () => {
-  if (!endTimestamp || !activeSessionId) return;
-  const extraTime = 15 * 60 * 1000; // 15 mins
-  await updateDoc(doc(db, "rooms", activeSessionId), {
-    endAt: endTimestamp + extraTime
-  });
+  if (isExtending || !activeSessionId) return;
+  
+  setIsExtending(true); // Start loading state
+  try {
+    const roomRef = doc(db, "rooms", activeSessionId);
+    
+    // 1. Get fresh data from Firestore to prevent "math lag"
+    const roomSnap = await getDoc(roomRef);
+    if (!roomSnap.exists()) return;
+
+    const currentEndAt = roomSnap.data().endAt || Date.now();
+    const extraTime = 15 * 60 * 1000; // 15 minutes in ms
+    const newEndAt = currentEndAt + extraTime;
+
+    // 2. Update Firestore
+    await updateDoc(roomRef, {
+      endAt: newEndAt
+    });
+
+    // 3. Update local state so the UI updates immediately
+    setEndTimestamp(newEndAt);
+    
+  } catch (error) {
+    console.error("Failed to extend time:", error);
+  } finally {
+    setIsExtending(false); // End loading state
+  }
 };
+
+// 1. Manage Mobile UI State and Connection Monitoring
+useEffect(() => {
+  if (!isLive) {
+    setMobileMenuOpen(false);
+    setChatOpen(false);
+    return;
+  }
+
+  // Monitor WebRTC Connection State for the pulsing UI dot
+  const interval = setInterval(() => {
+    if (signaling.peerConnection) {
+      const state = signaling.peerConnection.connectionState;
+      setConnectionStatus(state === 'connected' ? 'connected' : 'connecting');
+    }
+  }, 2000);
+
+  // Auto-hide mobile menu after 5 seconds of inactivity to clear the screen
+  let menuTimer: NodeJS.Timeout;
+  if (mobileMenuOpen) {
+    menuTimer = setTimeout(() => {
+      setMobileMenuOpen(false);
+    }, 5000);
+  }
+
+  return () => {
+    clearInterval(interval);
+    clearTimeout(menuTimer);
+  };
+}, [isLive, mobileMenuOpen, signaling.peerConnection]);
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
 
@@ -962,155 +1056,113 @@ const handleExtendTime = async () => {
         </button>
       </div>
 
-
 {/* ======================================================
-     LIVE CLASSROOM OVERLAY (Teacher View)
-     Features: WebRTC Video, Screen Share, Chat, Roster
+     LIVE CLASSROOM OVERLAY (Adaptive Mobile/Desktop)
 ====================================================== */}
 {isLive && (
   <div className="fixed inset-0 z-[100] bg-slate-950 flex flex-col animate-in fade-in duration-300">
     
-    {/* TOP HEADER */}
-    <div className="h-16 px-8 flex items-center justify-between bg-slate-900/50 border-b border-white/5">
-      <div className="flex items-center gap-4">
-        <div className={`w-3 h-3 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-red-500 animate-pulse'}`} />
-        <h2 className="text-white font-black text-sm uppercase tracking-widest">
-          LIVE: {resources.find(r => r.id === activeSessionId)?.title || "Classroom"}
+    {/* ADAPTIVE HEADER */}
+    <div className="h-14 md:h-16 px-4 md:px-8 flex items-center justify-between bg-slate-900/80 backdrop-blur-md border-b border-white/5 sticky top-0 z-[110]">
+      <div className="flex items-center gap-3">
+        {/* Connection Status Dot - Pulsing */}
+        <div className="relative flex items-center justify-center">
+            <div className={`w-3 h-3 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.8)]' : 'bg-red-500 animate-pulse'}`} />
+            {connectionStatus === 'connected' && <div className="absolute w-3 h-3 bg-emerald-500 rounded-full animate-ping opacity-75" />}
+        </div>
+        <h2 className="text-white font-black text-[10px] md:text-sm uppercase tracking-widest truncate max-w-[100px] md:max-w-none">
+          {resources.find(r => r.id === activeSessionId)?.title || "Classroom"}
         </h2>
       </div>
 
-{/* Timer Display */}
-     <div className="flex items-center gap-4 bg-slate-800/50 px-4 py-2 rounded-2xl border border-white/5">
-  <div className="flex flex-col items-center">
-    <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">Time Remaining</span>
-    <span className={`font-mono font-bold text-sm ${timeLeft && timeLeft < 300 ? 'text-red-500 animate-pulse' : 'text-emerald-500'}`}>
-      {timeLeft ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, '0')}` : "00:00"}
-    </span>
-  </div>
-
-  {/* ONLY TEACHER SEES THIS */}
-  {isTeacher && (
-    <Button 
-      onClick={handleExtendTime}
-      variant="ghost" 
-      className="h-8 text-[10px] bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white rounded-lg border border-indigo-500/20"
-    >
-      +15 MIN
-    </Button>
-  )}
-</div>
-
-{/* CLASS DURATION INPUT */}
-      <div className="flex items-center gap-4 bg-white/5 p-4 rounded-2xl border border-white/10 mb-4">
-  <span className="text-white/60 text-xs font-bold uppercase">Duration:</span>
-  <input 
-    type="number" 
-    value={classDuration} 
-    onChange={(e) => setClassDuration(parseInt(e.target.value))}
-    className="w-20 bg-slate-800 text-white px-3 py-1 rounded-lg outline-none border border-indigo-500/50"
-  />
-  <span className="text-white/60 text-xs">mins</span>
-</div>
+      {/* Persistent Timer (Centered on Mobile) */}
+      <div className="flex flex-col items-center bg-slate-800/80 px-4 py-1.5 rounded-2xl border border-white/10 shadow-inner">
+        <span className="text-[7px] md:text-[8px] font-black text-white/40 uppercase tracking-widest">Time Remaining</span>
+        <span className={`font-mono font-bold text-sm md:text-base ${timeLeft && timeLeft < 300 ? 'text-red-500 animate-pulse' : 'text-emerald-500'}`}>
+          {timeLeft ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, '0')}` : "00:00"}
+        </span>
+      </div>
 
       <Button 
         variant="destructive" 
         size="sm" 
-        className="rounded-xl font-bold px-6"
+        className="rounded-xl font-black text-[10px] px-3 md:px-6 h-9 md:h-10 uppercase shadow-lg shadow-red-900/20"
         onClick={() => {
           signaling.hangUp();
           setIsLive(false);
           setActiveSessionId(null);
         }}
       >
-        LEAVE CLASS
+        END SESSION
       </Button>
     </div>
 
     {/* MAIN STAGE */}
-    <div className="flex-1 p-6 flex gap-6 overflow-hidden">
+    <div className="flex-1 relative flex overflow-hidden">
       
-      <div className="flex-[3] relative bg-slate-900 rounded-[2.5rem] overflow-hidden group border-4 border-white/5">
+      {/* Video Content Area */}
+      <div className="flex-1 relative bg-slate-900 overflow-hidden">
         
-        {/* Remote Student Video */}
+        {/* Remote Student Video (Main View) */}
         <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
 
-        {/* SIDE MIC INDICATOR: Floats on the left side of the video */}
-        <div className="absolute left-6 top-1/2 -translate-y-1/2 flex flex-col items-center gap-2">
-          <div 
-            onClick={toggleMute}
-            className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 backdrop-blur-md border ${
-              isMuted 
-              ? 'bg-red-500/20 border-red-500/50 text-red-500' 
-              : 'bg-emerald-500/20 border-emerald-500/50 text-emerald-500'
-            }`}
-          >
-            {/* Replace with Mic/MicOff icons from lucide-react if imported */}
-            <Users size={24} className={isMuted ? 'opacity-50' : 'animate-pulse'} />
-          </div>
-          <span className="text-[9px] font-black text-white/40 uppercase tracking-tighter">
-            {isMuted ? 'Muted' : 'On Air'}
-          </span>
+        {/* TOP CORNER SELF-PREVIEW (Mobile Optimized) */}
+        <div className="absolute top-4 right-4 w-28 h-40 md:w-44 md:h-28 bg-black rounded-2xl border-2 border-white/20 shadow-2xl overflow-hidden z-20">
+          <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover scale-x-[-1]" />
+          {videoOff && <div className="absolute inset-0 bg-slate-900/90 flex items-center justify-center text-[8px] text-white/40 font-black uppercase text-center p-2">Camera Off</div>}
         </div>
-        
-        {/* Waiting Message */}
-        {connectionStatus !== 'connected' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-xl z-10">
-             <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
-             <p className="text-white/40 font-black uppercase tracking-widest text-[10px]">Awaiting Connection</p>
-          </div>
+
+        {/* MOBILE OVERLAY TOGGLE (Floating Action Button) */}
+        <div className="md:hidden absolute bottom-6 right-6 z-50">
+            <Button 
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="w-14 h-14 rounded-full bg-indigo-600 shadow-2xl border-2 border-white/20"
+            >
+                {mobileMenuOpen ? <X size={24} /> : <Settings size={24} />}
+            </Button>
+        </div>
+
+        {/* MOBILE FLOATING CONTROLS (Only visible when toggled) */}
+        {mobileMenuOpen && (
+            <div className="md:hidden absolute bottom-24 right-6 flex flex-col gap-4 animate-in slide-in-from-bottom-5 duration-300">
+                <Button onClick={toggleMute} className={`w-12 h-12 rounded-full ${isMuted ? 'bg-red-500' : 'bg-slate-800'}`}><MicOff size={20} /></Button>
+                <Button onClick={toggleVideo} className={`w-12 h-12 rounded-full ${videoOff ? 'bg-red-500' : 'bg-slate-800'}`}><VideoOff size={20} /></Button>
+                <Button onClick={() => setChatOpen(!chatOpen)} className="w-12 h-12 rounded-full bg-slate-800"><MessageSquare size={20} /></Button>
+            </div>
         )}
 
-        {/* BOTTOM CONTROL DOCK WITH TEXT LABELS */}
-        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-8 bg-slate-900/90 backdrop-blur-2xl px-10 py-4 rounded-[2.5rem] border border-white/10 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-4 group-hover:translate-y-0 shadow-2xl z-50">
-          
-          {/* MUTE ACTION */}
-          <div className="flex flex-col items-center gap-1.5">
-            <Button 
-              onClick={toggleMute} 
-              className={`w-12 h-12 rounded-2xl transition-all ${isMuted ? 'bg-red-600' : 'bg-white/10'}`}
-            >
-              <Users size={20} />
-            </Button>
-            <span className="text-[8px] font-bold text-white/50 uppercase tracking-widest">{isMuted ? 'Unmute' : 'Mute'}</span>
+        {/* DESKTOP BOTTOM DOCK (Hidden on Mobile) */}
+        <div className="hidden md:flex absolute bottom-10 left-1/2 -translate-x-1/2 items-center gap-8 bg-slate-900/90 backdrop-blur-2xl px-10 py-4 rounded-[2.5rem] border border-white/10 shadow-2xl z-50">
+          <div className="flex flex-col items-center gap-1.5 cursor-pointer" onClick={toggleMute}>
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${isMuted ? 'bg-red-600' : 'bg-white/10'}`}>
+                {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
+            </div>
+            <span className="text-[8px] font-bold text-white/50 uppercase tracking-widest">Mic</span>
           </div>
           
-          {/* VIDEO ACTION */}
-          <div className="flex flex-col items-center gap-1.5">
-            <Button 
-              onClick={toggleVideo} 
-              className={`w-12 h-12 rounded-2xl transition-all ${videoOff ? 'bg-red-600' : 'bg-white/10'}`}
-            >
-              <Video size={20} />
-            </Button>
-            <span className="text-[8px] font-bold text-white/50 uppercase tracking-widest">{videoOff ? 'Cam On' : 'Cam Off'}</span>
+          <div className="flex flex-col items-center gap-1.5 cursor-pointer" onClick={toggleVideo}>
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${videoOff ? 'bg-red-600' : 'bg-white/10'}`}>
+                {videoOff ? <VideoOff size={20} /> : <Video size={20} />}
+            </div>
+            <span className="text-[8px] font-bold text-white/50 uppercase tracking-widest">Camera</span>
           </div>
 
           <div className="w-px h-10 bg-white/10" />
 
-          {/* SCREEN SHARE ACTION */}
-          <div className="flex flex-col items-center gap-1.5">
-            <Button 
-              onClick={handleScreenShare}
-              className={`w-12 h-12 rounded-2xl transition-all ${isSharingScreen ? 'bg-emerald-500' : 'bg-white/10'}`}
-            >
-              <ExternalLink size={20} />
-            </Button>
-            <span className="text-[8px] font-bold text-white/50 uppercase tracking-widest">
-              {isSharingScreen ? 'Stop' : 'Share'}
-            </span>
+          <div className="flex flex-col items-center gap-1.5 cursor-pointer" onClick={handleScreenShare}>
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${isSharingScreen ? 'bg-emerald-500' : 'bg-white/10'}`}>
+                <ExternalLink size={20} />
+            </div>
+            <span className="text-[8px] font-bold text-white/50 uppercase tracking-widest">Share</span>
           </div>
         </div>
-
-        {/* Teacher Self-Preview */}
-        <div className="absolute top-8 right-8 w-44 h-28 bg-black rounded-3xl border-2 border-white/10 shadow-2xl overflow-hidden z-20">
-          <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover scale-x-[-1]" />
-          {videoOff && <div className="absolute inset-0 bg-slate-900 flex items-center justify-center text-[8px] text-white/20 font-black uppercase tracking-widest">No Feed</div>}
-        </div>
-
       </div>
 
+
       {/* B. SIDEBAR: Participants & Chat */}
-      <div className="w-96 flex flex-col gap-4">
+      {/* <div className="w-96 flex flex-col gap-4"> */}
+         <div className="hidden lg:flex w-96 flex-col gap-4 p-6 bg-slate-900/30 border-l border-white/5">
+
         
         {/* Participant Roster: Tracks students in the room */}
         <div className="h-1/3 bg-white/5 rounded-[2rem] p-6 border border-white/10 flex flex-col overflow-hidden">
@@ -1167,6 +1219,43 @@ const handleExtendTime = async () => {
             </Button>
           </div>
         </div>
+
+
+{/* Floating Active Students List */}
+<div className="absolute top-20 right-6 w-64 space-y-3 z-[100]">
+  <div className="bg-slate-900/80 backdrop-blur-md border border-white/10 rounded-2xl p-4 shadow-2xl">
+    <div className="flex justify-between items-center mb-4">
+      <h3 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Active Students</h3>
+      <Badge className="bg-emerald-500 text-white border-none text-[10px]">{activeParticipants.length}</Badge>
+    </div>
+    
+    <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+      {activeParticipants.length === 0 ? (
+        <p className="text-white/30 text-[10px] italic text-center py-2">Waiting for students...</p>
+      ) : (
+        activeParticipants.map((student) => (
+          <div key={student.id} className="flex items-center gap-3 bg-white/5 p-2 rounded-xl border border-white/5 group">
+            <div className="relative">
+               <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center text-xs font-bold text-white uppercase">
+                 {student.name.charAt(0)}
+               </div>
+               <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-slate-900 rounded-full"></div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-white truncate">{student.name}</p>
+              <p className="text-[9px] text-white/40 uppercase font-black">Connected</p>
+            </div>
+            {student.isHandRaised && (
+              <div className="animate-bounce">
+                <Sparkles size={14} className="text-amber-400" />
+              </div>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  </div>
+</div>
 
       </div>  
     </div>
