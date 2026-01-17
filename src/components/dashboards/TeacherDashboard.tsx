@@ -144,6 +144,11 @@ const TeacherDashboard: React.FC = () => {
   const [videoOff, setVideoOff] = useState(false);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
 
+// SESSION TIMER STATE
+const [classDuration, setClassDuration] = useState(40); // Default 40 mins
+const [timeLeft, setTimeLeft] = useState<number | null>(null);
+const [endTimestamp, setEndTimestamp] = useState<number | null>(null);
+
 
   /* ======================================================
      NEW: LIVE SESSION STATE
@@ -152,9 +157,9 @@ const TeacherDashboard: React.FC = () => {
   const [isLive, setIsLive] = useState(false);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const [isTeacher, set_isTeacher] = useState(true); // Assuming this dashboard is for teachers
+  const [isTeacher, set_isTeacher] = useState(true); // dashboard is for teachers
   const [_isHandRaised, set_isHandRaised] = useState(false);
-  // Inside your component
+
 const signaling = useMemo(() => new Signaling(), []);
 const [connectionStatus, setConnectionStatus] = useState<'searching' | 'connected' | 'disconnected'>('searching');
 
@@ -401,76 +406,101 @@ const handleAddResource = async () => {
     set_isHandRaised(!_isHandRaised);
   };
 
+ 
+
 // 2. The LOGIC to start the call
 useEffect(() => {
-  let timer: NodeJS.Timeout | null = null;
-  let isMounted = true; // Prevents updating state if component unmounts
+  let monitorInterval: any;
+  let isMounted = true;
 
   const startLiveClass = async () => {
-    // 1. Wait for DOM refs to attach (prevents the "srcObject of null" error)
-    // We retry up to 5 times over 500ms
+    // 1. Wait for DOM refs to attach (Critical for WebRTC)
     let retries = 0;
     while (!localVideoRef.current || !remoteVideoRef.current) {
-      if (retries > 5) {
-        console.error("Video refs failed to mount.");
-        return;
-      }
-      await new Promise(resolve => setTimeout(resolve, 100));
+      if (retries > 10) return; // Slightly more retries for slower devices
+      await new Promise(r => setTimeout(r, 100));
       retries++;
     }
 
+    // Safety check: ensure we are still live and in a session
     if (!isLive || !activeSessionId || !isMounted) return;
 
     try {
-      // 2. Hardware Initialization
-      console.log("Initializing hardware for session:", activeSessionId);
+      // 2. Hardware Initialization (Turns on Camera/Mic)
+      console.log("Initializing Hardware...");
       await signaling.openUserMedia(localVideoRef.current, remoteVideoRef.current);
       
-      // 3. Create the Signaling Room in Firestore
-      await signaling.createRoom(activeSessionId);
+      // 3. Calculate Timer & Create Room
+      const durationMs = classDuration * 60 * 1000;
+      const endTimestamp = Date.now() + durationMs;
+      
+      // Update local state so UI shows the timer immediately
+      setEndTimestamp(endTimestamp);
 
-      // 4. Start Connection Monitoring
-      timer = setInterval(() => {
-        if (!signaling.peerConnection) return;
+      // 4. Create Firestore Room (Satisfies rules & notifies students)
+      await signaling.createRoom(activeSessionId, { 
+        endAt: endTimestamp,
+        status: 'live',
+        teacherId: user?.uid,
+        startedAt: Date.now()
+      });
+
+      // 5. Start Monitoring Interval
+      monitorInterval = setInterval(() => {
+        if (!signaling.peerConnection || !isMounted) return;
         
+        // A. Connection Status
         const state = signaling.peerConnection.iceConnectionState;
-        console.log("WebRTC State:", state);
-
         if (state === 'connected' || state === 'completed') {
           setConnectionStatus('connected');
         } else if (state === 'failed' || state === 'closed') {
           setConnectionStatus('disconnected');
-        } else {
-          setConnectionStatus('searching');
         }
-      }, 2000);
+        
+        // B. Timer Calculation
+        const remaining = Math.max(0, Math.floor((endTimestamp - Date.now()) / 1000));
+        setTimeLeft(remaining);
 
-      console.log("Classroom successfully live.");
+        // C. 10-Minute System Alert (600 seconds)
+        if (remaining === 600) {
+          signaling.sendMessage(activeSessionId, "SYSTEM", "⚠️ 10 minutes remaining in class.");
+          // Visual toast or alert
+          console.warn("Class ending in 10 minutes.");
+        }
+
+        // D. Automatic Hardware Shutdown at 0
+        if (remaining <= 0) {
+          console.log("Time expired. Ending session.");
+          handleLeaveMeeting(); // This should trigger setIsLive(false)
+        }
+      }, 1000);
+
     } catch (error) {
       console.error("Failed to start class:", error);
       if (isMounted) {
         setIsLive(false);
-        alert("Camera access failed. Please ensure no other app is using it.");
+        setConnectionStatus('disconnected');
       }
     }
   };
 
+  // Trigger start
   if (isLive && activeSessionId) {
     startLiveClass();
   }
 
-  // 5. Consolidated Cleanup
+  // 6. Consolidated Cleanup (THE CAMERA KILLER)
   return () => {
     isMounted = false;
-    if (timer) clearInterval(timer);
+    if (monitorInterval) clearInterval(monitorInterval);
     
-    // Only hang up if we are actually ending the session
-    if (isLive || !activeSessionId) {
-      console.log("Cleaning up live session...");
-      signaling.hangUp();
-    }
+    // This is the safety guard: If the effect unmounts or isLive becomes false, 
+    // we MUST release the camera and microphone hardware.
+    console.log("Releasing hardware and closing signaling...");
+    signaling.hangUp(); 
   };
-}, [isLive, activeSessionId, signaling]); // Removed signaling.peerConnection from deps
+}, [isLive, activeSessionId, signaling, classDuration, user?.uid]); // Removed signaling.peerConnection from deps
+
 
   /* ======================================================   
 // TOGGLE HELPERS - MUTE & VIDEO
@@ -497,6 +527,56 @@ const handleScreenShare = async () => {
     await signaling.openUserMedia(localVideoRef.current!, remoteVideoRef.current!);
     setIsSharingScreen(false);
   }
+};
+
+/* ====================================================== 
+    7. SESSION TIMER & AUTO-END
+====================================================== */
+
+useEffect(() => {
+  if (!isLive || !activeSessionId) return;
+
+  // Listen for the 'endAt' value from Firestore
+  const unsub = onSnapshot(doc(db, "rooms", activeSessionId), (doc) => {
+    if (doc.exists() && doc.data().endAt) {
+      setEndTimestamp(doc.data().endAt);
+    }
+  });
+
+  const timer = setInterval(() => {
+    if (!endTimestamp) return;
+
+    const now = Date.now();
+    const distance = endTimestamp - now;
+    const remainingSeconds = Math.max(0, Math.floor(distance / 1000));
+
+    setTimeLeft(remainingSeconds);
+
+    // 10 Minute Alert (600 seconds)
+    if (remainingSeconds === 600) {
+      alert("⚠️ 10 minutes remaining! Wrap up the session or add more time.");
+    }
+
+    // Auto-End
+    if (remainingSeconds <= 0) {
+      clearInterval(timer);
+      handleLeaveMeeting(); // Automatically turns off camera
+    }
+  }, 1000);
+
+  return () => {
+    unsub();
+    clearInterval(timer);
+  };
+}, [isLive, activeSessionId, endTimestamp]);
+
+// Function to add more time
+const handleExtendTime = async () => {
+  if (!endTimestamp || !activeSessionId) return;
+  const extraTime = 15 * 60 * 1000; // 15 mins
+  await updateDoc(doc(db, "rooms", activeSessionId), {
+    endAt: endTimestamp + extraTime
+  });
 };
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
@@ -680,6 +760,7 @@ const handleScreenShare = async () => {
                           <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">                      
                                 <td className="px-8 py-6 text-right">
                                   <div className="flex justify-end gap-3">
+                                   
                                     {/* NEW: JOIN LIVE CLASS BUTTON */}
                                     {item.type === "classroom" && (
                                       <Button 
@@ -880,6 +961,8 @@ const handleScreenShare = async () => {
           {totalUnread > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-7 h-7 rounded-full flex items-center justify-center border-4 border-white font-black">{totalUnread}</span>}
         </button>
       </div>
+
+
 {/* ======================================================
      LIVE CLASSROOM OVERLAY (Teacher View)
      Features: WebRTC Video, Screen Share, Chat, Roster
@@ -895,6 +978,39 @@ const handleScreenShare = async () => {
           LIVE: {resources.find(r => r.id === activeSessionId)?.title || "Classroom"}
         </h2>
       </div>
+
+{/* Timer Display */}
+     <div className="flex items-center gap-4 bg-slate-800/50 px-4 py-2 rounded-2xl border border-white/5">
+  <div className="flex flex-col items-center">
+    <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">Time Remaining</span>
+    <span className={`font-mono font-bold text-sm ${timeLeft && timeLeft < 300 ? 'text-red-500 animate-pulse' : 'text-emerald-500'}`}>
+      {timeLeft ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, '0')}` : "00:00"}
+    </span>
+  </div>
+
+  {/* ONLY TEACHER SEES THIS */}
+  {isTeacher && (
+    <Button 
+      onClick={handleExtendTime}
+      variant="ghost" 
+      className="h-8 text-[10px] bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white rounded-lg border border-indigo-500/20"
+    >
+      +15 MIN
+    </Button>
+  )}
+</div>
+
+{/* CLASS DURATION INPUT */}
+      <div className="flex items-center gap-4 bg-white/5 p-4 rounded-2xl border border-white/10 mb-4">
+  <span className="text-white/60 text-xs font-bold uppercase">Duration:</span>
+  <input 
+    type="number" 
+    value={classDuration} 
+    onChange={(e) => setClassDuration(parseInt(e.target.value))}
+    className="w-20 bg-slate-800 text-white px-3 py-1 rounded-lg outline-none border border-indigo-500/50"
+  />
+  <span className="text-white/60 text-xs">mins</span>
+</div>
 
       <Button 
         variant="destructive" 

@@ -329,7 +329,7 @@ export default function ParentDashboard() {
           <div>
             <h1 className="text-5xl font-extrabold text-indigo-900 flex items-center gap-4">
               <Sparkles className="w-12 h-12 text-yellow-500" />
-              Welcome back, {profileCompleted ? `${title} ${fullName}` : "Parent"}!
+              Welcome, {profileCompleted ? `${title} ${fullName}` : "Parent"}!
             </h1>
             <p className="text-2xl text-indigo-700 mt-3">{SCHOOL_NAME} Parent Portal</p>
           </div>
