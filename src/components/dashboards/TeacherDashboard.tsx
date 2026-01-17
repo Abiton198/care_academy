@@ -175,6 +175,29 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     return () => unsub();
   }, [auth, navigate]);
 
+
+  const endSession = async () => {
+  try {
+    // Release camera and mic immediately
+    await signaling.hangUp();
+    
+    // Reset all UI flags
+    setIsLive(false);
+    setMobileMenuOpen(false);
+    setChatOpen(false);
+    
+    // Update Firestore to let students know the teacher left
+    if (activeSessionId) {
+      await updateDoc(doc(db, "rooms", activeSessionId), {
+        status: "ended",
+        endedAt: serverTimestamp()
+      });
+    }
+  } catch (error) {
+    console.error("Error ending session:", error);
+  }
+};
+
   useEffect(() => {
     if (!user) return;
     const qProfile = query(collection(db, "teacherApplications"), where("uid", "==", user.uid));
