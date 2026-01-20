@@ -113,18 +113,28 @@ const PrincipalDashboard: React.FC = () => {
   const [pendingAmount, setPendingAmount] = useState<number>(0);
   const [pendingTeachers, setPendingTeachers] = useState<any[]>([]);
   const [selectedTeacherApp, setSelectedTeacherApp] = useState<any | null>(null);
+  const teacherUsersQuery = query(collection(db, "users"), where("role", "==", "teacher"), where("applicationStatus", "==", "submitted"));
+
 
   const navigate = useNavigate();
   const { logout } = useAuth();
 
   // 1. DATA LISTENERS
-  useEffect(() => {
-    const unsubStudents = onSnapshot(collection(db, "students"), (snap) => {
-      setStudents(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
+const unsubStudents = onSnapshot(collection(db, "students"), (snap) => {
+  setStudents(
+    snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,                              // Firestore doc id
+        studentId: data.studentId ?? d.id,    // ✅ GUARANTEE studentId
+        ...data,
+      };
+    })
+  );
+});
 
-    const teacherUsersQuery = query(collection(db, "users"), where("role", "==", "teacher"), where("applicationStatus", "==", "submitted"));
-    const unsubPendingTeachers = onSnapshot(teacherUsersQuery, async (snap) => {
+useEffect(() => {
+        const unsubPendingTeachers = onSnapshot(teacherUsersQuery, async (snap) => {
       const pendingList = await Promise.all(snap.docs.map(async (userDoc) => {
         const userData = userDoc.data();
         if (userData.lastSubmissionId) {
@@ -147,35 +157,29 @@ const PrincipalDashboard: React.FC = () => {
   // 2. FINANCE LISTENER
 // Corrected Finance Listener for PrincipalDashboard.tsx
 useEffect(() => {
-  if (selectedType === "student" && selectedItem?.id && showModal) {
-    // We use 'array-contains' because the Firestore data stores IDs in 'targetStudentIds'
-    const q = query(
-      collection(db, "invoices"),
-      where("targetStudentIds", "array-contains", selectedItem.id), // FIX: Match the actual field name
-      orderBy("createdAt", "desc")
-    );
+  if (!selectedItem || selectedType !== "student") return;
 
-    const unsub = onSnapshot(q, (snap) => {
-      const docs = snap.docs.map(d => ({ 
-        id: d.id, 
-        ...d.data() 
-      }));
+  const sid = selectedItem.studentId || selectedItem.id;
+  if (!sid) return;
 
-      setPaymentHistory(docs);
+  const q = query(
+    collection(db, "invoices"),
+    where("studentId", "==", sid),
+    orderBy("createdAt", "desc")
+  );
 
-      // Calculate the total pending amount
-      const total = docs
-        .filter(d => d.status === "pending")
-        .reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
-      
-      setPendingAmount(total);
-    }, (error) => {
-      console.error("Firestore Finance Error:", error);
-    });
+  return onSnapshot(q, (snap) => {
+    const invoices = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    setPaymentHistory(invoices);
 
-    return () => unsub();
-  }
-}, [selectedItem, selectedType, showModal]);
+    // ✅ CALCULATE BALANCE
+    const pending = invoices
+      .filter(inv => inv.status === "pending")
+      .reduce((sum, inv) => sum + Number(inv.amount || 0), 0);
+
+    setPendingAmount(pending);
+  });
+}, [selectedItem, selectedType]);
 
   // 3. HANDLERS (DEFINED BEFORE RETURN)
   const handlePublishAnnouncement = async () => {
@@ -247,14 +251,31 @@ useEffect(() => {
     } catch (err) { console.error(err); }
   };
 
-  const deleteInvoice = async (invoiceId: string, studentId: string) => {
-    if (!window.confirm("Delete record?")) return;
-    try {
-      await deleteDoc(doc(db, "invoices", invoiceId));
-      const remaining = paymentHistory.filter(inv => inv.id !== invoiceId && inv.status === "pending");
-      await updateDoc(doc(db, "students", studentId), { paymentReceived: remaining.length === 0 });
-    } catch (err) { console.error(err); }
-  };
+ const deleteInvoice = async (invoiceId: string, studentId: string) => {
+  if (!window.confirm("Permanently delete this invoice? This will affect the student's balance.")) return;
+
+  try {
+    // 1. Perform the deletion FIRST
+    await deleteDoc(doc(db, "invoices", invoiceId));
+    
+    // 2. ONLY if deletion succeeds, update the student status
+    // We filter the LOCAL paymentHistory state to check what's left
+    const remainingPending = paymentHistory.filter(
+      inv => inv.id !== invoiceId && inv.status === "pending"
+    );
+
+    await updateDoc(doc(db, "students", studentId), { 
+      paymentReceived: remainingPending.length === 0 
+    });
+
+    alert("Invoice removed successfully.");
+  } catch (err: any) {
+    console.error("Delete failed:", err);
+    // If it fails (like your Permission error), this alert will trigger
+    // and the code above will NOT run, preventing the "fake" clearing of payment.
+    alert(`Error: ${err.message}. The record was not deleted.`);
+  }
+};
 
   const saveTimetableSlot = async (slotData: any) => {
     await addDoc(collection(db, "timetable"), { ...slotData, updatedAt: serverTimestamp() });
