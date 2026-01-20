@@ -53,6 +53,17 @@ interface TeacherProfile {
   status?: "pending" | "approved" | "rejected";
 }
 
+interface TeacherUser {
+  uid: string;
+  email: string;
+  personalInfo?: {
+    firstName?: string;
+    lastName?: string;
+  };
+  firstName?: string;
+  lastName?: string;
+}
+
 interface TimetableSlot {
   id: string;
   day: string;
@@ -170,6 +181,12 @@ const [connectionStatus, setConnectionStatus] = useState<'searching' | 'connecte
 
 const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+const teacher = user as unknown as TeacherUser;
+
+const firstName = teacher?.personalInfo?.firstName || teacher?.firstName || "";
+
+
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => { u ? setUser(u) : navigate("/"); });
     return () => unsub();
@@ -248,78 +265,33 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   /* ======================================================
      3. RESOURCE ENGINE (CRUD & AUDIT TRAIL)
   ===================================================== */
-  useEffect(() => {
-  // Ensure we have a valid UID before trying to query
-  if (!user?.uid) return;
 
-  const q = query(
-    collection(db, "class_links"), 
-    where("teacherId", "==", user.uid),
-    orderBy("createdAt", "desc")
-  );
-  
-  const unsub = onSnapshot(q, (snap) => {
-    const fetchedLinks = snap.docs.map(d => ({ 
-      id: d.id, 
-      ...d.data() 
-    } as ClassLink));
-    
-    setResources(fetchedLinks);
-    console.log("Audit Trail Updated:", fetchedLinks.length, "links found.");
-  }, (error) => {
-    // This will catch the 'Missing Index' error in your console
-    console.error("Firestore Subscription Error:", error);
-  });
-
-  return () => unsub();
-}, [user?.uid]); // Bind specifically to the UID
-
-
-// updateDoc, deleteDoc
-const handleUpdateResource = async (id: string) => {
-    try {
-      const resourceRef = doc(db, "class_links", id);
-      await updateDoc(resourceRef, {
-        title: editResourceData.title,
-        url: editResourceData.url,
-        type: editResourceData.type,
-        grade: editResourceData.grade,
-        updatedAt: serverTimestamp()
-      });
-      setEditingResourceId(null);
-    } catch (err) {
-      console.error("Update failed:", err);
-    }
-  };
-
-  const handleDeleteResource = async (id: string) => {
-    if (confirm("Permanently remove this link from student dashboards?")) {
-      await deleteDoc(doc(db, "class_links", id));
-    }
-  };
-
-  const filteredResources = resources.filter(r => 
-    selectedGradeFilter === "all" ? true : r.grade === selectedGradeFilter
-  );
-
+// UPDATE: Refined handleUpdateResource
 const handleAddResource = async () => {
   if (!newResource.title || !newResource.url) return alert("Title and URL are required");
 
-  // 1. Correctly extract the name from the nested personalInfo map
-  const firstName = user?.personalInfo?.firstName || "";
-  const lastName = user?.personalInfo?.lastName || "";
-  const fullName = `${firstName} ${lastName}`.trim() || "Educator";
+  // 1. Identify exactly where the name is stored. 
+  // We check 'personalInfo' first, then the top-level 'displayName'
+  const firstName = user?.personalInfo?.firstName || user?.firstName || "";
+  const lastName = user?.personalInfo?.lastName || user?.lastName || "";
+  
+  // 2. Combine and verify
+  const fullName = `${firstName} ${lastName}`.trim();
+  
+  // 3. Final Fallback: If name is still empty, use email or "Teacher" 
+  // instead of just "Educator" to make it look more professional
+  const finalName = fullName || user?.email?.split('@')[0] || "Teacher";
 
   try {
     await addDoc(collection(db, "class_links"), {
       title: newResource.title,
       url: newResource.url,
       type: newResource.type,
-      grade: newResource.targetGrade,
+      targetGrade: newResource.targetGrade,
       teacherId: user?.uid,
-      // 2. Use the field name 'teacherName' to match your audit trail requirements
-      teacherName: fullName, 
-      createdAt: serverTimestamp()
+      teacherName: finalName, // Use the verified name here
+      createdAt: serverTimestamp(),
+      status: "active"
     });
 
     setNewResource({ ...newResource, title: "", url: "" });
@@ -327,6 +299,49 @@ const handleAddResource = async () => {
     console.error("Error adding resource:", err);
   }
 };
+
+// DELETE: Permanent removal
+const handleDeleteResource = async (id: string) => {
+  if (window.confirm("Permanently remove this link from student dashboards and audit history?")) {
+    try {
+      await deleteDoc(doc(db, "class_links", id));
+    } catch (err) {
+      console.error("Delete failed:", err);
+    }
+  }
+};
+
+// FILTER: Ensure the filter uses 'targetGrade' to match the database
+const filteredResources = resources.filter(r => 
+  selectedGradeFilter === "all" ? true : r.targetGrade === selectedGradeFilter
+);
+
+useEffect(() => {
+  if (!user?.uid) return;
+
+  // This is the specific query for the Audit Trail
+  const q = query(
+    collection(db, "class_links"),
+    where("teacherId", "==", user.uid), // This matches the ID you saved in handleAddResource
+    orderBy("createdAt", "desc")
+  );
+
+  const unsub = onSnapshot(q, (snap) => {
+    const fetchedLinks = snap.docs.map(d => ({ 
+      id: d.id, 
+      ...d.data() 
+    }));
+    
+    // This fills the 'resources' state which 'filteredResources' uses
+    setResources(fetchedLinks); 
+  }, (error) => {
+    // If you see an error here about "indexes", click the link in the console
+    console.error("Audit Trail Fetch Error:", error);
+  });
+
+  return () => unsub();
+}, [user?.uid]);
+
   /* ======================================================
      4. CHAT & MESSAGING LOGIC
   ===================================================== */
@@ -789,181 +804,162 @@ useEffect(() => {
           </TabsContent>
 
           {/* LINK ENGINE TAB */}
-          <TabsContent value="links">
-            <div className="space-y-6">
-              
-              {/* PUBLISHING ENGINE */}
-              <Card className="border-0 shadow-2xl bg-indigo-900 text-white rounded-[2rem] overflow-hidden">
-                <div className="p-8 border-b border-white/10 bg-white/5 flex justify-between items-center">
-                   <div>
-                     <h2 className="text-2xl font-black">LINK PUBLISHING ENGINE</h2>
-                     <p className="text-xs text-indigo-300 font-bold uppercase tracking-widest mt-1">Updates Student Dashboards instantly</p>
-                   </div>
-                   <div className="bg-white/10 p-2 rounded-xl border border-white/20">
-                     <Label className="text-[10px] font-black uppercase text-indigo-200 block mb-1">Filter Audit Trail</Label>
-                     <select 
-                        className="bg-transparent text-xs font-bold outline-none cursor-pointer"
-                        value={selectedGradeFilter}
-                        onChange={(e) => setSelectedGradeFilter(e.target.value)}
-                      >
-                        <option className="text-black" value="all">View All Grades</option>
-                        {availableGrades.map(g => <option className="text-black" key={g} value={g}>{g}</option>)}
-                      </select>
-                   </div>
-                </div>
-                <CardContent className="p-8">
-                  <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-end">
-                    <div className="space-y-2 col-span-1">
-                      <Label className="text-[10px] uppercase font-black text-indigo-200">Target Grade</Label>
-                      <select 
-                        className="w-full h-12 px-4 rounded-xl bg-white/10 border-2 border-white/10 text-white text-sm font-bold focus:border-white/40 transition-all outline-none"
-                        value={newResource.targetGrade}
-                        onChange={e => setNewResource({...newResource, targetGrade: e.target.value})}
-                      >
-                        <option className="text-black" value="all">All Grades</option>
-                        {availableGrades.map(g => <option className="text-black" key={g} value={g}>{g}</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-2 col-span-1 md:col-span-1">
-                      <Label className="text-[10px] uppercase font-black text-indigo-200">Link Title</Label>
-                      <Input className="h-12 bg-white/10 border-2 border-white/10 text-white placeholder:text-white/30 rounded-xl focus:border-white/40 font-bold" placeholder="e.g. Maths Live Session" value={newResource.title} onChange={e => setNewResource({...newResource, title: e.target.value})} />
-                    </div>
-                    <div className="space-y-2 col-span-1 md:col-span-1">
-                      <Label className="text-[10px] uppercase font-black text-indigo-200">URL / Zoom Link</Label>
-                      <Input className="h-12 bg-white/10 border-2 border-white/10 text-white placeholder:text-white/30 rounded-xl focus:border-white/40 font-mono text-xs" placeholder="https://zoom.us/..." value={newResource.url} onChange={e => setNewResource({...newResource, url: e.target.value})} />
-                    </div>
-                    <div className="space-y-2 col-span-1">
-                      <Label className="text-[10px] uppercase font-black text-indigo-200">Category</Label>
-                      <select 
-                        className="w-full h-12 px-4 rounded-xl bg-white/10 border-2 border-white/10 text-white text-sm font-bold focus:border-white/40 outline-none"
-                        value={newResource.type} 
-                        onChange={e => setNewResource({...newResource, type: e.target.value})}
-                      >
-                        <option className="text-black" value="classroom">Classroom / Live</option>
-                        <option className="text-black" value="resource">Study Material</option>
-                      </select>
-                    </div>
-                    <Button onClick={handleAddResource} className="h-12 bg-amber-400 hover:bg-amber-500 text-black font-black rounded-xl shadow-xl transition-transform active:scale-95">
-                      <PlusCircle className="mr-2 h-5 w-5" /> PUBLISH LINK
-                    </Button>
-                  </div>
-                  
-                </CardContent>
-              </Card>
+         <TabsContent value="links">
+  <div className="space-y-6">
+    
+    {/* PUBLISHING ENGINE */}
+    <Card className="border-0 shadow-2xl bg-indigo-900 text-white rounded-[2rem] overflow-hidden">
+      <div className="p-8 border-b border-white/10 bg-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+         <div>
+           <h2 className="text-2xl font-black italic tracking-tighter">LINK PUBLISHING ENGINE</h2>
+           <p className="text-xs text-indigo-300 font-bold uppercase tracking-widest mt-1">Updates Student Dashboards instantly</p>
+         </div>
+         <div className="bg-white/10 p-2 rounded-xl border border-white/20">
+           <Label className="text-[10px] font-black uppercase text-indigo-200 block mb-1">Filter Audit Trail</Label>
+           <select 
+              className="bg-transparent text-xs font-bold outline-none cursor-pointer text-white"
+              value={selectedGradeFilter}
+              onChange={(e) => setSelectedGradeFilter(e.target.value)}
+            >
+              <option className="text-black" value="all">View All Grades</option>
+              {availableGrades.map(g => <option className="text-black" key={g} value={g}>{g}</option>)}
+            </select>
+         </div>
+      </div>
+      <CardContent className="p-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-end">
+          <div className="space-y-2">
+            <Label className="text-[10px] uppercase font-black text-indigo-200">Target Grade</Label>
+            <select 
+              className="w-full h-12 px-4 rounded-xl bg-white/10 border-2 border-white/10 text-white text-sm font-bold focus:border-white/40 transition-all outline-none"
+              value={newResource.targetGrade}
+              onChange={e => setNewResource({...newResource, targetGrade: e.target.value})}
+            >
+              <option className="text-black" value="all">All Grades</option>
+              {availableGrades.map(g => <option className="text-black" key={g} value={g}>{g}</option>)}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-[10px] uppercase font-black text-indigo-200">Link Title</Label>
+            <Input className="h-12 bg-white/10 border-2 border-white/10 text-white placeholder:text-white/30 rounded-xl focus:border-white/40 font-bold" placeholder="e.g. Maths Live Session" value={newResource.title} onChange={e => setNewResource({...newResource, title: e.target.value})} />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-[10px] uppercase font-black text-indigo-200">URL / Zoom Link</Label>
+            <Input className="h-12 bg-white/10 border-2 border-white/10 text-white placeholder:text-white/30 rounded-xl focus:border-white/40 font-mono text-xs" placeholder="https://zoom.us/..." value={newResource.url} onChange={e => setNewResource({...newResource, url: e.target.value})} />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-[10px] uppercase font-black text-indigo-200">Category</Label>
+            <select 
+              className="w-full h-12 px-4 rounded-xl bg-white/10 border-2 border-white/10 text-white text-sm font-bold focus:border-white/40 outline-none"
+              value={newResource.type} 
+              onChange={e => setNewResource({...newResource, type: e.target.value})}
+            >
+              <option className="text-black" value="classroom">Classroom / Live</option>
+              <option className="text-black" value="resource">Study Material</option>
+            </select>
+          </div>
+          <Button onClick={handleAddResource} className="h-12 bg-amber-400 hover:bg-amber-500 text-black font-black rounded-xl shadow-xl transition-transform active:scale-95">
+            <PlusCircle className="mr-2 h-5 w-5" /> PUBLISH LINK
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
 
-              {/* AUDIT TRAIL / MANAGEMENT TABLE */}
-              <div className="bg-white rounded-[2rem] shadow-2xl border-0 overflow-hidden">
-                <div className="p-8 border-b bg-slate-50 flex justify-between items-center">
-                  <h3 className="font-black text-slate-800 text-xl tracking-tight uppercase">Audit Trail & Record Management</h3>
-                  <Badge variant="secondary" className="px-4 py-1 rounded-full font-bold">{filteredResources.length} RECORDS ACTIVE</Badge>
-                </div>
-                
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="bg-slate-100/50 text-[10px] uppercase font-black text-slate-400 tracking-widest">
-                        <th className="px-8 py-5">Audience</th>
-                        <th className="px-8 py-5">Document Details</th>
-                        <th className="px-8 py-5">Action Point</th>
-                        <th className="px-8 py-5 text-right">Settings</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-
-                      {/* LIVE CLASS BUTTON */}
-                      {filteredResources.map((item) => {
-                        const isEditing = editingResourceId === item.id;
-                        return (
-                          <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">                      
-                                <td className="px-8 py-6 text-right">
-                                  <div className="flex justify-end gap-3">
-                                   
-                                    {/* NEW: JOIN LIVE CLASS BUTTON */}
-                                    {item.type === "classroom" && (
-                                      <Button 
-                                        size="sm" 
-                                        className="bg-indigo-600 hover:bg-indigo-700 animate-pulse"
-                                        onClick={() => {
-                                          setActiveSessionId(item.id);
-                                          setIsLive(true);
-                                          // Here you would trigger your signaling.joinRoom logic
-                                        }}
-                                      >
-                                        <Video size={16} className="mr-2" /> JOIN LIVE
-                                      </Button>
-                                    )}
-                                    
-                                    {isEditing ? (
-                                      <>
-                                        <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600" onClick={() => handleUpdateResource(item.id)}>
-                                          <Check size={16} />
-                                        </Button>
-                                        <Button size="sm" variant="ghost" onClick={() => setEditingResourceId(null)}>
-                                          <X size={16} />
-                                        </Button>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <button onClick={() => { setEditingResourceId(item.id); setEditResourceData(item); }} className="p-2 text-slate-400 hover:text-indigo-600"><Edit2 size={16}/></button>
-                                        <button onClick={() => handleDeleteResource(item.id)} className="p-2 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button>
-                                      </>
-                                    )}
-                                  </div>
-                                </td>
-                            <td className="px-8 py-6">
-                              {isEditing ? (
-                                <Input className="h-9 text-sm font-bold" value={editResourceData.title} onChange={e => setEditResourceData({...editResourceData, title: e.target.value})} />
-                              ) : (
-                                <div>
-                                  <p className="font-black text-slate-800 text-base">{item.title}</p>
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{item.type}</span>
-                                </div>
-                              )}
-                            </td>
-                            <td className="px-8 py-6">
-                              {isEditing ? (
-                                <Input className="h-9 text-xs font-mono" value={editResourceData.url} onChange={e => setEditResourceData({...editResourceData, url: e.target.value})} />
-                              ) : (
-                                <div className="flex items-center gap-2">
-                                  <p className="text-[11px] text-indigo-500 font-mono truncate max-w-[200px] bg-indigo-50 px-2 py-1 rounded-md">{item.url}</p>
-                                  <a href={item.url} target="_blank" rel="noreferrer" className="text-slate-300 hover:text-indigo-600"><ExternalLink size={14}/></a>
-                                </div>
-                              )}
-                            </td>
-                            <td className="px-8 py-6 text-right">
-                              <div className="flex justify-end gap-3">
-                                {isEditing ? (
-                                  <>
-                                    <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 shadow-md" onClick={() => handleUpdateResource(item.id)}>
-                                      <Check size={16} />
-                                    </Button>
-                                    <Button size="sm" variant="ghost" className="text-slate-400" onClick={() => setEditingResourceId(null)}>
-                                      <X size={16} />
-                                    </Button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <button onClick={() => { setEditingResourceId(item.id); setEditResourceData(item); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"><Edit2 size={16}/></button>
-                                    <button onClick={() => handleDeleteResource(item.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={16}/></button>
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  {filteredResources.length === 0 && (
-                    <div className="py-20 text-center flex flex-col items-center">
-                       <BookOpen className="text-slate-200 w-16 h-16 mb-4" />
-                       <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">No link records found</p>
+    {/* AUDIT TRAIL / MANAGEMENT TABLE */}
+    <div className="bg-white rounded-[2rem] shadow-2xl border-0 overflow-hidden">
+      <div className="p-8 border-b bg-slate-50 flex justify-between items-center">
+        <h3 className="font-black text-slate-800 text-xl tracking-tight uppercase">Audit Trail & Record Management</h3>
+        <Badge className="px-4 py-1 rounded-full font-black bg-indigo-100 text-indigo-600 border-none">{filteredResources.length} RECORDS ACTIVE</Badge>
+      </div>
+      
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="bg-slate-100/50 text-[10px] uppercase font-black text-slate-400 tracking-widest">
+              <th className="px-8 py-5">Audience</th>
+              <th className="px-8 py-5">Content Details</th>
+              <th className="px-8 py-5">Navigation</th>
+              <th className="px-8 py-5 text-right">Settings</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {filteredResources.map((item) => {
+              const isEditing = editingResourceId === item.id;
+              return (
+                <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">                      
+                  <td className="px-8 py-6">
+                    <Badge variant="outline" className="font-black text-[10px] border-slate-200 text-slate-500 uppercase">
+                      Grade {item.targetGrade}
+                    </Badge>
+                  </td>
+                  <td className="px-8 py-6">
+                    {isEditing ? (
+                      <Input className="h-9 text-sm font-bold" value={editResourceData.title} onChange={e => setEditResourceData({...editResourceData, title: e.target.value})} />
+                    ) : (
+                      <div>
+                        <p className="font-black text-slate-800 text-base flex items-center gap-2">
+                          {item.title}
+                          {item.type === "classroom" && <span className="w-2 h-2 bg-rose-500 rounded-full animate-pulse" />}
+                        </p>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{item.type === 'classroom' ? 'Live Session' : 'Downloadable Resource'}</span>
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-8 py-6">
+                    {isEditing ? (
+                      <Input className="h-9 text-xs font-mono" value={editResourceData.url} onChange={e => setEditResourceData({...editResourceData, url: e.target.value})} />
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 bg-slate-100 px-3 py-2 rounded-xl group-hover:bg-indigo-50 transition-colors">
+                          <p className="text-[11px] text-indigo-600 font-mono truncate max-w-[150px]">{item.url}</p>
+                        </div>
+                        <a 
+                          href={item.url.startsWith('http') ? item.url : `https://${item.url}`} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          className="bg-slate-900 text-white p-2 rounded-xl hover:bg-indigo-600 transition-all shadow-md"
+                        >
+                          <ExternalLink size={14}/>
+                        </a>
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-8 py-6 text-right">
+                    <div className="flex justify-end gap-2">
+                      {isEditing ? (
+                        <>
+                          <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600" onClick={() => handleUpdateResource(item.id)}>
+                            <Check size={16} />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditingResourceId(null)}>
+                            <X size={16} />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => { setEditingResourceId(item.id); setEditResourceData(item); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"><Edit2 size={16}/></button>
+                          <button onClick={() => handleDeleteResource(item.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={16}/></button>
+                        </>
+                      )}
                     </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </TabsContent>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {filteredResources.length === 0 && (
+          <div className="py-20 text-center flex flex-col items-center">
+             <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                <BookOpen className="text-slate-300 w-8 h-8" />
+             </div>
+             <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">No link records found in audit trail</p>
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+</TabsContent>
 
           {/* TIMETABLE VIEW */}
           <TabsContent value="timetable">

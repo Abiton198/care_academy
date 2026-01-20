@@ -42,7 +42,8 @@ import {
   Sparkles,
   MessageCircle,
   LayoutDashboard,
-  Clock
+  Clock,
+  ExternalLink
 } from "lucide-react";
 
 
@@ -295,14 +296,25 @@ const StudentDashboard: React.FC = () => {
 };
 
   useEffect(() => {
-    if (!profile?.grade) return;
-    const qLinks = query(collection(db, "class_links"), where("grade", "in", [profile.grade, "all"]), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(qLinks, (snap) => {
-      setClassLinks(snap.docs.map(d => ({ id: d.id, ...d.data() } as ClassLink)));
-      setLinksLoaded(true);
-    });
-    return () => unsub();
-  }, [profile?.grade]);
+  // 1. Guard clause: If profile or grade is missing, don't run the query
+  if (!profile?.grade) return;
+
+  // 2. Use 'profile.grade' directly in the query
+  const qLinks = query(
+    collection(db, "class_links"),
+    where("targetGrade", "in", ["all", profile.grade]), // FIX: Use profile.grade here
+    orderBy("createdAt", "desc")
+  );
+
+  const unsub = onSnapshot(qLinks, (snap) => {
+    setClassLinks(snap.docs.map(d => ({ id: d.id, ...d.data() } as ClassLink)));
+    setLinksLoaded(true);
+  }, (err) => {
+    console.error("Link Subscription Error:", err);
+  });
+
+  return () => unsub();
+}, [profile?.grade]); // 3. This ensures it re-runs if the grade changes
 
   /* ---------------- 2. LIVE STATUS WATCHER (GREEN LIGHT) ---------------- */
   useEffect(() => {
@@ -512,7 +524,7 @@ const StudentDashboard: React.FC = () => {
             </div>
 
             {/* LIVE NOTIFICATION BOX */}
-            {isTeacherLive && (
+            {/* {isTeacherLive && (
               <div className="bg-slate-900 rounded-[2.5rem] p-8 flex flex-col md:flex-row items-center justify-between gap-6 border-4 border-emerald-500/20 shadow-2xl">
                 <div className="flex items-center gap-6">
                   <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center text-white animate-pulse shadow-lg shadow-emerald-500/20">
@@ -530,7 +542,7 @@ const StudentDashboard: React.FC = () => {
                   GO TO CLASSROOM
                 </Button>
               </div>
-            )}
+            )} */}
 
             {/* UPCOMING TODAY LIST */}
             <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
@@ -589,43 +601,69 @@ const StudentDashboard: React.FC = () => {
 
         {/* 3. LINKS TAB */}
         {activeTab === "links" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 animate-in zoom-in-95 duration-500">
-            {classLinks.map((link) => (
-              <Card 
-                key={link.id} 
-                className="group border-0 shadow-xl rounded-[2.5rem] overflow-hidden hover:scale-[1.03] transition-all cursor-pointer"
-                onClick={() => link.type === 'classroom' ? joinClass(link) : window.open(link.url, '_blank')}
-              >
-                <CardContent className="p-8">
-                  <div className="flex items-center gap-5 mb-8">
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors shadow-sm ${
-                      link.type === 'classroom' 
-                        ? 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white' 
-                        : 'bg-amber-50 text-amber-600'
-                    }`}>
-                      {link.type === 'classroom' ? <Video size={24} /> : <FileText size={24} />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-black text-slate-800 uppercase text-sm truncate tracking-tight">{link.title}</h4>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{link.teacherName}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between pt-6 border-t border-slate-50">
-                    <Badge className={`border-none font-black text-[9px] uppercase tracking-widest px-4 py-1.5 rounded-xl ${
-                      link.type === 'classroom' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'
-                    }`}>
-                      {link.type === 'classroom' && isTeacherLive ? '● LIVE NOW' : link.type}
-                    </Badge>
-                    <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-300 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm">
-                      <ArrowRight size={18} />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 animate-in zoom-in-95 duration-500">
+    {classLinks.map((link) => (
+      <Card 
+        key={link.id} 
+        className="group border-0 shadow-xl rounded-[2.5rem] overflow-hidden hover:scale-[1.03] transition-all cursor-pointer bg-white"
+        onClick={() => {
+          // Logic: Check if the link is external or if we should use internal joinClass
+          const isExternal = link.url?.startsWith('http') || link.url?.includes('.') ;
+          
+          if (isExternal) {
+            // Ensure the URL has a protocol
+            const destination = link.url.startsWith('http') ? link.url : `https://${link.url}`;
+            window.open(destination, '_blank');
+          } else {
+            // Fallback to internal logic if it's just a room ID
+            joinClass(link);
+          }
+        }}
+      >
+        <CardContent className="p-8">
+          <div className="flex items-center gap-5 mb-6">
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-sm ${
+              link.type === 'classroom' 
+                ? 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white' 
+                : 'bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white'
+            }`}>
+              {link.type === 'classroom' ? <Video size={24} /> : <FileText size={24} />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="font-black text-slate-800 uppercase text-sm truncate tracking-tight group-hover:text-indigo-600 transition-colors">
+                {link.title}
+              </h4>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                Authored by: <span className="text-slate-600">{link.teacherName}</span>
+              </p>
+            </div>
           </div>
-        )}
+
+          {/* URL PREVIEW AREA */}
+          <div className="mb-6 p-3 bg-slate-50 rounded-xl border border-slate-100 group-hover:bg-indigo-50/50 transition-colors">
+            <p className="text-[10px] font-mono text-indigo-400 truncate">
+              {link.url}
+            </p>
+          </div>
+          
+          <div className="flex items-center justify-between pt-6 border-t border-slate-100">
+            <Badge className={`border-none font-black text-[9px] uppercase tracking-widest px-4 py-1.5 rounded-xl ${
+              link.type === 'classroom' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'
+            }`}>
+              {link.type === 'classroom' ? '● Live Session' : 'Resource Material'}
+            </Badge>
+            <div className="flex items-center gap-2 text-[10px] font-black text-slate-300 group-hover:text-indigo-600 transition-all">
+              <span className="opacity-0 group-hover:opacity-100 transition-opacity">OPEN LINK</span>
+              <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-300 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm">
+                <ExternalLink size={18} />
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    ))}
+  </div>
+)}
       </main>
     </div>
 
@@ -655,35 +693,64 @@ const StudentDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* RESOURCE GRID */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {classLinks.map((link) => (
-            <Card key={link.id} className="group border-0 shadow-xl rounded-[2.5rem] overflow-hidden hover:scale-[1.02] transition-all cursor-pointer" onClick={() => {
-              if (link.type === 'classroom') { setActiveSession(link); setIsLive(true); }
-              else window.open(link.url, '_blank');
-            }}>
-              <CardContent className="p-8">
-                <div className="flex items-center gap-5 mb-6">
-                  <div className={`w-14 h-14 rounded-[1.2rem] flex items-center justify-center ${link.type === 'classroom' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'}`}>
-                    {link.type === 'classroom' ? <Video size={24} /> : <FileText size={24} />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-black text-slate-800 uppercase text-sm truncate">{link.title}</h4>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{link.teacherName}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between pt-6 border-t border-slate-50">
-                   <Badge className="bg-slate-100 text-slate-500 border-none font-bold px-4 py-1 rounded-lg">
-                     {link.type.toUpperCase()}
-                   </Badge>
-                   <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-300 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                     <ArrowRight size={18} />
-                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+       {/* RESOURCE GRID */}
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+  {classLinks.map((link) => (
+    <Card 
+      key={link.id} 
+      className="group border-0 shadow-xl rounded-[2.5rem] overflow-hidden hover:scale-[1.02] transition-all cursor-pointer bg-white" 
+      onClick={() => {
+        // logic: If it's a classroom type but has a valid external URL, go to the URL.
+        // If you still want the OPTION for internal WebRTC, you can check if the URL includes 'internal'
+        if (link.url && (link.url.startsWith('http') || link.url.includes('zoom.us') || link.url.includes('meet.google'))) {
+          window.open(link.url.startsWith('http') ? link.url : `https://${link.url}`, '_blank');
+        } else if (link.type === 'classroom') {
+          // Fallback for internal WebRTC if no external URL is provided
+          setActiveSession(link); 
+          setIsLive(true); 
+        } else {
+          window.open(link.url, '_blank');
+        }
+      }}
+    >
+      <CardContent className="p-8">
+        <div className="flex items-center gap-5 mb-6">
+          <div className={`w-14 h-14 rounded-[1.2rem] flex items-center justify-center ${link.type === 'classroom' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'}`}>
+            {link.type === 'classroom' ? <Video size={24} /> : <FileText size={24} />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+               <h4 className="font-black text-slate-800 uppercase text-sm truncate">{link.title}</h4>
+               {link.type === 'classroom' && (
+                 <span className="flex h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+               )}
+            </div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              {link.teacherName}
+            </p>
+          </div>
         </div>
+
+        <div className="space-y-3">
+          <p className="text-[11px] text-slate-500 font-medium line-clamp-1 italic bg-slate-50 p-2 rounded-lg border border-slate-100">
+            {link.url}
+          </p>
+          
+          <div className="flex items-center justify-between pt-4 border-t border-slate-50">
+             <Badge className={`border-none font-black text-[9px] px-3 py-1 rounded-full ${
+               link.type === 'classroom' ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-600'
+             }`}>
+               {link.type === 'classroom' ? 'LIVE SESSION' : 'STUDY MATERIAL'}
+             </Badge>
+             <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white group-hover:bg-indigo-600 transition-all shadow-lg">
+               <ExternalLink size={18} />
+             </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  ))}
+</div>
       </main>
 
       {/* ======================================================
