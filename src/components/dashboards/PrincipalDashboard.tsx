@@ -215,31 +215,56 @@ useEffect(() => {
     } catch (err) { console.error(err); }
   };
 
-  const handleBulkBill = async (ids: string[], amount: number) => {
-    setIsPublishing(true);
-    try {
-      const batch = writeBatch(db);
-      const monthYear = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
-      ids.forEach(studentId => {
-        const student = students.find(s => s.id === studentId);
-        const invRef = doc(collection(db, "invoices"));
-        batch.set(invRef, {
-          studentId,
-          parentId: student?.parentId || "unknown",
-          studentNames: `${student?.firstName} ${student?.lastName}`,
-          amount,
-          category: `${monthYear} Tuition`,
-          status: "pending",
-          isVerifiedByPrincipal: true,
-          createdAt: serverTimestamp(),
-        });
-        batch.update(doc(db, "students", studentId), { paymentReceived: false });
+ const handleBulkBill = async (ids: string[], amount: number) => {
+  setIsPublishing(true);
+  try {
+    const batch = writeBatch(db);
+    const monthYear = new Date().toLocaleString("default", { month: "long", year: "numeric" });
+
+    ids.forEach(studentId => {
+      const student = students.find(s => s.id === studentId);
+
+      if (!student) {
+        console.warn("Student not found:", studentId);
+        return;
+      }
+
+      // Make sure parentId exists
+      const parentId = student.parentId;
+      if (!parentId) {
+        console.warn("Parent ID missing for student:", studentId, student.firstName, student.lastName);
+        return;
+      }
+
+      const invRef = doc(collection(db, "invoices"));
+      batch.set(invRef, {
+        studentId,
+        parentId, // ✅ assign exactly the student's parentId
+        studentNames: `${student.firstName} ${student.lastName}`,
+        amount,
+        category: `${monthYear} Tuition`,
+        status: "pending",
+        isVerifiedByPrincipal: true,
+        createdAt: serverTimestamp(),
       });
-      await batch.commit();
-      setIsBillingModalOpen(false);
-      alert("Billing complete.");
-    } catch (err) { console.error(err); } finally { setIsPublishing(false); }
-  };
+
+      console.log(`Invoice created for ${student.firstName} ${student.lastName} → parentId: ${parentId}`);
+
+      // Update student record to track payment
+      batch.update(doc(db, "students", studentId), { paymentReceived: false });
+    });
+
+    await batch.commit();
+    setIsBillingModalOpen(false);
+    alert("Billing complete. Check console for invoice logs.");
+  } catch (err) {
+    console.error("Bulk billing error:", err);
+  } finally {
+    setIsPublishing(false);
+  }
+};
+
+
 
   const clearSingleInvoice = async (invoiceId: string, student: any) => {
     try {

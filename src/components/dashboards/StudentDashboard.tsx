@@ -51,6 +51,7 @@ import {
 /* Auth & Signaling */
 import { useAuth } from "../auth/AuthProvider";
 import { Signaling } from "@/lib/signaling";
+import MoodleCard from "./MoodleCard";
 
 // =============================================================================
 // TYPES
@@ -206,6 +207,16 @@ const StudentDashboard: React.FC = () => {
   /* ---------------- UI HELPERS ---------------- */
   const today = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date());
   const todayClasses = timetable.filter(t => t.day === today);
+
+
+  const handleLogout = async () => {
+  try {
+    await logout();           // Firebase sign out
+    navigate("/parent-dashboard");      // or "/parent/dashboard"
+  } catch (err) {
+    console.error("Logout failed", err);
+  }
+};
 
 
   /* ---------------- 1. DASHBOARD SYNC (OVERVIEW) ---------------- */
@@ -484,7 +495,7 @@ const StudentDashboard: React.FC = () => {
               Grade {profile.grade}
             </p>
           </div>
-          <Button variant="ghost" onClick={logout}>
+          <Button variant="ghost" onClick={handleLogout}>
             <LogOut size={16} className="mr-2" /> Logout
           </Button>
         </div>
@@ -510,6 +521,8 @@ const StudentDashboard: React.FC = () => {
           ))}
         </nav>
       </header>
+
+       <MoodleCard/>
 
       <main className="max-w-7xl mx-auto p-6 md:p-10">
         
@@ -750,8 +763,10 @@ const StudentDashboard: React.FC = () => {
       </CardContent>
     </Card>
   ))}
+
 </div>
       </main>
+ 
 
       {/* ======================================================
                  LIVE CLASSROOM FULL-SCREEN OVERLAY

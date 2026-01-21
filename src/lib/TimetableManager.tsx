@@ -22,11 +22,86 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { Label } from "@/components/ui/label";
 import { Loader2, Trash2, Plus, Calendar as CalendarIcon, AlertCircle, CheckCircle2 } from "lucide-react";
 
+// time
+import { Clock } from "lucide-react";
+
+const TimePicker = ({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) => {
+  const hours = Array.from({ length: 24 }, (_, i) =>
+    i.toString().padStart(2, "0")
+  );
+  const minutes = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"];
+
+  const [h, m] = value ? value.split(":") : ["", ""];
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className="h-12 rounded-2xl bg-slate-100 border-none font-bold text-xs shadow-inner w-full justify-start"
+        >
+          <Clock size={16} className="mr-2 text-slate-500" />
+          {value || "Select Time"}
+        </Button>
+      </PopoverTrigger>
+
+      <PopoverContent className="w-64 p-4 rounded-2xl shadow-xl border-none">
+        <div className="grid grid-cols-2 gap-3">
+          {/* Hours */}
+          <div>
+            <Label className="text-[10px] font-black uppercase text-slate-400">
+              Hour
+            </Label>
+            <Select value={h} onValueChange={(val) => onChange(`${val}:${m || "00"}`)}>
+              <SelectTrigger className="h-10 rounded-xl bg-slate-50">
+                <SelectValue placeholder="HH" />
+              </SelectTrigger>
+              <SelectContent>
+                {hours.map((hr) => (
+                  <SelectItem key={hr} value={hr}>
+                    {hr}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Minutes */}
+          <div>
+            <Label className="text-[10px] font-black uppercase text-slate-400">
+              Minute
+            </Label>
+            <Select value={m} onValueChange={(val) => onChange(`${h || "08"}:${val}`)}>
+              <SelectTrigger className="h-10 rounded-xl bg-slate-50">
+                <SelectValue placeholder="MM" />
+              </SelectTrigger>
+              <SelectContent>
+                {minutes.map((min) => (
+                  <SelectItem key={min} value={min}>
+                    {min}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+
 /* =========================================================
    CONSTANTS
 ========================================================= */
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const TIMES = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"];
+
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 const CAMBRIDGE_GRADES = [
   "Stage 1", "Stage 2", "Stage 3", "Stage 4", "Stage 5", "Stage 6",
   "Checkpoint (Yr 7-9)", "IGCSE 1 (Yr 10)", "IGCSE 2 (Yr 11)", "AS Level", "A Level"
@@ -180,23 +255,24 @@ const TimetableManager: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-end">
             
             {/* Day & Time */}
-            <div className="space-y-3">
-              <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Timing</Label>
-              <div className="flex gap-2">
-                <Select value={day} onValueChange={(v) => setDay(v)}>
-                  <SelectTrigger className="rounded-2xl border-none bg-slate-100 font-bold text-xs h-12 shadow-inner">
-                    <SelectValue placeholder="Day" />
-                  </SelectTrigger>
-                  <SelectContent>{DAYS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
-                </Select>
-                <Select value={time} onValueChange={(v) => setTime(v)}>
-                  <SelectTrigger className="rounded-2xl border-none bg-slate-100 font-bold text-xs h-12 shadow-inner">
-                    <SelectValue placeholder="Time" />
-                  </SelectTrigger>
-                  <SelectContent>{TIMES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-            </div>
+        <div className="space-y-3">
+  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">
+    Timing
+  </Label>
+  <div className="flex gap-2">
+    <Select value={day} onValueChange={setDay}>
+      <SelectTrigger className="rounded-2xl border-none bg-slate-100 font-bold text-xs h-12 shadow-inner">
+        <SelectValue placeholder="Day" />
+      </SelectTrigger>
+      <SelectContent>
+        {DAYS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+      </SelectContent>
+    </Select>
+
+    <TimePicker value={time} onChange={setTime} />
+  </div>
+</div>
+
 
             {/* Grade Selection */}
             <div className="space-y-3">

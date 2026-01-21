@@ -19,6 +19,7 @@ import {
 } from "firebase/firestore";
 import { getAuth, onAuthStateChanged, signOut, User } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
+import MoodleCard from "./MoodleCard";
 
 /* UI Components */
 import { Button } from "@/components/ui/button";
@@ -739,6 +740,7 @@ useEffect(() => {
             <TabsTrigger value="links" className="px-8 py-3 font-bold">Link Engine</TabsTrigger>
             <TabsTrigger value="timetable" className="px-8 py-3 font-bold">Timetable</TabsTrigger>
             <TabsTrigger value="profile" className="px-8 py-3 font-bold">My Profile</TabsTrigger>
+                        
           </TabsList>
 
 {/* STATUS BANNER */}
@@ -802,6 +804,8 @@ useEffect(() => {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <MoodleCard/>
 
           {/* LINK ENGINE TAB */}
          <TabsContent value="links">
