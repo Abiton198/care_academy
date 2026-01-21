@@ -62,13 +62,53 @@ interface TeacherApplicationFormProps {
 }
 
 const British_Curriculum_SUBJECTS = [
-  "Mathematics (IGCSE)", "Physics (IGCSE)", "Chemistry (IGCSE)",
-  "Biology (IGCSE)", "Computer Science (IGCSE)", "English Language (IGCSE)",
-  "Business Studies (IGCSE)", "Economics (IGCSE)", "Geography (IGCSE)", "History (IGCSE)", "Coding (IGCSE)",
-  "Mathematics (A-Level)", "Physics (A-Level)", "Chemistry (A-Level)",
-  "Biology (A-Level)", "Computer Science (A-Level)", "English Literature (A-Level)",
-  "Business Studies (A-Level)", "Economics (A-Level)", "Geography (A-Level)", "History (A-Level)", "Further Mathematics (A-Level)",
+  /* =========================
+     Primary Curriculum
+     ========================= */
+  "English (Primary)",
+  "Mathematics (Primary)",
+  "Science (Primary)",
+  "Computing (Primary)",
+  "Geography (Primary)",
+  "History (Primary)",
+  "Art & Design (Primary)",
+  "Design & Technology (Primary)",
+  "Music (Primary)",
+  "Physical Education (Primary)",
+  "Religious Education (Primary)",
+  "PSHE (Primary)",
+
+  /* =========================
+     IGCSE
+     ========================= */
+  "Mathematics (IGCSE)",
+  "Physics (IGCSE)",
+  "Chemistry (IGCSE)",
+  "Biology (IGCSE)",
+  "Computer Science (IGCSE)",
+  "English Language (IGCSE)",
+  "Business Studies (IGCSE)",
+  "Economics (IGCSE)",
+  "Geography (IGCSE)",
+  "History (IGCSE)",
+  "Coding (IGCSE)",
+
+  /* =========================
+     A-Level
+     ========================= */
+  "Mathematics (A-Level)",
+  "Further Mathematics (A-Level)",
+  "Physics (A-Level)",
+  "Chemistry (A-Level)",
+  "Biology (A-Level)",
+  "Computer Science (A-Level)",
+  "English Literature (A-Level)",
+  "Business Studies (A-Level)",
+  "Economics (A-Level)",
+  "Geography (A-Level)",
+  "History (A-Level)",
 ];
+
 
 /* ======================================================
    MAIN COMPONENT
