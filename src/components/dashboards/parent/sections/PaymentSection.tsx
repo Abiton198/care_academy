@@ -20,7 +20,7 @@ const MERCHANT_ID = import.meta.env.VITE_PAYFAST_MERCHANT_ID;
 const MERCHANT_KEY = import.meta.env.VITE_PAYFAST_MERCHANT_KEY;
 const PAYFAST_URL = "https://www.payfast.co.za/eng/process"; 
 
-const MONTHLY_TUITION = 1200; 
+const MONTHLY_TUITION = 1300; 
 const REGISTRATION_FEE = 550;
 
 export default function PaymentsSection() {
@@ -69,8 +69,8 @@ export default function PaymentsSection() {
   const calcReg = includesRegistration ? targetStudents.filter(s => !s.registrationPaid).length * REGISTRATION_FEE : 0;
 
   const baseAmount = calcTuition + calcReg;
-  const PROCESSING_FEE = 0.10 * baseAmount; // 10% Admin/Gateway fee
-  const finalTotal = baseAmount + PROCESSING_FEE;
+  // const PROCESSING_FEE = 0.10 * baseAmount; // 10% Admin/Gateway fee
+  const finalTotal = baseAmount 
 
   /* ---------------- PAYFAST INTEGRATION ---------------- */
   
@@ -146,7 +146,7 @@ export default function PaymentsSection() {
         category: paymentType.toUpperCase(),
         status: "pending", 
         createdAt: serverTimestamp(),
-        breakdown: { tuition: calcTuition, registration: calcReg, adminFee: PROCESSING_FEE }
+        breakdown: { tuition: calcTuition, registration: calcReg}
       });
 
       // 2. Update Student Flags for Principal Dashboard
@@ -239,10 +239,12 @@ export default function PaymentsSection() {
                       {calcReg > 0 && (
                         <tr><td className="py-2">Registration</td><td className="text-right">R{calcReg.toFixed(2)}</td></tr>
                       )}
-                      <tr className="text-slate-400">
+
+                      {/* NO ADMIN FEES CHARGED NOW */}
+                      {/* <tr className="text-slate-400">
                         <td className="py-2">Admin/Gateway (10%)</td>
                         <td className="text-right">R{PROCESSING_FEE.toFixed(2)}</td>
-                      </tr>
+                      </tr> */}
                     </tbody>
                  </table>
 
