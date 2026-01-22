@@ -68,77 +68,61 @@ export default function LoginForm() {
    AUTH STATE LISTENER (SAFE REDIRECTS)
    ===================================================== */
 useEffect(() => {
-  const unsub = onAuthStateChanged(auth, async (user) => {
-    if (!user || authLoading || redirectedRef.current) {
+  const unsub = onAuthStateChanged(auth, (user) => {
+    if (!user || redirectedRef.current) {
       setLoading(false);
       return;
     }
 
-    try {
-      const userRef = doc(db, "users", user.uid);
-      const snap = await getDoc(userRef);
+    // 🔐 Delay Firestore until auth token is ready
+    user.getIdTokenResult().then(async () => {
+      try {
+        const userRef = doc(db, "users", user.uid);
+        const snap = await getDoc(userRef);
 
-      // If they are logged in but have no Firestore record yet, stay on login
-      if (!snap.exists()) {
-        setLoading(false);
-        return;
-      }
-
-      const data = snap.data();
-      const role = data.role?.toLowerCase();
-
-      // 🛑 SAFETY GUARD: Prevent /-dashboard errors
-      if (!role) {
-        console.error("User document found but no role assigned!");
-        setError("Account configuration error. Please contact the administrator.");
-        setLoading(false);
-        setAuthLoading(false);
-        return;
-      }
-
-      // 1. Principal Redirect
-      if (role === "principal") {
-        redirectedRef.current = true;
-        window.location.href = "/principal-dashboard";
-        return;
-      }
-
-      // 2. Teacher Redirect (with Application Check)
-      if (role === "teacher") {
-        if (data.applicationStatus === "pending") {
-          setNewTeacherUid(user.uid);
-          setShowTeacherModal(true);
+        if (!snap.exists()) {
           setLoading(false);
           return;
         }
+
+        const data = snap.data();
+        const role = data.role?.toLowerCase();
+
+        if (!role) {
+          setError("Account configuration error.");
+          setLoading(false);
+          return;
+        }
+
         redirectedRef.current = true;
-        window.location.href = "/teacher-dashboard";
-        return;
+
+        if (role === "principal") {
+          window.location.href = "/principal-dashboard";
+        } else if (role === "teacher") {
+          if (data.applicationStatus === "pending") {
+            setNewTeacherUid(user.uid);
+            setShowTeacherModal(true);
+            setLoading(false);
+            return;
+          }
+          window.location.href = "/teacher-dashboard";
+        } else if (role === "parent") {
+          window.location.href = "/parent-dashboard";
+        } else {
+          window.location.href = `/${role}-dashboard`;
+        }
+
+      } catch (err) {
+        console.error("Auth check failed:", err);
+        setError("Permission verification failed.");
+        setLoading(false);
       }
-
-      // 3. Parent Redirect
-      if (role === "parent") {
-        redirectedRef.current = true;
-        window.location.href = "/parent-dashboard";
-        return;
-      }
-
-      // 4. Fallback for Students or others
-      redirectedRef.current = true;
-      navigate(`/${role}-dashboard`, { replace: true });
-
-    } catch (err) {
-      console.error("Auth listener error:", err);
-      setError("Failed to verify user permissions.");
-    } finally {
-      setLoading(false);
-    }
+    });
   });
 
   return () => unsub();
-}, [navigate, authLoading]);
+}, []);
 
- 
  
   /* =====================================================
      GOOGLE AUTH
