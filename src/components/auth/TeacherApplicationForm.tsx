@@ -107,6 +107,12 @@ const British_Curriculum_SUBJECTS = [
   "Economics (A-Level)",
   "Geography (A-Level)",
   "History (A-Level)",
+
+
+  /*===========================
+      EXTRAS
+  ==============================*/
+  "Bible Study (All Grades)"
 ];
 
 
