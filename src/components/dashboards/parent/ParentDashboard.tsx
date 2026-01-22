@@ -49,6 +49,9 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { format } from "date-fns";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Settings } from "lucide-react";
 
 /* ======================================================
    CONSTANTS & TYPES
@@ -245,33 +248,33 @@ export default function ParentDashboard() {
     navigate("/");
   };
 
-  const saveProfileAndContinue = async () => {
-    if (!fullName || !contact || !address) {
-      alert("Please complete required fields.");
-      return;
-    }
+  // const saveProfileAndContinue = async () => {
+  //   if (!fullName || !contact || !address) {
+  //     alert("Please complete required fields.");
+  //     return;
+  //   }
 
-    try {
-      await setDoc(
-        doc(db, "parents", user!.uid),
-        {
-          title,
-          fullName,
-          contact,
-          address,
-          profileCompleted: true,
-          updatedAt: new Date(),
-        },
-        { merge: true }
-      );
+  //   try {
+  //     await setDoc(
+  //       doc(db, "parents", user!.uid),
+  //       {
+  //         title,
+  //         fullName,
+  //         contact,
+  //         address,
+  //         profileCompleted: true,
+          // updatedAt: new Date(),
+  //       },
+  //       { merge: true }
+  //     );
 
-      setProfileCompleted(true);
-      setWizardStep(2);
-      setActiveTab("Registration");
-    } catch (err) {
-      console.error("Profile save failed:", err);
-    }
-  };
+  //     setProfileCompleted(true);
+  //     setWizardStep(2);
+  //     setActiveTab("Registration");
+  //   } catch (err) {
+  //     console.error("Profile save failed:", err);
+  //   }
+  // };
 
   const renderSection = () => {
     switch (activeTab) {
@@ -312,6 +315,75 @@ export default function ParentDashboard() {
         return null;
     }
   };
+
+  // Popoup wizard
+  useEffect(() => {
+  if (!user?.uid) return;
+
+  const parentRef = doc(db, "parents", user.uid);
+
+  // Listen for profile completion status
+  const unsub = onSnapshot(parentRef, (snap) => {
+    if (snap.exists()) {
+      const data = snap.data();
+      // If profileCompleted is false or undefined, show the wizard
+      if (!data.profileCompleted) {
+        setShowWizard(true);
+        setProfileCompleted(false);
+      } else {
+        setShowWizard(false);
+        setProfileCompleted(true);
+      }
+      
+      // Pre-fill fields if some data already exists
+      setFullName(data.fullName || user.displayName || "");
+      setContact(data.contact || "");
+      setAddress(data.address || "");
+      setTitle(data.title || "");
+    } else {
+      // New user with no document yet
+      setShowWizard(true);
+      setProfileCompleted(false);
+    }
+  });
+
+  return () => unsub();
+}, [user?.uid]);
+
+const saveProfileAndContinue = async () => {
+  if (!fullName || !contact || !address) {
+    alert("Please complete required fields marked with *");
+    return;
+  }
+
+  try {
+    const parentRef = doc(db, "parents", user!.uid);
+    
+    await setDoc(parentRef, {
+      title,
+      fullName,
+      contact,
+      address,
+      email: user?.email, // Keep email synced
+      profileCompleted: true,
+      updatedAt: new Date(), // Use serverTimestamp for accuracy
+    }, { merge: true });
+
+    // Close wizard and switch tabs
+    setShowWizard(false);
+    setProfileCompleted(true);
+    
+    // Move to the next logic (Registering Student)
+    setActiveTab("Registration"); 
+    
+    // Optional: Toast notification
+    console.log("Profile verified. Moving to student registration.");
+    
+  } catch (err) {
+    console.error("Profile save failed:", err);
+    alert("System error: Could not save profile.");
+  }
+};
 
   if (loading) {
     return (
@@ -362,48 +434,67 @@ export default function ParentDashboard() {
       </div>
 
       {/* Profile Completion Wizard */}
-      {showWizard && !profileCompleted && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-10">
-            <h2 className="text-3xl font-bold text-indigo-800 mb-6">Complete Your Profile</h2>
-            <div className="space-y-5">
-              <input
-                className="w-full border-2 border-gray-300 rounded-xl p-4"
-                placeholder="Title (Mr/Mrs/Ms/Dr)"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-              <input
-                className="w-full border-2 border-gray-300 rounded-xl p-4"
-                placeholder="Full Name *"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-              />
-              <input
-                className="w-full border-2 border-gray-300 rounded-xl p-4"
-                placeholder="Contact Number *"
-                value={contact}
-                onChange={(e) => setContact(e.target.value)}
-              />
-              <textarea
-                className="w-full border-2 border-gray-300 rounded-xl p-4"
-                placeholder="Residential Address *"
-                rows={3}
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-              />
-            </div>
-            <div className="flex justify-end gap-4 mt-8">
-              <Button variant="outline" onClick={() => setShowWizard(false)}>
-                Later
-              </Button>
-              <Button onClick={saveProfileAndContinue} className="bg-indigo-600">
-                Save & Continue
-              </Button>
-            </div>
-          </div>
+     {showWizard && !profileCompleted && (
+  <div className="fixed inset-0 bg-slate-900/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+    <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-2xl w-full p-10 animate-in zoom-in-95 duration-300">
+      <div className="text-center mb-8">
+        <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Settings className="animate-spin-slow" size={32} />
         </div>
-      )}
+        <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Setup Your Profile</h2>
+        <p className="text-slate-500 font-medium">Complete these details to begin student registration</p>
+      </div>
+
+      <div className="space-y-4">
+        <div className="grid grid-cols-4 gap-4">
+           <Input
+            className="col-span-1 h-14 rounded-2xl border-2 border-slate-100 focus:border-indigo-500 font-bold"
+            placeholder="Title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+          <Input
+            className="col-span-3 h-14 rounded-2xl border-2 border-slate-100 focus:border-indigo-500 font-bold"
+            placeholder="Full Name *"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+          />
+        </div>
+        
+        <Input
+          className="h-14 rounded-2xl border-2 border-slate-100 focus:border-indigo-500 font-bold"
+          placeholder="Primary Contact Number *"
+          value={contact}
+          onChange={(e) => setContact(e.target.value)}
+        />
+        
+        <Textarea
+          className="rounded-2xl border-2 border-slate-100 focus:border-indigo-500 font-medium p-4"
+          placeholder="Full Residential Address *"
+          rows={3}
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+        />
+      </div>
+
+      <div className="flex flex-col gap-3 mt-10">
+        <Button 
+          onClick={saveProfileAndContinue} 
+          className="h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-lg shadow-lg shadow-indigo-200 transition-all active:scale-95"
+        >
+          SAVE & START REGISTRATION
+        </Button>
+        <Button 
+          variant="ghost" 
+          onClick={() => setShowWizard(false)}
+          className="text-slate-400 font-bold hover:text-slate-600"
+        >
+          I'll do this later
+        </Button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }
