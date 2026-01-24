@@ -1,0 +1,52 @@
+{
+  "packageId": "app.netlify.care_academy.twa",
+  "host": "care-academy.netlify.app",
+  "name": "Care Academy",
+  "launcherName": "Care",
+  "display": "standalone",
+  "themeColor": "#2563EB",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#131744",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://care-academy.netlify.app/icons/icon-512.png",
+  "maskableIconUrl": "https://care-academy.netlify.app/icons/icon-512-maskable.png",
+  "monochromeIconUrl": "https://care-academy.netlify.app/icons/icon-mono.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "/home/travis/Desktop/care_academy/android.keystore",
+    "alias": "android"
+  },
+  "appVersionName": "1",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://care-academy.netlify.app/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": {
+      "enabled": true
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://care-academy.netlify.app/",
+  "minSdkVersion": 21,
+  "orientation": "portrait",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1"
+}
