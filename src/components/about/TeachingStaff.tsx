@@ -53,7 +53,7 @@ const TeachingStaff: React.FC = () => {
         <div className="text-center space-y-4">
           <h1 className="text-4xl md:text-6xl font-black text-gray-900 tracking-tight">Meet Our Specialist Educators</h1>
           <p className="text-lg text-gray-600 max-w-3xl mx-auto italic">
-            "SACE-registered experts with 12+ years of experience in CAPS & British Curriculum, 
+            "Experts with 12+ years of experience in British Curriculum, 
             united by a mission to nurture character and academic brilliance."
           </p>
         </div>
@@ -76,7 +76,7 @@ const TeachingStaff: React.FC = () => {
               </div>
             </div>
             <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-              18 years of experience. Specialist in <strong>British Curriculum IGCSE & AS-Level</strong> Chemistry
+              30 years of experience. Specialist in <strong>British Curriculum IGCSE & AS-Level</strong> Chemistry
             </p>
             <ul className="text-xs space-y-2 text-gray-500 font-medium border-t pt-4">
               <li className="flex items-center gap-2 italic">BA in Chemistry (NMU)</li>
@@ -151,6 +151,40 @@ const TeachingStaff: React.FC = () => {
               <li className="flex items-center gap-2 italic">AI Specialist</li>
               <li className="flex items-center gap-2 italic">Specialist in Software Development</li>
             </ul>
+          </motion.div>
+
+            {/* Teacher 5 - Bible Study */}
+          <motion.div whileHover={{ y: -5 }} className="bg-white p-8 rounded-[2.5rem] shadow-xl border-t-8 border-emerald-600 group">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-20 h-20 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600 border-2 border-dashed border-emerald-200">
+                <Heart size={40} className="fill-emerald-600" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 leading-tight">Tanya Prinloo</h3>
+                <p className="text-sm text-emerald-600 font-bold">Bible Studies</p>
+                <div className="flex mt-1">
+                  {[1, 2, 3, 4, 5].map((i) => <Star key={i} size={12} className="fill-yellow-400 text-yellow-400" />)}
+                </div>
+              </div>
+            </div>
+           <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+  Dedicated <strong>Bible Studies Educator</strong> focused on developing
+  ethical awareness, critical thinking, and global citizenship through
+  thoughtful exploration of biblical principles and real-world application.
+</p>
+
+<ul className="text-xs space-y-2 text-gray-500 font-medium border-t pt-4">
+  <li className="flex items-center gap-2 italic">
+    Cambridge Learner Values & Ethics
+  </li>
+  <li className="flex items-center gap-2 italic">
+    Critical Thinking & Moral Reasoning
+  </li>
+  <li className="flex items-center gap-2 italic">
+    Character Formation & Student Mentorship
+  </li>
+</ul>
+
           </motion.div>
 
         </div>
