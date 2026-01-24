@@ -15,7 +15,6 @@
   "startUrl": "/",
   "iconUrl": "https://care-academy.netlify.app/icons/icon-512.png",
   "maskableIconUrl": "https://care-academy.netlify.app/icons/icon-512-maskable.png",
-  "monochromeIconUrl": "https://care-academy.netlify.app/icons/icon-mono.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
     "path": "/home/travis/Desktop/care_academy/android.keystore",

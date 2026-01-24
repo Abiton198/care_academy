@@ -1,0 +1,4 @@
+#Sat Jan 24 23:32:59 SAST 2026
+base.0=/home/travis/Desktop/care_academy/app/build/intermediates/dex/release/minifyReleaseWithR8/classes.dex
+renamed.0=classes.dex
+path.0=classes.dex
