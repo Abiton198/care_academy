@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/select";
 
 import { Loader2, AlertCircle, Chrome, X } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 
 import TeacherApplicationModal from "../dashboards/TeacherApplicationModal";
 
@@ -63,6 +64,7 @@ export default function LoginForm() {
 
   const [showTeacherModal, setShowTeacherModal] = useState(false);
   const [newTeacherUid, setNewTeacherUid] = useState<string | null>(null);
+    const [showPassword, setShowPassword] = useState(false);
   
   
   /* =====================================================
@@ -303,17 +305,25 @@ const handleEmailPasswordSignIn = async () => {
     />
   </div>
 
-  <div className="space-y-2">
-    <Label htmlFor="password">Password</Label>
-    <Input
-      id="password"
-      type="password"
-      placeholder="••••••••"
-      value={password}
-      onChange={(e) => setPassword(e.target.value)}
-      autoComplete="current-password"
-    />
-  </div>
+   <div className="space-y-2 relative">
+      <Label htmlFor="password">Password</Label>
+      <Input
+        id="password"
+        type={showPassword ? "text" : "password"}
+        placeholder="••••••••"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        autoComplete="current-password"
+        className="pr-12" // space for the toggle button
+      />
+      <button
+        type="button"
+        onClick={() => setShowPassword(!showPassword)}
+        className="absolute right-3 top-9 text-slate-400 hover:text-slate-600"
+      >
+        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+      </button>
+    </div>
 
   <Button
     type="button"

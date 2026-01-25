@@ -44,6 +44,8 @@ import Vision from "./components/about/Vision";
 import FeesStructure from "./components/about/FeesStructure";
 import TeachingStaff from "./components/about/TeachingStaff";
 import Accreditation from "./components/about/Accreditation";
+import AccountDeletionPolicy from "./pages/AccountDeletionPolicy";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 
 const queryClient = new QueryClient();
 class DashboardErrorBoundary extends React.Component<
@@ -95,6 +97,8 @@ const App: React.FC = () => {
                 <Route path="/about/fees" element={<FeesStructure />} />
                 <Route path="/about/teaching-staff" element={<TeachingStaff />} />
                 <Route path="/about/accreditation" element={<Accreditation />} />
+                <Route path="/delete-account-request" element={<AccountDeletionPolicy />} />
+                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
 
                 {/* Parent Dashboard Layout */}
                 <Route path="/parent" element={<ParentDashboardLayout />}>

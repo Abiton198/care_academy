@@ -8,6 +8,7 @@ import ParentDashboard from "./dashboards/parent/ParentDashboard";
 import TeacherDashboard from "./dashboards/TeacherDashboard";
 import PrincipalDashboard from "./dashboards/PrincipalDashboard";
 import AdminDashboard from "./dashboards/AdminDashboard";
+import { Link } from "react-router-dom";
 
 // Icons & UI
 import { Info, ArrowRight, ExternalLink, Sparkles } from "lucide-react";
@@ -234,9 +235,36 @@ const AppLayout: React.FC = () => {
     <AuthProvider>
       <div className="min-h-screen flex flex-col font-sans antialiased">
         <AppContent />
-        <footer className="bg-gray-950 text-white/40 text-center py-6 text-[10px] tracking-widest uppercase border-t border-white/5">
-          © {new Date().getFullYear()} British Curriculum Hybrid Christian Academy • Excellence Reformed
-        </footer>
+      <footer className="bg-gray-950 text-white/40 py-10 border-t border-white/5">
+  <div className="max-w-7xl mx-auto px-6">
+    <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+      
+      {/* Copyright & Branding */}
+      <div className="text-[10px] tracking-widest uppercase">
+        © {new Date().getFullYear()} British Curriculum Hybrid Christian Academy 
+        <span className="mx-2 text-white/10">|</span> 
+        Excellence Reformed
+      </div>
+
+      {/* Compliance Links */}
+     <nav className="flex gap-8">
+  <Link 
+    to="/privacy-policy" 
+    className="text-[10px] tracking-widest uppercase hover:text-white transition-colors border-b border-transparent hover:border-white/20 pb-1"
+  >
+    Privacy Policy
+  </Link>
+  
+  <Link 
+    to="/delete-account-request" 
+    className="text-[10px] tracking-widest uppercase hover:text-rose-400 transition-colors border-b border-transparent hover:border-rose-400/20 pb-1"
+  >
+    Delete Account
+  </Link>
+</nav>
+    </div>
+  </div>
+</footer>
       </div>
     </AuthProvider>
   );
