@@ -7,6 +7,7 @@ import { auth, db, googleProvider } from "@/lib/firebaseConfig";
 import {
   signInWithPopup,
   onAuthStateChanged,
+  signInWithEmailAndPassword,
 } from "firebase/auth";
 
 import {
@@ -189,6 +190,43 @@ useEffect(() => {
   };
 
   /* =====================================================
+   EMAIL & PASSWORD SIGN-IN (NO SIGN-UP)
+   ===================================================== */
+const handleEmailPasswordSignIn = async () => {
+  if (authLoading) return;
+
+  setError(null);
+  setAuthLoading(true);
+
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+    // ✅ onAuthStateChanged will handle redirect automatically
+  } catch (err: any) {
+    console.error(err);
+
+    switch (err.code) {
+      case "auth/user-not-found":
+        setError("No account found for this email.");
+        break;
+      case "auth/wrong-password":
+        setError("Incorrect password.");
+        break;
+      case "auth/invalid-email":
+        setError("Invalid email address.");
+        break;
+      case "auth/user-disabled":
+        setError("This account has been disabled.");
+        break;
+      default:
+        setError("Sign-in failed. Please try again.");
+    }
+  } finally {
+    setAuthLoading(false);
+  }
+};
+
+
+  /* =====================================================
      UI
      ===================================================== */
   if (loading) return null;
@@ -251,12 +289,43 @@ useEffect(() => {
                       </TabsList>
 
                       {/* SIGN IN TAB */}
-                      <TabsContent value="signin" className="space-y-4 mt-6">
-                     
-                        <Button type="submit" className="w-full" disabled={authLoading}>
-                          {authLoading ? <Loader2 className="animate-spin" /> : "Sign In"}
-                        </Button>
-                      </TabsContent>
+                    <TabsContent value="signin" className="space-y-4 mt-6">
+
+  <div className="space-y-2">
+    <Label htmlFor="email">Email</Label>
+    <Input
+      id="email"
+      type="email"
+      placeholder="admin@school.co.za"
+      value={email}
+      onChange={(e) => setEmail(e.target.value)}
+      autoComplete="email"
+    />
+  </div>
+
+  <div className="space-y-2">
+    <Label htmlFor="password">Password</Label>
+    <Input
+      id="password"
+      type="password"
+      placeholder="••••••••"
+      value={password}
+      onChange={(e) => setPassword(e.target.value)}
+      autoComplete="current-password"
+    />
+  </div>
+
+  <Button
+    type="button"
+    className="w-full"
+    disabled={authLoading || !email || !password}
+    onClick={handleEmailPasswordSignIn}
+  >
+    {authLoading ? <Loader2 className="animate-spin" /> : "Sign In"}
+  </Button>
+
+</TabsContent>
+
 
                       {/* SIGN UP TAB */}
                       <TabsContent value="signup" className="space-y-4 mt-6">

@@ -117,7 +117,8 @@ const PrincipalDashboard: React.FC = () => {
 
 
   const navigate = useNavigate();
-  const { logout } = useAuth();
+   const { user, logout } = useAuth();
+
 
   // 1. DATA LISTENERS
 const unsubStudents = onSnapshot(collection(db, "students"), (snap) => {
@@ -337,22 +338,51 @@ useEffect(() => {
         
         {/* HEADER */}
         <header className="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white"><GraduationCap size={32} /></div>
-            <div>
-              <h1 className="text-2xl font-black text-slate-900">Care Academy Admin</h1>
-              <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Principal Command</p>
-            </div>
-          </div>
-          <div className="flex gap-4">
-            <Button onClick={() => setIsBillingModalOpen(true)} className="bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-black shadow-lg">
-              <DollarSign className="mr-2" size={18} /> GLOBAL BILLING
-            </Button>
-            <Button variant="ghost" className="font-bold text-slate-400" onClick={async () => { await logout(); navigate("/"); }}>
-                <LogOut className="mr-2 h-4 w-4" /> Logout
-            </Button>
-          </div>
-        </header>
+      <div className="flex items-center gap-4">
+        <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white">
+          <GraduationCap size={32} />
+        </div>
+        <div>
+          {/* Display dynamic name */}
+    <h1 className="text-2xl font-black text-slate-900">
+  {user
+    ? user.role === "principal"
+      ? `Principal ${user.firstName || ""} `  // ✅ show actual name
+      : user.role === "teacher"
+      ? `Teacher ${user.firstName || user.email?.split("@")[0] || ""}`
+      : "Care Academy Admin"
+    : "Care Academy"}
+</h1>
+
+          {/* Display role dynamically */}
+          <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
+            {user?.role === "principal"
+              ? "Principal Command"
+              : user?.role === "teacher"
+              ? "Teacher Dashboard"
+              : "Admin Panel"}
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-4">
+        <Button
+          onClick={() => setIsBillingModalOpen(true)}
+          className="bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-black shadow-lg"
+        >
+          <DollarSign className="mr-2" size={18} /> GLOBAL BILLING
+        </Button>
+        <Button
+          variant="ghost"
+          className="font-bold text-slate-400"
+          onClick={async () => {
+            await logout();
+            navigate("/");
+          }}
+        >
+          <LogOut className="mr-2 h-4 w-4" /> Logout
+        </Button>
+      </div>
+    </header>
 
         {/* ANALYTICS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

@@ -16,6 +16,8 @@ export interface AppUser {
   role: UserRole;
   applicationStatus?: "pending" | "approved" | "rejected";
   classActivated?: boolean;
+   firstName?: string;
+  lastName?: string;
 }
 
 /* ============================================================
@@ -64,6 +66,8 @@ const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
         email: firebaseUser.email,
         role: data.role, // This will be "teacher"
         applicationStatus: data.applicationStatus,
+         firstName: data.firstName || "",  
+          lastName: data.lastName || "", 
       });
     } else {
       // 2. Only if the document literally doesn't exist yet, 
