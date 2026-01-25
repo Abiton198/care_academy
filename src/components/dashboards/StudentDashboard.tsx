@@ -15,6 +15,7 @@ import {
   deleteDoc,
   doc,
   setDoc,
+  getDoc,
   serverTimestamp
 } from "firebase/firestore";
 
@@ -52,6 +53,8 @@ import {
 import { useAuth } from "../auth/AuthProvider";
 import { Signaling } from "@/lib/signaling";
 import MoodleCard from "./MoodleCard";
+import { useParams } from "react-router-dom";
+
 
 // =============================================================================
 // TYPES
@@ -148,22 +151,50 @@ const StudentDashboard: React.FC = () => {
    const [activeTab, setActiveTab] = useState<"overview" | "timetable" | "links">(
     "overview"
   );
+const { studentId } = useParams<{ studentId: string }>();
 
 
 
   /* ---------------- 1. LOAD PROFILE & DATA ---------------- */
   useEffect(() => {
-    if (authLoading || !user) return;
-    const loadProfile = async () => {
-      const q = query(collection(db, "students"), where("parentId", "==", user.uid));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const data = snap.docs[0].data();
-        setProfile({ id: snap.docs[0].id, firstName: data.firstName, grade: data.grade });
+  if (authLoading || !user || !studentId) return;
+
+  const loadProfile = async () => {
+    try {
+      const studentRef = doc(db, "students", studentId);
+      const snap = await getDoc(studentRef);
+
+      if (!snap.exists()) {
+        setProfileError("Student not found.");
+        return;
       }
-    };
-    loadProfile();
-  }, [user, authLoading]);
+
+      const data = snap.data();
+
+      // 🔐 Security check: ensure this child belongs to this parent
+      if (data.parentId !== user.uid) {
+        setProfileError("Unauthorized access.");
+        return;
+      }
+
+      setProfile({
+        id: snap.id,
+        firstName: data.firstName,
+        grade: data.grade,
+        email: data.email,
+      });
+
+    } catch (err) {
+      console.error(err);
+      setProfileError("Failed to load student profile.");
+    } finally {
+      setProfileLoaded(true);
+    }
+  };
+
+  loadProfile();
+}, [user, authLoading, studentId]);
+
 
   useEffect(() => {
     if (!profile?.grade) return;
@@ -220,26 +251,7 @@ const StudentDashboard: React.FC = () => {
 
 
   /* ---------------- 1. DASHBOARD SYNC (OVERVIEW) ---------------- */
-  useEffect(() => {
-    if (authLoading || !user) return;
-    const loadData = async () => {
-      try {
-        const q = query(collection(db, "students"), where("parentId", "==", user.uid));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const data = snap.docs[0].data();
-          setProfile({ id: snap.docs[0].id, firstName: data.firstName, grade: data.grade });
-        } else {
-          setProfileError("No student record found.");
-        }
-      } catch (err) {
-        setProfileError("Failed to sync registry.");
-      } finally {
-        setProfileLoaded(true);
-      }
-    };
-    loadData();
-  }, [user, authLoading]);
+  
 
  const handleExit = async () => {
   console.log("Initiating exit sequence...");
@@ -488,17 +500,26 @@ const StudentDashboard: React.FC = () => {
         <div className="min-h-screen bg-[#F8FAFC]">
       {/* HEADER */}
       <header className="bg-white border-b sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div>
-            <h1 className="font-black">Student Portal</h1>
-            <p className="text-xs text-slate-400">
-              Grade {profile.grade}
-            </p>
-          </div>
-          <Button variant="ghost" onClick={handleLogout}>
-            <LogOut size={16} className="mr-2" /> Logout
-          </Button>
-        </div>
+       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+  <div>
+    <h1 className="font-black">
+      {profile?.firstName
+        ? `${profile.firstName}'s Portal`
+        : "Student Portal"}
+    </h1>
+
+    <p className="text-xs text-slate-400">
+      {profile?.grade
+        ? `Grade ${profile.grade}`
+        : "Loading student profile..."}
+    </p>
+  </div>
+
+  <Button variant="ghost" onClick={handleLogout}>
+    <LogOut size={16} className="mr-2" />
+    Logout
+  </Button>
+</div>
 
         <nav className="max-w-7xl mx-auto px-6 flex gap-8">
           {[

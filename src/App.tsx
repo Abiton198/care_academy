@@ -107,6 +107,8 @@ const App: React.FC = () => {
                 <Route path="/admin-login" element={<AdminLoginForm />} />
                 <Route path="/suspended" element={<SuspendedScreen />} />
                 <Route path="/teacher-application" element={<TeacherApplicationForm />} />
+                <Route path="/student-dashboard/:studentId" element={<StudentDashboard />} />
+
 
                 {/* Protected Dashboards */}
                 <Route
