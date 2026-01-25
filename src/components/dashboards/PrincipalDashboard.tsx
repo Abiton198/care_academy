@@ -347,7 +347,7 @@ useEffect(() => {
     <h1 className="text-2xl font-black text-slate-900">
   {user
     ? user.role === "principal"
-      ? `Principal ${user.firstName || ""} `  // ✅ show actual name
+      ? ` ${user.firstName || ""} `  // ✅ show actual name
       : user.role === "teacher"
       ? `Teacher ${user.firstName || user.email?.split("@")[0] || ""}`
       : "Care Academy Admin"
@@ -357,7 +357,7 @@ useEffect(() => {
           {/* Display role dynamically */}
           <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
             {user?.role === "principal"
-              ? "Principal Command"
+              ? "Principal Console"
               : user?.role === "teacher"
               ? "Teacher Dashboard"
               : "Admin Panel"}
