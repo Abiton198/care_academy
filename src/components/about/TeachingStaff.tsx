@@ -34,7 +34,7 @@ const TeachingStaff: React.FC = () => {
               A World-Class Faculty <br /> <span className="text-yellow-300">For a Borderless Education</span>
             </h2>
             <p className="text-lg text-indigo-100 max-w-3xl mx-auto">
-              Our SACE-registered educators are specialists in <strong>Hybrid Pedagogy</strong>, 
+              Our educators are specialists in <strong>Hybrid Pedagogy</strong>, 
               ensuring your child receives the same nurturing excellence whether they are in 
               the <strong>classroom or across the globe</strong>.
             </p>
