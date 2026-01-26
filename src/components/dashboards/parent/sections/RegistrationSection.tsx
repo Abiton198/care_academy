@@ -60,7 +60,8 @@ const British_Curriculum_SUBJECTS = {
       "British Curriculum Primary Global Perspectives",
       "British Curriculum Primary Digital Literacy",
       "British Curriculum Primary Art & Design",
-      "Coding, AI & Robotics"
+      "Coding, AI & Robotics",
+      "Afrikaans",
     ]
   },
   Secondary_IGCSE: {
@@ -78,7 +79,8 @@ const British_Curriculum_SUBJECTS = {
       "Economics (IGCSE)",
       "Geography (IGCSE)",
       "History (IGCSE)",
-      "Coding, AI & Robotics (IGCSE)"
+      "Coding, AI & Robotics (IGCSE)",
+      "Afrikaans"
     ]
   },
   Secondary_ALevel: {
@@ -95,7 +97,8 @@ const British_Curriculum_SUBJECTS = {
       "Economics (A-Level)",
       "Geography (A-Level)",
       "History (A-Level)",
-      "Coding, AI & Robotics"
+      "Coding, AI & Robotics",
+      "Afrikaans"
     ]
   }
 };
