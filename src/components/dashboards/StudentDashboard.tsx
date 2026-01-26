@@ -24,6 +24,8 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { getParentInfo } from "@/lib/useParentInfo";
+import { useStudentAuth } from "../auth/StudentAuthContext";
 
 /* Icons */
 import {
@@ -59,12 +61,17 @@ import { useParams } from "react-router-dom";
 // =============================================================================
 // TYPES
 // =============================================================================
+
 interface StudentProfile {
-  id: string;
+  id: string;            // Ensure this is here
   firstName: string;
+  lastName?: string;
   grade: string;
+  parentId?: string;     
+  parentName?: string;   
   email?: string;
 }
+
 
 interface TimetableEntry {
   id: string;
@@ -152,48 +159,48 @@ const StudentDashboard: React.FC = () => {
     "overview"
   );
 const { studentId } = useParams<{ studentId: string }>();
+  const [parent, setParent] = useState<{
+    firstName: string;
+    lastName: string;
+    email: string;
+  } | null>(null);
+   const { student } = useStudentAuth();
 
 
 
   /* ---------------- 1. LOAD PROFILE & DATA ---------------- */
-  useEffect(() => {
-  if (authLoading || !user || !studentId) return;
+ useEffect(() => {
+  // If we have a studentId, try to load it immediately. 
+  // Don't wait for the standard Firebase 'user' to be ready.
+  if (!studentId) return;
 
   const loadProfile = async () => {
     try {
+      console.log("📡 Portal: Fetching profile for", studentId);
       const studentRef = doc(db, "students", studentId);
       const snap = await getDoc(studentRef);
 
       if (!snap.exists()) {
+        console.error("❌ Portal Error: Student document does not exist in Firestore.");
         setProfileError("Student not found.");
+        setProfileLoaded(true); // Stop the loading spinner
         return;
       }
 
       const data = snap.data();
+      console.log("✅ Profile Data Received:", data.firstName);
 
-      // 🔐 Security check: ensure this child belongs to this parent
-      if (data.parentId !== user.uid) {
-        setProfileError("Unauthorized access.");
-        return;
-      }
-
-      setProfile({
-        id: snap.id,
-        firstName: data.firstName,
-        grade: data.grade,
-        email: data.email,
-      });
-
+      setProfile({ id: snap.id, ...data } as StudentProfile);
+      setProfileLoaded(true);
     } catch (err) {
-      console.error(err);
-      setProfileError("Failed to load student profile.");
-    } finally {
+      console.error("❌ Database Error:", err);
+      setProfileError("Connection blocked by security rules.");
       setProfileLoaded(true);
     }
   };
 
   loadProfile();
-}, [user, authLoading, studentId]);
+}, [studentId]); 
 
 
   useEffect(() => {
@@ -323,11 +330,11 @@ const { studentId } = useParams<{ studentId: string }>();
   if (!profile?.grade) return;
 
   // 2. Use 'profile.grade' directly in the query
-  const qLinks = query(
-    collection(db, "class_links"),
-    where("targetGrade", "in", ["all", profile.grade]), // FIX: Use profile.grade here
-    orderBy("createdAt", "desc")
-  );
+const qLinks = query(
+  collection(db, "class_links"),
+  where("targetGrade", "in", ["all", profile.grade])
+  // orderBy("createdAt", "desc") <-- COMMENT THIS OUT TEMPORARILY
+);
 
   const unsub = onSnapshot(qLinks, (snap) => {
     setClassLinks(snap.docs.map(d => ({ id: d.id, ...d.data() } as ClassLink)));
@@ -341,20 +348,33 @@ const { studentId } = useParams<{ studentId: string }>();
 
   /* ---------------- 2. LIVE STATUS WATCHER (GREEN LIGHT) ---------------- */
   useEffect(() => {
-    // We watch ALL classroom links to see if any are currently 'live'
-    const classroomLinks = classLinks.filter(l => l.type === "classroom");
-    if (classroomLinks.length === 0) return;
+  const classroomLinks = classLinks.filter(l => l.type === "classroom");
+  if (classroomLinks.length === 0) {
+    setIsClassLive(false);
+    return;
+  }
 
-    const unsubscribes = classroomLinks.map(link => {
-      return onSnapshot(doc(db, "rooms", link.id), (snap) => {
-        if (snap.exists() && snap.data().status === "live") {
-          setIsClassLive(true);
-        }
-      });
+  console.log(`📡 Monitoring ${classroomLinks.length} rooms for live status...`);
+
+  const unsubscribes = classroomLinks.map(link => {
+    return onSnapshot(doc(db, "rooms", link.id), (snap) => {
+      const isRoomLive = snap.exists() && snap.data().status === "live";
+      
+      // Update the green light based on actual room status
+      setIsClassLive(isRoomLive); 
+      
+      if (isRoomLive) console.log(`🟢 Room ${link.title} is now LIVE`);
+    }, (err) => {
+      console.error(`❌ Room Listener Error for ${link.id}:`, err);
     });
+  });
 
-    return () => unsubscribes.forEach(unsub => unsub());
-  }, [classLinks]);
+  return () => {
+    console.log("Cleanup: Closing room listeners");
+    unsubscribes.forEach(unsub => unsub());
+  };
+}, [classLinks]);
+
 
   /* ---------------- 3. WEBRTC & PRESENCE LOGIC ---------------- */
   useEffect(() => {
@@ -489,59 +509,98 @@ const { studentId } = useParams<{ studentId: string }>();
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  if (authLoading || !profileLoaded) return <LoadingScreen />;
+  // STUDENT LINK TO PARENT
 
-  if (authLoading) return <div className="p-10 text-center">Loading Portal...</div>;
+  useEffect(() => {
+    if (!student?.parentId) return;
+
+    getParentInfo(student.parentId).then(setParent);
+  }, [student?.parentId]);
+
+ // Wait for the profile to be fetched from Firestore before showing anything
+if (!profileLoaded) {
+  return (
+    <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50">
+      <Loader2 className="animate-spin text-indigo-600 mb-4" size={40} />
+      <p className="font-black text-slate-400 uppercase tracking-widest text-xs">Synchronizing Portal...</p>
+    </div>
+  );
+}
+
+// If profile is loaded but no data was found
+if (!profile) {
+  return (
+    <div className="p-10 text-center">
+      <h2 className="text-xl font-bold">Profile Not Found</h2>
+      <p>Please contact support or check your link.</p>
+    </div>
+  );
+}
+//   if (authLoading || !profileLoaded) {
+//   return (
+//     <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50">
+//       <Loader2 className="animate-spin text-indigo-600 mb-4" size={40} />
+//       <p className="font-black text-slate-400 uppercase tracking-widest text-xs">Synchronizing Portal...</p>
+//     </div>
+//   );
+// }
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       
       {/* TOP NAV */}
         <div className="min-h-screen bg-[#F8FAFC]">
-      {/* HEADER */}
-      <header className="bg-white border-b sticky top-0 z-40">
-       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-  <div>
-    <h1 className="font-black">
-      {profile?.firstName
-        ? `${profile.firstName}'s Portal`
-        : "Student Portal"}
-    </h1>
+     {/* HEADER */}
+<header className="bg-white border-b sticky top-0 z-40">
+  <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+    <div>
+      <h1 className="font-black text-slate-900">
+        {profile?.firstName
+          ? `Welcome, ${profile.firstName}`
+          : "Student Portal"}
+      </h1>
 
-    <p className="text-xs text-slate-400">
-      {profile?.grade
-        ? `Grade ${profile.grade}`
-        : "Loading student profile..."}
-    </p>
+      <p className="text-xs text-slate-400">
+        {profile?.grade
+          ? `Grade ${profile.grade}`
+          : "Loading student profile..."}
+        {profile?.parentName && (
+          <span className="ml-2 text-slate-300">
+            · Linked to {profile.parentName}
+          </span>
+        )}
+      </p>
+    </div>
+
+    <Button variant="ghost" onClick={handleLogout}>
+      <LogOut size={16} className="mr-2" />
+      Logout
+    </Button>
   </div>
 
-  <Button variant="ghost" onClick={handleLogout}>
-    <LogOut size={16} className="mr-2" />
-    Logout
-  </Button>
-</div>
+  {/* NAV */}
+  <nav className="max-w-7xl mx-auto px-6 flex gap-8">
+    {[
+      { id: "overview", icon: LayoutDashboard, label: "Overview" },
+      { id: "timetable", icon: Clock, label: "Schedule" },
+      { id: "links", icon: Video, label: "Resources" },
+    ].map((t) => (
+      <button
+        key={t.id}
+        onClick={() => setActiveTab(t.id as any)}
+        className={`py-4 text-xs font-black uppercase transition ${
+          activeTab === t.id
+            ? "border-b-2 border-indigo-600 text-indigo-600"
+            : "text-slate-400 hover:text-slate-600"
+        }`}
+      >
+        <t.icon size={14} className="inline mr-2" />
+        {t.label}
+      </button>
+    ))}
+  </nav>
+</header>
 
-        <nav className="max-w-7xl mx-auto px-6 flex gap-8">
-          {[
-            { id: "overview", icon: LayoutDashboard, label: "Overview" },
-            { id: "timetable", icon: Clock, label: "Schedule" },
-            { id: "links", icon: Video, label: "Resources" },
-          ].map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id as any)}
-              className={`py-4 text-xs font-black uppercase ${
-                activeTab === t.id
-                  ? "border-b-2 border-indigo-600 text-indigo-600"
-                  : "text-slate-400"
-              }`}
-            >
-              <t.icon size={14} className="inline mr-2" />
-              {t.label}
-            </button>
-          ))}
-        </nav>
-      </header>
 
        <MoodleCard/>
 

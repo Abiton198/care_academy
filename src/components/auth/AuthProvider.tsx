@@ -3,12 +3,13 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db } from "@/lib/firebaseConfig";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 
 /* ============================================================
    TYPES
 ============================================================ */
-export type UserRole = "parent" | "teacher" | "principal" | "admin";
+// Added 'student' to the roles
+export type UserRole = "parent" | "teacher" | "principal" | "admin" | "student";
 
 export interface AppUser {
   uid: string;
@@ -16,7 +17,7 @@ export interface AppUser {
   role: UserRole;
   applicationStatus?: "pending" | "approved" | "rejected";
   classActivated?: boolean;
-   firstName?: string;
+  firstName?: string;
   lastName?: string;
 }
 
@@ -43,52 +44,82 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   /* ============================================================
-     AUTH STATE LISTENER
+     AUTH STATE LISTENER (HYBRID LOGIC)
   ============================================================ */
   useEffect(() => {
-const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-  setLoading(true);
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      setLoading(true);
 
-  if (!firebaseUser) {
-    setUser(null);
-    setLoading(false);
-    return;
-  }
+      // --- PATH A: FIREBASE AUTH (Parents/Teachers/Principals) ---
+      if (firebaseUser) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            setUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              role: data.role as UserRole,
+              applicationStatus: data.applicationStatus,
+              firstName: data.firstName || "",
+              lastName: data.lastName || "",
+            });
+          } else {
+            // This handles the gap between Auth creation and Firestore doc creation
+            console.log("Waiting for profile creation...");
+          }
+        } catch (err) {
+          console.error("Auth provider error:", err);
+        } finally {
+          setLoading(false);
+        }
+        return; 
+      }
 
-  try {
-    // 1. Check the 'users' collection FIRST
-    const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+      // --- PATH B: CUSTOM SESSION (Students) ---
+      const studentSession = localStorage.getItem("studentSession");
+      if (studentSession) {
+        try {
+          const studentData = JSON.parse(studentSession);
+          setUser({
+            uid: studentData.uid,
+            email: null,
+            role: "student",
+            firstName: studentData.firstName || "Student",
+            lastName: "",
+          });
+        } catch (e) {
+          console.error("Invalid student session", e);
+          localStorage.removeItem("studentSession");
+          setUser(null);
+        }
+      } else {
+        // No Firebase user and no Student session
+        setUser(null);
+      }
 
-    if (userDoc.exists()) {
-      const data = userDoc.data();
-      setUser({
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        role: data.role, // This will be "teacher"
-        applicationStatus: data.applicationStatus,
-         firstName: data.firstName || "",  
-          lastName: data.lastName || "", 
-      });
-    } else {
-      // 2. Only if the document literally doesn't exist yet, 
-      // we wait. DO NOT SET DEFAULT ROLE HERE.
-      // This allows the LoginForm enough time to create the record.
-      console.log("Waiting for profile creation...");
-    }
-  } catch (err) {
-    console.error("Auth error:", err);
-  } finally {
-    setLoading(false);
-  }
-});
+      setLoading(false);
+    });
+
+    return () => unsub();
   }, []);
 
   /* ============================================================
-     LOGOUT
+     LOGOUT (CLEARS EVERYTHING)
   ============================================================ */
   const logout = async () => {
-    await signOut(auth);
-    setUser(null);
+    try {
+      // 1. Sign out of Firebase Auth
+      await signOut(auth);
+      // 2. Clear Student LocalStorage
+      localStorage.removeItem("studentSession");
+      // 3. Reset State
+      setUser(null);
+      // 4. Force Redirect to login
+      window.location.href = "/login";
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
   };
 
   return (

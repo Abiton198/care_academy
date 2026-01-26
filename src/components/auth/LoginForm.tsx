@@ -12,6 +12,10 @@ import {
 
 import {
   doc,
+  collection,
+  query,
+  where,
+  getDocs,
   getDoc,
   setDoc,
   updateDoc,
@@ -21,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+// import { login} from "lucide-react";
 import {
   Card,
   CardContent,
@@ -65,43 +70,54 @@ export default function LoginForm() {
   const [showTeacherModal, setShowTeacherModal] = useState(false);
   const [newTeacherUid, setNewTeacherUid] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
+    const [username, setUsername] = useState("");
+const [studentAuthLoading, setStudentAuthLoading] = useState(false);
   
   
   /* =====================================================
    AUTH STATE LISTENER (SAFE REDIRECTS)
    ===================================================== */
 useEffect(() => {
-  const unsub = onAuthStateChanged(auth, (user) => {
+  const unsub = onAuthStateChanged(auth, async (user) => {
     if (!user || redirectedRef.current) {
       setLoading(false);
       return;
     }
 
-    // 🔐 Delay Firestore until auth token is ready
-    user.getIdTokenResult().then(async () => {
-      try {
-        const userRef = doc(db, "users", user.uid);
-        const snap = await getDoc(userRef);
+    try {
+      // 🔐 Ensure auth token is fully ready
+      await user.getIdTokenResult(true);
 
-        if (!snap.exists()) {
-          setLoading(false);
-          return;
-        }
+      const userRef = doc(db, "users", user.uid);
+      const snap = await getDoc(userRef);
 
-        const data = snap.data();
-        const role = data.role?.toLowerCase();
+      // ❌ User authenticated but no Firestore profile
+      if (!snap.exists()) {
+        await auth.signOut();
+        setError("Account not fully set up. Please sign in again.");
+        setLoading(false);
+        return;
+      }
 
-        if (!role) {
-          setError("Account configuration error.");
-          setLoading(false);
-          return;
-        }
+      const data = snap.data();
+      const role = data.role?.toLowerCase();
 
-        redirectedRef.current = true;
+      if (!role) {
+        await auth.signOut();
+        setError("Account role is missing. Contact support.");
+        setLoading(false);
+        return;
+      }
 
-        if (role === "principal") {
+      redirectedRef.current = true;
+
+      // ✅ ROLE-BASED REDIRECTS (EXPLICIT & SAFE)
+      switch (role) {
+        case "principal":
           window.location.href = "/principal-dashboard";
-        } else if (role === "teacher") {
+          break;
+
+        case "teacher":
           if (data.applicationStatus === "pending") {
             setNewTeacherUid(user.uid);
             setShowTeacherModal(true);
@@ -109,23 +125,97 @@ useEffect(() => {
             return;
           }
           window.location.href = "/teacher-dashboard";
-        } else if (role === "parent") {
-          window.location.href = "/parent-dashboard";
-        } else {
-          window.location.href = `/${role}-dashboard`;
-        }
+          break;
 
-      } catch (err) {
-        console.error("Auth check failed:", err);
-        setError("Permission verification failed.");
-        setLoading(false);
+        case "parent":
+          window.location.href = "/parent-dashboard";
+          break;
+
+        case "student":
+          window.location.href = "/student-dashboard";
+          break;
+
+        default:
+          await auth.signOut();
+          setError("Unknown account role.");
+          setLoading(false);
+          break;
       }
-    });
+
+    } catch (err) {
+      console.error("Auth redirect failed:", err);
+      await auth.signOut();
+      setError("Permission verification failed.");
+      setLoading(false);
+    }
   });
 
   return () => unsub();
 }, []);
 
+
+/*==================================================
+STUDENT PASSWORD
+===================================================*/
+/* 2. The Login Logic */
+const handleStudentLogin = async () => {
+  if (!username || !password) {
+    setError("Please enter both username and password.");
+    return;
+  }
+
+  setStudentAuthLoading(true);
+  setError(null);
+
+  try {
+    // Search Firestore for the student with this username
+    const q = query(
+      collection(db, "students"),
+      where("username", "==", username.toLowerCase().trim())
+    );
+    
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+      throw new Error("Student account not found.");
+    }
+
+    const studentDoc = querySnapshot.docs[0];
+    const studentData = studentDoc.data();
+
+    // Verify Password: Base64 encode the input to match your ParentDashboard logic
+    const encodedInput = btoa(password);
+
+    if (encodedInput !== studentData.passwordHash) {
+      throw new Error("Invalid username or password.");
+    }
+
+    if (studentData.loginEnabled === false) {
+      throw new Error("This account has been disabled by the parent/administrator.");
+    }
+
+    // SUCCESS: Store the session locally
+    // Since this isn't Firebase Auth, we use localStorage to persist the "login"
+    const studentSession = {
+      uid: studentDoc.id,
+      firstName: studentData.firstName,
+      role: "student",
+      parentId: studentData.parentId,
+      loginTime: Date.now()
+    };
+
+    localStorage.setItem("studentSession", JSON.stringify(studentSession));
+
+    // Redirect to the student dashboard
+    window.location.href = `/student-dashboard/${studentDoc.id}`;
+
+  } catch (err: any) {
+    console.error("Student Login Error:", err);
+    setError(err.message || "An error occurred during login.");
+  } finally {
+    setStudentAuthLoading(false);
+  }
+};
  
   /* =====================================================
      GOOGLE AUTH
@@ -190,6 +280,9 @@ useEffect(() => {
       console.error("Submission error:", err);
     }
   };
+ 
+
+
 
   /* =====================================================
    EMAIL & PASSWORD SIGN-IN (NO SIGN-UP)
@@ -285,13 +378,19 @@ const handleEmailPasswordSignIn = async () => {
                   <form>
                     
                     <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
-                      <TabsList className="grid grid-cols-2 bg-indigo-100 rounded-xl">
+                      {/* <TabsList className="grid grid-cols-2 bg-indigo-100 rounded-xl">
                         <TabsTrigger value="signin">Sign In</TabsTrigger>
                         <TabsTrigger value="signup">Sign Up</TabsTrigger>
-                      </TabsList>
+                      </TabsList> */}
+                        <TabsList className="grid grid-cols-3 bg-indigo-100 rounded-xl p-1">
+                          <TabsTrigger value="signin">Staff/Parent</TabsTrigger>
+                          <TabsTrigger value="student">Student</TabsTrigger>
+                          <TabsTrigger value="signup">Register</TabsTrigger>
+                        </TabsList>
 
                       {/* SIGN IN TAB */}
                     <TabsContent value="signin" className="space-y-4 mt-6">
+
 
   <div className="space-y-2">
     <Label htmlFor="email">Email</Label>
@@ -335,6 +434,54 @@ const handleEmailPasswordSignIn = async () => {
   </Button>
 
 </TabsContent>
+
+{/*  */}
+{/* NEW STUDENT LOGIN TAB */}
+  <TabsContent value="student" className="space-y-4 mt-6 animate-in fade-in duration-300">
+    <div className="space-y-2">
+      <Label htmlFor="student-user">Student Username</Label>
+      <Input
+        id="student-user"
+        type="text"
+        placeholder="firstname.lastname"
+        value={username} // Ensure you added: const [username, setUsername] = useState("");
+        onChange={(e) => setUsername(e.target.value)}
+        className="rounded-xl border-indigo-100 focus:border-indigo-500"
+      />
+    </div>
+
+    <div className="space-y-2 relative">
+      <Label htmlFor="student-pass">Student Password</Label>
+      <Input
+        id="student-pass"
+        type={showPassword ? "text" : "password"}
+        placeholder="••••••••"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        className="rounded-xl border-indigo-100 focus:border-indigo-500 pr-12"
+      />
+      <button
+        type="button"
+        onClick={() => setShowPassword(!showPassword)}
+        className="absolute right-3 top-9 text-slate-400 hover:text-indigo-600 transition-colors"
+      >
+        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+      </button>
+    </div>
+
+    <Button
+      type="button"
+      onClick={handleStudentLogin}
+      className="w-full bg-indigo-600 hover:bg-indigo-700 h-12 rounded-xl font-bold shadow-lg shadow-indigo-100"
+      disabled={studentAuthLoading || !username || !password}
+    >
+      {studentAuthLoading ? (
+        <Loader2 className="animate-spin" />
+      ) : (
+        "Access Student Portal"
+      )}
+    </Button>
+  </TabsContent>
 
 
                       {/* SIGN UP TAB */}

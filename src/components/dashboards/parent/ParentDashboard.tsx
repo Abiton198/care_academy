@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db } from "@/lib/firebaseConfig";
 import { signOut } from "firebase/auth";
+import { Eye, EyeOff, RefreshCw, UserCheck } from "lucide-react";
 import {
   doc,
   getDoc,
@@ -59,14 +60,31 @@ import { Settings } from "lucide-react";
 const SCHOOL_NAME = "Care Academy";
 
 interface Student {
+  // 🔑 Identity
   id: string;
   firstName: string;
   lastName: string;
   grade: string;
+
+  // 👨‍👩‍👧 Parent linkage
+  parentId: string;
+
+  // 🔐 Student login (NOT Firebase Auth)
+  username: string;
+  passwordHash: string;
+  loginEnabled: boolean;
+
+  // 🎓 Academic info
   subjects?: string[];
-  status?: string;
   learningMode?: "Campus" | "Virtual";
+  status?: "active" | "suspended" | "archived";
+
+  // 🕒 Audit
+  createdBy: string;        // parent uid
+  createdAt: any;           // Firestore Timestamp
+  updatedAt?: any;
 }
+
 
 interface TimetableEntry {
   id: string;
@@ -170,6 +188,16 @@ export default function ParentDashboard() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
 
   const sections = ["Overview", "Registration", "Payments", "Communications", "Status", "Settings"];
+
+const [newStudentFirstName, setNewStudentFirstName] = useState("");
+const [newStudentLastName, setNewStudentLastName] = useState("");
+const [newStudentGrade, setNewStudentGrade] = useState("");
+const [newStudentUsername, setNewStudentUsername] = useState("");
+const [newStudentPassword, setNewStudentPassword] = useState("");
+const [creatingStudent, setCreatingStudent] = useState(false);
+const [selectedStudentForLogin, setSelectedStudentForLogin] = useState<string>("");
+const [showPassword, setShowPassword] = useState(false);
+
 
   // Load parent profile + real-time data
   useEffect(() => {
@@ -350,6 +378,60 @@ export default function ParentDashboard() {
   return () => unsub();
 }, [user?.uid]);
 
+// 2. Helper to generate default username and random password
+const autoFillCredentials = (studentId: string) => {
+  const student = students.find(s => s.id === studentId);
+  if (!student) return;
+
+  // Default Username: firstname.lastname (lowercase)
+  const defaultUser = `${student.firstName.toLowerCase()}.${student.lastName.toLowerCase()}`;
+  
+  // Random 8-character password
+  const randomPass = Math.random().toString(36).slice(-8).toUpperCase();
+
+  setNewStudentUsername(defaultUser);
+  setNewStudentPassword(randomPass);
+  setSelectedStudentForLogin(studentId);
+};
+
+// 3. Updated Logic to Update Existing Student
+const createStudentLogin = async () => {
+  if (!selectedStudentForLogin || !newStudentUsername || !newStudentPassword) {
+    alert("Please select a student and ensure credentials are set.");
+    return;
+  }
+
+  setCreatingStudent(true);
+
+  try {
+    // Basic hash for demo (btoa)
+    const passwordHash = btoa(newStudentPassword); 
+
+    const studentRef = doc(db, "students", selectedStudentForLogin);
+    
+    // Use updateDoc to add credentials to the existing student record
+    await updateDoc(studentRef, {
+      username: newStudentUsername,
+      passwordHash: passwordHash,
+      rawPassword: newStudentPassword, // Stored so parent can see it later if needed
+      loginEnabled: true,
+      updatedAt: new Date(),
+    });
+
+    alert("Credentials successfully linked to " + newStudentUsername);
+    
+    // Clear form
+    setNewStudentUsername("");
+    setNewStudentPassword("");
+    setSelectedStudentForLogin("");
+  } catch (err) {
+    console.error("Link error:", err);
+    alert("Failed to create login.");
+  } finally {
+    setCreatingStudent(false);
+  }
+};
+
 const saveProfileAndContinue = async () => {
   if (!fullName || !contact || !address) {
     alert("Please complete required fields marked with *");
@@ -428,6 +510,101 @@ const saveProfileAndContinue = async () => {
             ))}
           </div>
         </div>
+
+        {/* STUDENT PASSWORDS */}
+       <div className="bg-white rounded-[2.5rem] p-10 border border-slate-100 shadow-sm space-y-8 mt-8">
+  <div className="flex items-center gap-4">
+    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+      <UserCheck size={24} />
+    </div>
+    <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">
+      Student Portal Access
+    </h2>
+  </div>
+
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    {/* Step 1: Select Existing Student */}
+    <div className="space-y-2">
+      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
+        1. Select Registered Student
+      </label>
+      <Select 
+        value={selectedStudentForLogin} 
+        onValueChange={(val) => autoFillCredentials(val)}
+      >
+        <SelectTrigger className="h-14 rounded-2xl border-2 border-slate-100 font-bold">
+          <SelectValue placeholder="Choose a student..." />
+        </SelectTrigger>
+        <SelectContent>
+          {students.map((s) => (
+            <SelectItem key={s.id} value={s.id}>
+              {s.firstName} {s.lastName} (Grade {s.grade})
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+
+    {/* Step 2: Username */}
+    <div className="space-y-2">
+      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
+        2. Assigned Username
+      </label>
+      <Input
+        placeholder="Username"
+        value={newStudentUsername}
+        onChange={(e) => setNewStudentUsername(e.target.value)}
+        className="h-14 rounded-2xl border-2 border-slate-100 font-bold"
+      />
+    </div>
+
+    {/* Step 3: Password with Toggle and Randomizer */}
+    <div className="space-y-2 md:col-span-2">
+      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
+        3. Access Password
+      </label>
+      <div className="relative">
+        <Input
+          placeholder="Password"
+          type={showPassword ? "text" : "password"}
+          value={newStudentPassword}
+          onChange={(e) => setNewStudentPassword(e.target.value)}
+          className="h-14 rounded-2xl border-2 border-slate-100 font-bold pr-24"
+        />
+        <div className="absolute right-2 top-2 flex gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowPassword(!showPassword)}
+            className="h-10 w-10 p-0 rounded-xl"
+          >
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const pass = Math.random().toString(36).slice(-8).toUpperCase();
+              setNewStudentPassword(pass);
+            }}
+            className="h-10 w-10 p-0 rounded-xl text-indigo-600 hover:bg-indigo-50"
+          >
+            <RefreshCw size={16} />
+          </Button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <Button
+    onClick={createStudentLogin}
+    disabled={creatingStudent || !selectedStudentForLogin}
+    className="w-full h-16 bg-indigo-600 hover:bg-indigo-700 text-white rounded-[1.5rem] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 transition-all active:scale-95"
+  >
+    {creatingStudent ? "Syncing..." : "Enable Student Access"}
+  </Button>
+</div>
+
 
         {/* Main Content */}
         <div className="bg-white rounded-3xl shadow-2xl p-8">{renderSection()}</div>
