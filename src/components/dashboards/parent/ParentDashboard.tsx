@@ -74,6 +74,7 @@ interface Student {
   username: string;
   passwordHash: string;
   loginEnabled: boolean;
+  rawPassword?: string;  // password
 
   // 🎓 Academic info
   subjects?: string[];
@@ -371,17 +372,19 @@ const autoFillCredentials = (studentId: string) => {
   const student = students.find(s => s.id === studentId);
   if (!student) return;
 
-  // Default Username: firstname.lastname (lowercase)
-  const defaultUser = `${student.firstName.toLowerCase()}.${student.lastName.toLowerCase()}`;
-  
-  // Random 8-character password
-  const randomPass = Math.random().toString(36).slice(-8).toUpperCase();
-
-  setNewStudentUsername(defaultUser);
-  setNewStudentPassword(randomPass);
+  // If credentials already exist in Firestore, use them
+  if (student.username && student.rawPassword) {
+    setNewStudentUsername(student.username);
+    setNewStudentPassword(student.rawPassword);
+  } else {
+    // Otherwise, generate defaults for a new setup
+    const defaultUser = `${student.firstName.toLowerCase()}.${student.lastName.toLowerCase()}`;
+    const randomPass = Math.random().toString(36).slice(-8).toUpperCase();
+    setNewStudentUsername(defaultUser);
+    setNewStudentPassword(randomPass);
+  }
   setSelectedStudentForLogin(studentId);
 };
-
 // 3. Updated Logic to Update Existing Student
 const createStudentLogin = async () => {
   if (!selectedStudentForLogin || !newStudentUsername || !newStudentPassword) {
@@ -418,6 +421,14 @@ const createStudentLogin = async () => {
   } finally {
     setCreatingStudent(false);
   }
+};
+
+// Manual save password
+// Standalone function for the Refresh Button in your JSX
+const handleManualPasswordReset = (e: React.MouseEvent) => {
+  e.stopPropagation(); // Prevents triggering any parent click events
+  const pass = Math.random().toString(36).slice(-8).toUpperCase();
+  setNewStudentPassword(pass);
 };
 
 const saveProfileAndContinue = async () => {
@@ -568,42 +579,68 @@ const saveProfileAndContinue = async () => {
         </div>
 
         {/* Step 3: Password with Toggle and Randomizer */}
-        <div className="space-y-2 md:col-span-2">
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
-            3. Access Password
-          </label>
-          <div className="relative">
-            <Input
-              placeholder="Password"
-              type={showPassword ? "text" : "password"}
-              value={newStudentPassword}
-              onChange={(e) => setNewStudentPassword(e.target.value)}
-              className="h-14 rounded-2xl border-2 border-slate-100 font-bold pr-24"
-            />
-            <div className="absolute right-2 top-2 flex gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowPassword(!showPassword)}
-                className="h-10 w-10 p-0 rounded-xl"
-              >
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation(); // Prevents clicking button from triggering collapse
-                  const pass = Math.random().toString(36).slice(-8).toUpperCase();
-                  setNewStudentPassword(pass);
-                }}
-                className="h-10 w-10 p-0 rounded-xl text-indigo-600 hover:bg-indigo-50"
-              >
-                <RefreshCw size={16} />
-              </Button>
-            </div>
-          </div>
-        </div>
+        {/* Step 3: Password with Toggle and Randomizer */}
+{/* Step 3: Password with Toggle and Randomizer */}
+<div className="space-y-2 md:col-span-2">
+  <div className="flex justify-between items-center px-2">
+    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+      3. Access Password
+    </label>
+    {newStudentPassword && (
+      <button 
+        type="button"
+        onClick={() => {
+          const text = `Username: ${newStudentUsername}\nPassword: ${newStudentPassword}`;
+          navigator.clipboard.writeText(text);
+          alert("Credentials copied to clipboard!");
+        }}
+        className="text-[9px] font-black text-indigo-600 uppercase hover:underline"
+      >
+        Copy Credentials
+      </button>
+    )}
+  </div>
+
+  <div className="relative group">
+    <Input
+      placeholder="Password"
+      type={showPassword ? "text" : "password"}
+      value={newStudentPassword}
+      onChange={(e) => setNewStudentPassword(e.target.value)}
+      className="h-14 rounded-2xl border-2 border-slate-100 font-bold pr-32 focus:border-indigo-500 transition-all bg-white"
+    />
+    
+    <div className="absolute right-2 top-2 flex gap-1 bg-white pl-2">
+      {/* VISIBILITY TOGGLE */}
+      <Button
+        variant="ghost"
+        size="sm"
+        type="button"
+        onClick={() => setShowPassword(!showPassword)}
+        className="h-10 w-10 p-0 rounded-xl hover:bg-slate-50"
+      >
+        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+      </Button>
+
+      {/* MANUAL REFRESH BUTTON */}
+      <Button
+        variant="ghost"
+        size="sm"
+        type="button"
+        onClick={handleManualPasswordReset}
+        title="Generate New Password"
+        className="h-10 w-10 p-0 rounded-xl text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 transition-colors border border-transparent hover:border-indigo-100"
+      >
+        <RefreshCw size={16} />
+      </Button>
+    </div>
+  </div>
+  
+  <p className="text-[9px] text-slate-400 ml-2 font-medium italic">
+    * This password is encrypted. Use the refresh icon only if you wish to overwrite the current password.
+  </p>
+</div>
+
       </div>
     </div>
   </div>
