@@ -8,7 +8,6 @@ import { doc, getDoc } from "firebase/firestore";
 /* ============================================================
    TYPES
 ============================================================ */
-// Added 'student' to the roles
 export type UserRole = "parent" | "teacher" | "principal" | "admin" | "student";
 
 export interface AppUser {
@@ -19,21 +18,28 @@ export interface AppUser {
   classActivated?: boolean;
   firstName?: string;
   lastName?: string;
+  grade?: string;      
+  parentName?: string; 
 }
 
 /* ============================================================
-   CONTEXT
+   CONTEXT INTERFACE
 ============================================================ */
 interface AuthContextType {
   user: AppUser | null;
   loading: boolean;
-  logout: () => Promise<void>;
+  logoutStudent: () => void;
+  logoutParent: () => Promise<void>;
+  logoutAll: () => Promise<void>;
 }
 
+// Initialize with defaults that match the Interface
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  logout: async () => {},
+  logoutStudent: () => {},
+  logoutParent: async () => {},
+  logoutAll: async () => {},
 });
 
 /* ============================================================
@@ -65,7 +71,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               lastName: data.lastName || "",
             });
           } else {
-            // This handles the gap between Auth creation and Firestore doc creation
             console.log("Waiting for profile creation...");
           }
         } catch (err) {
@@ -86,7 +91,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             email: null,
             role: "student",
             firstName: studentData.firstName || "Student",
-            lastName: "",
+            lastName: studentData.lastName || "",
           });
         } catch (e) {
           console.error("Invalid student session", e);
@@ -94,7 +99,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setUser(null);
         }
       } else {
-        // No Firebase user and no Student session
         setUser(null);
       }
 
@@ -105,25 +109,55 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   /* ============================================================
-     LOGOUT (CLEARS EVERYTHING)
+     TARGETED LOGOUT HANDLERS
   ============================================================ */
-  const logout = async () => {
-    try {
-      // 1. Sign out of Firebase Auth
-      await signOut(auth);
-      // 2. Clear Student LocalStorage
-      localStorage.removeItem("studentSession");
-      // 3. Reset State
+
+  // 1. Logs out ONLY the Student (keeps Parent/Firebase active)
+  const logoutStudent = () => {
+    localStorage.removeItem("studentSession");
+    // If current user is a student, clear state and redirect
+    if (user?.role === "student") {
       setUser(null);
-      // 4. Force Redirect to login
-      window.location.href = "/login";
-    } catch (error) {
-      console.error("Logout failed:", error);
+      window.location.href = "/"; 
     }
   };
 
+  // 2. Logs out ONLY the Parent/Admin/Teacher (Firebase Auth)
+  const logoutParent = async () => {
+    try {
+      await signOut(auth);
+      // We do NOT touch studentSession localStorage here
+      if (user?.role !== "student") {
+        setUser(null);
+      }
+      window.location.href = "/";
+    } catch (error) {
+      console.error("Parent logout failed:", error);
+    }
+  };
+
+  // 3. Global Logout (Logs out of everything)
+  const logoutAll = async () => {
+    localStorage.removeItem("studentSession");
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error("SignOut error:", err);
+    }
+    setUser(null);
+    window.location.href = "/";
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, logout }}>
+    <AuthContext.Provider 
+      value={{ 
+        user, 
+        loading, 
+        logoutStudent,
+        logoutParent,
+        logoutAll
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

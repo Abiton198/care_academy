@@ -53,6 +53,7 @@ import { format } from "date-fns";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Settings } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 /* ======================================================
    CONSTANTS & TYPES
@@ -167,6 +168,7 @@ function HybridSwitch({ student }: { student: Student }) {
    MAIN PARENT DASHBOARD
 ====================================================== */
 export default function ParentDashboard() {
+  const { logoutStudent, logoutParent } = useAuth();
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -197,7 +199,7 @@ const [newStudentPassword, setNewStudentPassword] = useState("");
 const [creatingStudent, setCreatingStudent] = useState(false);
 const [selectedStudentForLogin, setSelectedStudentForLogin] = useState<string>("");
 const [showPassword, setShowPassword] = useState(false);
-
+const [isPasswordCardOpen, setIsPasswordCardOpen] = useState(false);
 
   // Load parent profile + real-time data
   useEffect(() => {
@@ -271,38 +273,24 @@ const [showPassword, setShowPassword] = useState(false);
     };
   }, [user?.uid, selectedChildId]);
 
-  const handleLogout = async () => {
-    await signOut(auth);
-    navigate("/");
-  };
-
-  // const saveProfileAndContinue = async () => {
-  //   if (!fullName || !contact || !address) {
-  //     alert("Please complete required fields.");
-  //     return;
-  //   }
-
-  //   try {
-  //     await setDoc(
-  //       doc(db, "parents", user!.uid),
-  //       {
-  //         title,
-  //         fullName,
-  //         contact,
-  //         address,
-  //         profileCompleted: true,
-          // updatedAt: new Date(),
-  //       },
-  //       { merge: true }
-  //     );
-
-  //     setProfileCompleted(true);
-  //     setWizardStep(2);
-  //     setActiveTab("Registration");
-  //   } catch (err) {
-  //     console.error("Profile save failed:", err);
-  //   }
-  // };
+ 
+const handleLogout = async () => {
+  try {
+    if (user?.role === "parent") {
+      // 1. If a student is logging out
+      logoutParent()
+      // Note: logoutStudent handles the redirect to /student-login internally
+    } else {
+      // 2. If a Parent, Teacher, or Admin is logging out
+      
+      await logoutStudent(); 
+      // This will clear Firebase Auth but leave studentSession alone
+      navigate("/"); 
+    }
+  } catch (err) {
+    console.error("Logout failed", err);
+  }
+};
 
   const renderSection = () => {
     switch (activeTab) {
@@ -511,86 +499,110 @@ const saveProfileAndContinue = async () => {
           </div>
         </div>
 
-        {/* STUDENT PASSWORDS */}
-       <div className="bg-white rounded-[2.5rem] p-10 border border-slate-100 shadow-sm space-y-8 mt-8">
-  <div className="flex items-center gap-4">
-    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
-      <UserCheck size={24} />
+     {/* STUDENT PASSWORDS */}
+<div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm mt-8 transition-all duration-300 overflow-hidden">
+  
+  {/* CLICKABLE HEADER */}
+  <button 
+    onClick={() => setIsPasswordCardOpen(!isPasswordCardOpen)}
+    className="w-full p-10 flex items-center justify-between hover:bg-slate-50/50 transition-colors text-left"
+  >
+    <div className="flex items-center gap-4">
+      <div className={`p-3 rounded-2xl transition-colors ${isPasswordCardOpen ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600'}`}>
+        <UserCheck size={24} />
+      </div>
+      <div>
+        <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">
+          Student Portal Access
+        </h2>
+        {!isPasswordCardOpen && (
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+            Click to manage usernames and passwords
+          </p>
+        )}
+      </div>
     </div>
-    <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">
-      Student Portal Access
-    </h2>
-  </div>
-
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-    {/* Step 1: Select Existing Student */}
-    <div className="space-y-2">
-      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
-        1. Select Registered Student
-      </label>
-      <Select 
-        value={selectedStudentForLogin} 
-        onValueChange={(val) => autoFillCredentials(val)}
-      >
-        <SelectTrigger className="h-14 rounded-2xl border-2 border-slate-100 font-bold">
-          <SelectValue placeholder="Choose a student..." />
-        </SelectTrigger>
-        <SelectContent>
-          {students.map((s) => (
-            <SelectItem key={s.id} value={s.id}>
-              {s.firstName} {s.lastName} (Grade {s.grade})
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    
+    <div className={`transition-transform duration-300 ${isPasswordCardOpen ? 'rotate-180' : 'rotate-0'}`}>
+      <ChevronDown size={28} className="text-slate-300" />
     </div>
+  </button>
 
-    {/* Step 2: Username */}
-    <div className="space-y-2">
-      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
-        2. Assigned Username
-      </label>
-      <Input
-        placeholder="Username"
-        value={newStudentUsername}
-        onChange={(e) => setNewStudentUsername(e.target.value)}
-        className="h-14 rounded-2xl border-2 border-slate-100 font-bold"
-      />
-    </div>
-
-    {/* Step 3: Password with Toggle and Randomizer */}
-    <div className="space-y-2 md:col-span-2">
-      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
-        3. Access Password
-      </label>
-      <div className="relative">
-        <Input
-          placeholder="Password"
-          type={showPassword ? "text" : "password"}
-          value={newStudentPassword}
-          onChange={(e) => setNewStudentPassword(e.target.value)}
-          className="h-14 rounded-2xl border-2 border-slate-100 font-bold pr-24"
-        />
-        <div className="absolute right-2 top-2 flex gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowPassword(!showPassword)}
-            className="h-10 w-10 p-0 rounded-xl"
+  {/* EXPANDABLE CONTENT */}
+  <div className={`transition-all duration-300 ease-in-out ${isPasswordCardOpen ? 'max-h-[1000px] opacity-100 p-10 pt-0' : 'max-h-0 opacity-0 pointer-events-none'}`}>
+    <div className="space-y-8 border-t border-slate-50 pt-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Step 1: Select Existing Student */}
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
+            1. Select Registered Student
+          </label>
+          <Select 
+            value={selectedStudentForLogin} 
+            onValueChange={(val) => autoFillCredentials(val)}
           >
-            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              const pass = Math.random().toString(36).slice(-8).toUpperCase();
-              setNewStudentPassword(pass);
-            }}
-            className="h-10 w-10 p-0 rounded-xl text-indigo-600 hover:bg-indigo-50"
-          >
-            <RefreshCw size={16} />
-          </Button>
+            <SelectTrigger className="h-14 rounded-2xl border-2 border-slate-100 font-bold">
+              <SelectValue placeholder="Choose a student..." />
+            </SelectTrigger>
+            <SelectContent>
+              {students.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.firstName} {s.lastName} (Grade {s.grade})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Step 2: Username */}
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
+            2. Assigned Username
+          </label>
+          <Input
+            placeholder="Username"
+            value={newStudentUsername}
+            onChange={(e) => setNewStudentUsername(e.target.value)}
+            className="h-14 rounded-2xl border-2 border-slate-100 font-bold"
+          />
+        </div>
+
+        {/* Step 3: Password with Toggle and Randomizer */}
+        <div className="space-y-2 md:col-span-2">
+          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
+            3. Access Password
+          </label>
+          <div className="relative">
+            <Input
+              placeholder="Password"
+              type={showPassword ? "text" : "password"}
+              value={newStudentPassword}
+              onChange={(e) => setNewStudentPassword(e.target.value)}
+              className="h-14 rounded-2xl border-2 border-slate-100 font-bold pr-24"
+            />
+            <div className="absolute right-2 top-2 flex gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowPassword(!showPassword)}
+                className="h-10 w-10 p-0 rounded-xl"
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation(); // Prevents clicking button from triggering collapse
+                  const pass = Math.random().toString(36).slice(-8).toUpperCase();
+                  setNewStudentPassword(pass);
+                }}
+                className="h-10 w-10 p-0 rounded-xl text-indigo-600 hover:bg-indigo-50"
+              >
+                <RefreshCw size={16} />
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

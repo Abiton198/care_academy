@@ -38,6 +38,63 @@ import {
   ShieldCheck, FileText, Briefcase, Trash2, Loader2
 } from "lucide-react";
 
+
+const British_Curriculum_SUBJECTS = {
+  Primary: {
+    Core: [
+      "British Curriculum Primary English",
+      "British Curriculum Primary Mathematics",
+      "British Curriculum Primary Science"
+    ],
+    Electives: [
+      "British Curriculum Primary Global Perspectives",
+      "British Curriculum Primary Digital Literacy",
+      "British Curriculum Primary Art & Design",
+      "Coding, AI & Robotics"
+    ]
+  },
+  Secondary_IGCSE: {
+    Core: [
+      "English Language (IGCSE)",
+      "Mathematics (IGCSE)",
+      "Science (Co-ordinated or Combined)"
+    ],
+    Electives: [
+      "Physics (IGCSE)",
+      "Chemistry (IGCSE)",
+      "Biology (IGCSE)",
+      "Computer Science (IGCSE)",
+      "Business Studies (IGCSE)",
+      "Economics (IGCSE)",
+      "Geography (IGCSE)",
+      "History (IGCSE)",
+      "Coding (IGCSE)",
+      "Accounting (IGCSE)",
+      "Sociology (IGCSE)",
+      "Coding, AI & Robotics"
+    ]
+  },
+  Secondary_ALevel: {
+    Core: [], // A-Levels are path-specific electives
+    Electives: [
+      "Mathematics (A-Level)",
+      "Further Mathematics (A-Level)",
+      "Physics (A-Level)",
+      "Chemistry (A-Level)",
+      "Biology (A-Level)",
+      "Computer Science (A-Level)",
+      "English Literature (A-Level)",
+      "Business Studies (A-Level)",
+      "Economics (A-Level)",
+      "Geography (A-Level)",
+      "History (A-Level)",
+      "Psychology (A-Level)",
+      "Law (A-Level)",
+      "Coding, AI & Robotics"
+    ]
+  }
+};
+
 /* ---------------- Sub-Component: Global Billing Modal ---------------- */
 const GlobalBillingModal = ({ students, isOpen, onOpenChange, onBill, isPublishing }: any) => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -490,12 +547,66 @@ useEffect(() => {
                   <TabsTrigger value="action" className="font-black uppercase text-[10px]">{selectedType === "student" ? "Financial Ledger" : "Credentials"}</TabsTrigger>
                 </TabsList>
                 
-                <TabsContent value="overview" className="grid grid-cols-2 gap-6">
-                  <InfoBox label="Full Name" value={selectedType === "student" ? `${selectedItem?.firstName} ${selectedItem?.lastName}` : `${selectedItem?.personalInfo?.firstName} ${selectedItem?.personalInfo?.lastName}`} />
-                  <InfoBox label="Email" value={selectedItem?.personalInfo?.email || selectedItem?.parentEmail || "N/A"} />
-                  <InfoBox label="Level" value={selectedItem?.grade || selectedItem?.personalInfo?.gradePhase || "N/A"} />
-                  <InfoBox label="Status" value={selectedItem?.status || "Active"} />
-                </TabsContent>
+               <TabsContent value="overview" className="space-y-6">
+  {/* Basic Info Grid */}
+  <div className="grid grid-cols-2 gap-6">
+    <InfoBox label="Full Name" value={selectedType === "student" ? `${selectedItem?.firstName} ${selectedItem?.lastName}` : `${selectedItem?.personalInfo?.firstName} ${selectedItem?.personalInfo?.lastName}`} />
+    <InfoBox label="Email" value={selectedItem?.personalInfo?.email || selectedItem?.parentEmail || "N/A"} />
+    <InfoBox label="Level" value={selectedItem?.grade || selectedItem?.personalInfo?.gradePhase || "N/A"} />
+    <InfoBox label="Status" value={selectedItem?.status || "Active"} />
+  </div>
+
+  {/* NEW: Categorized Subjects Section */}
+  {selectedType === "student" && selectedItem?.subjects && (
+    <div className="mt-8 space-y-4 pt-6 border-t border-slate-100">
+      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 ml-1">Academic Curriculum Breakdown</h4>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Core Subjects Box */}
+        <div className="bg-indigo-50/50 rounded-2xl p-4 border border-indigo-100">
+          <p className="text-[9px] font-black text-indigo-400 uppercase mb-3 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" /> Core Modules
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {selectedItem.subjects
+              .filter(sub => {
+                const master = selectedItem.grade?.startsWith("Stage") 
+                  ? British_Curriculum_SUBJECTS.Primary.Core 
+                  : British_Curriculum_SUBJECTS.Secondary_IGCSE.Core;
+                return master.includes(sub);
+              })
+              .map(sub => (
+                <Badge key={sub} className="bg-white text-indigo-700 border-indigo-200 text-[10px] font-bold px-3 py-1">
+                  {sub}
+                </Badge>
+              ))}
+          </div>
+        </div>
+
+        {/* Elective Subjects Box */}
+        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+          <p className="text-[9px] font-black text-slate-400 uppercase mb-3 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" /> Electives
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {selectedItem.subjects
+              .filter(sub => {
+                const master = selectedItem.grade?.startsWith("Stage") 
+                  ? British_Curriculum_SUBJECTS.Primary.Core 
+                  : British_Curriculum_SUBJECTS.Secondary_IGCSE.Core;
+                return !master.includes(sub);
+              })
+              .map(sub => (
+                <Badge key={sub} variant="outline" className="bg-white text-slate-600 border-slate-200 text-[10px] font-bold px-3 py-1">
+                  {sub}
+                </Badge>
+              ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )}
+</TabsContent>
 
                 <TabsContent value="action">
                   {selectedType === "student" ? (

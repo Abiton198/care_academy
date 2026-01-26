@@ -117,8 +117,9 @@ function ControlBtn({ icon: Icon, label, active, onClick, danger, success }: any
 // MAIN COMPONENT
 // =============================================================================
 const StudentDashboard: React.FC = () => {
+  const { logoutStudent, logoutParent } = useAuth();
   const navigate = useNavigate();
-  const { user, loading: authLoading, logout } = useAuth();
+  const { user, loading: authLoading} = useAuth();
 
   /* ---------------- DATA STATE ---------------- */
   const [profile, setProfile] = useState<StudentProfile | null>(null);
@@ -163,6 +164,7 @@ const { studentId } = useParams<{ studentId: string }>();
     firstName: string;
     lastName: string;
     email: string;
+    grade:string;
   } | null>(null);
    const { student } = useStudentAuth();
 
@@ -246,11 +248,18 @@ const { studentId } = useParams<{ studentId: string }>();
   const today = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date());
   const todayClasses = timetable.filter(t => t.day === today);
 
-
-  const handleLogout = async () => {
+const handleLogout = async () => {
   try {
-    await logout();           // Firebase sign out
-    navigate("/parent-dashboard");      // or "/parent/dashboard"
+    if (user?.role === "student") {
+      // 1. If a student is logging out
+      logoutStudent(); 
+      // Note: logoutStudent handles the redirect to /student-login internally
+    } else {
+      // 2. If a Parent, Teacher, or Admin is logging out
+      await logoutParent();
+      // This will clear Firebase Auth but leave studentSession alone
+      navigate("/"); 
+    }
   } catch (err) {
     console.error("Logout failed", err);
   }
@@ -536,14 +545,7 @@ if (!profile) {
     </div>
   );
 }
-//   if (authLoading || !profileLoaded) {
-//   return (
-//     <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50">
-//       <Loader2 className="animate-spin text-indigo-600 mb-4" size={40} />
-//       <p className="font-black text-slate-400 uppercase tracking-widest text-xs">Synchronizing Portal...</p>
-//     </div>
-//   );
-// }
+
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
@@ -553,24 +555,33 @@ if (!profile) {
      {/* HEADER */}
 <header className="bg-white border-b sticky top-0 z-40">
   <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-    <div>
-      <h1 className="font-black text-slate-900">
-        {profile?.firstName
-          ? `Welcome, ${profile.firstName}`
-          : "Student Portal"}
-      </h1>
+    {/* STUDENT HEADER INFO */}
+<div className="flex flex-col">
+  <h1 className="text-xl font-black text-slate-900 uppercase">
+   Welcome {user?.firstName} {user?.lastName}
+  </h1>
+  
+  <p className="text-xs text-slate-400 flex items-center">
+    {/* Fallback logic: check profile first, then user object */}
+    {profile?.grade || user?.grade ? (
+      <span className="font-bold text-indigo-500 uppercase tracking-wider">
+        Grade {profile?.grade || user?.grade}
+      </span>
+    ) : (
+      <span className="animate-pulse italic">Syncing Academic Record...</span>
+    )}
 
-      <p className="text-xs text-slate-400">
-        {profile?.grade
-          ? `Grade ${profile.grade}`
-          : "Loading student profile..."}
-        {profile?.parentName && (
-          <span className="ml-2 text-slate-300">
-            · Linked to {profile.parentName}
-          </span>
-        )}
-      </p>
-    </div>
+    {/* Parent Link Info */}
+    {(profile?.parentName || user?.parentName) && (
+      <span className="ml-2 flex items-center gap-2">
+        <span className="text-slate-200">|</span>
+        <span className="text-slate-400 font-medium">
+          Linked to {profile?.parentName || user?.parentName}
+        </span>
+      </span>
+    )}
+  </p>
+</div>
 
     <Button variant="ghost" onClick={handleLogout}>
       <LogOut size={16} className="mr-2" />

@@ -20,74 +20,36 @@ import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
-import { Loader2, Trash2, Plus, Calendar as CalendarIcon, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, Trash2, Plus, Calendar as CalendarIcon, AlertCircle, Clock, UserCheck } from "lucide-react";
 
-// time
-import { Clock } from "lucide-react";
-
-const TimePicker = ({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) => {
-  const hours = Array.from({ length: 24 }, (_, i) =>
-    i.toString().padStart(2, "0")
-  );
+// Time Picker remains the same
+const TimePicker = ({ value, onChange }: { value: string; onChange: (v: string) => void; }) => {
+  const hours = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, "0"));
   const minutes = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"];
-
   const [h, m] = value ? value.split(":") : ["", ""];
 
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          className="h-12 rounded-2xl bg-slate-100 border-none font-bold text-xs shadow-inner w-full justify-start"
-        >
+        <Button variant="outline" className="h-12 rounded-2xl bg-slate-100 border-none font-bold text-xs shadow-inner w-full justify-start">
           <Clock size={16} className="mr-2 text-slate-500" />
           {value || "Select Time"}
         </Button>
       </PopoverTrigger>
-
       <PopoverContent className="w-64 p-4 rounded-2xl shadow-xl border-none">
         <div className="grid grid-cols-2 gap-3">
-          {/* Hours */}
           <div>
-            <Label className="text-[10px] font-black uppercase text-slate-400">
-              Hour
-            </Label>
+            <Label className="text-[10px] font-black uppercase text-slate-400">Hour</Label>
             <Select value={h} onValueChange={(val) => onChange(`${val}:${m || "00"}`)}>
-              <SelectTrigger className="h-10 rounded-xl bg-slate-50">
-                <SelectValue placeholder="HH" />
-              </SelectTrigger>
-              <SelectContent>
-                {hours.map((hr) => (
-                  <SelectItem key={hr} value={hr}>
-                    {hr}
-                  </SelectItem>
-                ))}
-              </SelectContent>
+              <SelectTrigger className="h-10 rounded-xl bg-slate-50"><SelectValue placeholder="HH" /></SelectTrigger>
+              <SelectContent>{hours.map((hr) => (<SelectItem key={hr} value={hr}>{hr}</SelectItem>))}</SelectContent>
             </Select>
           </div>
-
-          {/* Minutes */}
           <div>
-            <Label className="text-[10px] font-black uppercase text-slate-400">
-              Minute
-            </Label>
+            <Label className="text-[10px] font-black uppercase text-slate-400">Minute</Label>
             <Select value={m} onValueChange={(val) => onChange(`${h || "08"}:${val}`)}>
-              <SelectTrigger className="h-10 rounded-xl bg-slate-50">
-                <SelectValue placeholder="MM" />
-              </SelectTrigger>
-              <SelectContent>
-                {minutes.map((min) => (
-                  <SelectItem key={min} value={min}>
-                    {min}
-                  </SelectItem>
-                ))}
-              </SelectContent>
+              <SelectTrigger className="h-10 rounded-xl bg-slate-50"><SelectValue placeholder="MM" /></SelectTrigger>
+              <SelectContent>{minutes.map((min) => (<SelectItem key={min} value={min}>{min}</SelectItem>))}</SelectContent>
             </Select>
           </div>
         </div>
@@ -96,12 +58,11 @@ const TimePicker = ({
   );
 };
 
-
 /* =========================================================
-   CONSTANTS
+   MAIN COMPONENT
 ========================================================= */
 
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const CAMBRIDGE_GRADES = [
   "Stage 1", "Stage 2", "Stage 3", "Stage 4", "Stage 5", "Stage 6",
   "Checkpoint (Yr 7-9)", "IGCSE 1 (Yr 10)", "IGCSE 2 (Yr 11)", "AS Level", "A Level"
@@ -130,14 +91,12 @@ const TimetableManager: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Form State
   const [day, setDay] = useState("");
   const [time, setTime] = useState("");
   const [grade, setGrade] = useState("");
   const [subject, setSubject] = useState("");
   const [selectedTeacherId, setSelectedTeacherId] = useState("");
 
-  /* 1. SYNC TEACHERS */
   useEffect(() => {
     const q = query(collection(db, "teacherApplications"), where("status", "==", "approved"));
     const unsub = onSnapshot(q, (snap) => {
@@ -154,7 +113,6 @@ const TimetableManager: React.FC = () => {
     return () => unsub();
   }, []);
 
-  /* 2. SYNC TIMETABLE */
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "timetable"), (snap) => {
       setEntries(snap.docs.map((d) => ({ id: d.id, ...d.data() } as TimetableEntry)));
@@ -163,7 +121,6 @@ const TimetableManager: React.FC = () => {
     return () => unsub();
   }, []);
 
-  /* 3. FILTER LOGIC */
   const availableSubjects = useMemo(() => {
     const allSubs = teachers.flatMap(t => t.subjects);
     return Array.from(new Set(allSubs)).sort();
@@ -174,48 +131,67 @@ const TimetableManager: React.FC = () => {
     return teachers.filter(t => t.subjects.includes(subject));
   }, [subject, teachers]);
 
-  /* 4. ACTIONS */
   const createSlot = async () => {
-    if (!day || !time || !grade || !subject || !selectedTeacherId) {
-      alert("Validation Failed: Please ensure all 5 fields are selected.");
-      return;
-    }
+  if (!day || !time || !grade || !subject || !selectedTeacherId) {
+    alert("Validation Failed: Please ensure all 5 fields are selected.");
+    return;
+  }
 
-    setIsSaving(true);
-    const teacherObj = teachers.find(t => t.id === selectedTeacherId);
+  setIsSaving(true);
+  const teacherObj = teachers.find(t => t.id === selectedTeacherId);
 
-    const hasConflict = entries.some(
-      e => e.day === day && e.time === time && e.grade === grade
-    );
+  // ✅ UPDATED CONFLICT LOGIC:
+  // Allow same teacher for Stage 4 & Stage 5 simultaneously
+  const teacherBusy = entries.some(e => {
+    const isSameTime = e.day === day && e.time === time && e.teacherUid === selectedTeacherId;
+    if (!isSameTime) return false;
 
-    if (hasConflict) {
-      alert(`Schedule Conflict: ${grade} already has a class at ${time} on ${day}.`);
-      setIsSaving(false);
-      return;
-    }
+    // EXCEPTION: If current selection is Stage 4 and existing entry is Stage 5 (or vice versa)
+    // they are NOT considered "busy" (blocked), they are allowed to co-teach.
+    const isCoTeachingStage = 
+      (grade === "Stage 4" && e.grade === "Stage 5") || 
+      (grade === "Stage 5" && e.grade === "Stage 4");
 
-    try {
-      await addDoc(collection(db, "timetable"), {
-        day,
-        time,
-        grade,
-        subject,
-        curriculum: "Cambridge",
-        teacherName: teacherObj?.name || "Unknown",
-        teacherUid: selectedTeacherId,
-        createdAt: serverTimestamp(),
-      });
-      
-      // Success: Only reset subject/teacher to allow quick entry for same grade/day
-      setSubject("");
-      setSelectedTeacherId("");
-    } catch (err: any) {
-      console.error("Firestore Error:", err);
-      alert("Database Error: " + err.message);
-    } finally {
-      setIsSaving(false);
-    }
-  };
+    return !isCoTeachingStage; // Block only if it's NOT a valid co-teaching stage
+  });
+
+  const classExists = entries.some(
+    e => e.day === day && e.time === time && e.grade === grade && e.subject === subject
+  );
+
+  if (teacherBusy) {
+    alert(`Conflict: Teacher ${teacherObj?.name} is already teaching a different level at ${time} on ${day}.`);
+    setIsSaving(false);
+    return;
+  }
+
+  if (classExists) {
+    alert(`Conflict: ${grade} already has ${subject} scheduled at ${time} on ${day}.`);
+    setIsSaving(false);
+    return;
+  }
+
+  try {
+    await addDoc(collection(db, "timetable"), {
+      day,
+      time,
+      grade,
+      subject,
+      curriculum: "Cambridge",
+      teacherName: teacherObj?.name || "Unknown",
+      teacherUid: selectedTeacherId,
+      createdAt: serverTimestamp(),
+    });
+    
+    setSubject("");
+    setSelectedTeacherId("");
+  } catch (err: any) {
+    console.error("Firestore Error:", err);
+    alert("Database Error: " + err.message);
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   const deleteSlot = async (id: string) => {
     if (confirm("Permanently delete this class entry?")) {
@@ -228,14 +204,14 @@ const TimetableManager: React.FC = () => {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       
-      {/* SELECTION TRACKER (Debug Bar) */}
+      {/* SELECTION TRACKER */}
       <div className="bg-slate-900 p-4 rounded-3xl shadow-2xl flex flex-wrap gap-6 items-center justify-center border border-slate-800">
-        <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mr-2">Status Panel:</p>
+        <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mr-2">Scheduler Active:</p>
         <StatusItem label="Day" value={day} />
         <StatusItem label="Time" value={time} />
         <StatusItem label="Grade" value={grade} />
         <StatusItem label="Subject" value={subject} />
-        <StatusItem label="Teacher" value={selectedTeacherId ? "Selected" : null} />
+        <StatusItem label="Teacher" value={selectedTeacherId ? "Ready" : null} />
       </div>
 
       <Card className="border-none shadow-2xl bg-white rounded-[2.5rem] overflow-hidden">
@@ -246,35 +222,26 @@ const TimetableManager: React.FC = () => {
             </div>
             <div>
               <CardTitle className="text-xl font-black uppercase tracking-tight">Cambridge Timetable Master</CardTitle>
-              <p className="text-indigo-100 text-[10px] font-bold uppercase tracking-widest">Global Schedule Management</p>
+              <p className="text-indigo-100 text-[10px] font-bold uppercase tracking-widest">Supports Overlapping Sessions</p>
             </div>
           </div>
         </div>
         
         <CardContent className="p-8">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-end">
-            
-            {/* Day & Time */}
-        <div className="space-y-3">
-  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">
-    Timing
-  </Label>
-  <div className="flex gap-2">
-    <Select value={day} onValueChange={setDay}>
-      <SelectTrigger className="rounded-2xl border-none bg-slate-100 font-bold text-xs h-12 shadow-inner">
-        <SelectValue placeholder="Day" />
-      </SelectTrigger>
-      <SelectContent>
-        {DAYS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-      </SelectContent>
-    </Select>
+            <div className="space-y-3">
+              <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Timing</Label>
+              <div className="flex gap-2">
+                <Select value={day} onValueChange={setDay}>
+                  <SelectTrigger className="rounded-2xl border-none bg-slate-100 font-bold text-xs h-12 shadow-inner">
+                    <SelectValue placeholder="Day" />
+                  </SelectTrigger>
+                  <SelectContent>{DAYS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+                </Select>
+                <TimePicker value={time} onChange={setTime} />
+              </div>
+            </div>
 
-    <TimePicker value={time} onChange={setTime} />
-  </div>
-</div>
-
-
-            {/* Grade Selection */}
             <div className="space-y-3">
               <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Grade Level</Label>
               <Select value={grade} onValueChange={(v) => setGrade(v)}>
@@ -285,7 +252,6 @@ const TimetableManager: React.FC = () => {
               </Select>
             </div>
 
-            {/* Subject Selection */}
             <div className="space-y-3">
               <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Subject</Label>
               <Select value={subject} onValueChange={(v) => { setSubject(v); setSelectedTeacherId(""); }}>
@@ -296,7 +262,6 @@ const TimetableManager: React.FC = () => {
               </Select>
             </div>
 
-            {/* Teacher Selection */}
             <div className="space-y-3">
               <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Instructor</Label>
               <Select value={selectedTeacherId} onValueChange={(v) => setSelectedTeacherId(v)} disabled={!subject}>
@@ -310,9 +275,9 @@ const TimetableManager: React.FC = () => {
             <Button 
               onClick={createSlot}
               disabled={isSaving}
-              className="w-full bg-indigo-600 hover:bg-slate-900 text-white font-black rounded-2xl h-12 shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+              className="w-full bg-indigo-600 hover:bg-slate-900 text-white font-black rounded-2xl h-12 shadow-lg transition-all"
             >
-              {isSaving ? <Loader2 className="animate-spin" size={18} /> : <><Plus size={18}/> PUBLISH SLOT</>}
+              {isSaving ? <Loader2 className="animate-spin" size={18} /> : <><Plus size={18} className="mr-2"/> PUBLISH SLOT</>}
             </Button>
           </div>
         </CardContent>
@@ -321,7 +286,11 @@ const TimetableManager: React.FC = () => {
       {/* TIMETABLE GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {DAYS.map((d) => {
-          const dayEntries = entries.filter(e => e.day === d).sort((a,b) => a.time.localeCompare(b.time));
+          // Sort entries by time and then by grade to keep them organized
+          const dayEntries = entries
+            .filter(e => e.day === d)
+            .sort((a,b) => a.time.localeCompare(b.time) || a.grade.localeCompare(b.grade));
+
           return (
             <Card key={d} className="border-none shadow-xl rounded-[2.5rem] bg-white min-h-[400px] flex flex-col">
               <div className="bg-slate-50 p-6 rounded-t-[2.5rem] border-b border-slate-100 text-center">
@@ -333,17 +302,19 @@ const TimetableManager: React.FC = () => {
                     <PopoverTrigger asChild>
                       <div className="p-5 rounded-3xl bg-white border border-slate-100 hover:border-indigo-500 hover:shadow-xl transition-all cursor-pointer group relative">
                         <div className="flex justify-between items-center mb-3">
-                          <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-none text-[9px] font-black px-3 py-1 rounded-lg">{e.time}</Badge>
-                          <span className="text-[9px] font-black text-slate-300 uppercase">{e.grade}</span>
+                          <div className="flex gap-2">
+                             <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-none text-[9px] font-black px-3 py-1 rounded-lg">{e.time}</Badge>
+                             <Badge variant="outline" className="text-[8px] font-black uppercase text-indigo-400 border-indigo-100">{e.grade}</Badge>
+                          </div>
                         </div>
                         <p className="font-black text-slate-800 text-sm uppercase leading-tight">{e.subject}</p>
                         <div className="flex items-center gap-2 mt-2">
-                           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                           <UserCheck size={12} className="text-emerald-500" />
                            <p className="text-[10px] text-slate-400 font-bold">{e.teacherName}</p>
                         </div>
                       </div>
                     </PopoverTrigger>
-                    <PopoverContent className="w-56 p-2 rounded-2xl border-none shadow-2xl bg-white/90 backdrop-blur-md">
+                    <PopoverContent className="w-56 p-2 rounded-2xl border-none shadow-2xl bg-white">
                        <Button variant="ghost" onClick={() => deleteSlot(e.id)} className="w-full justify-start text-rose-500 hover:bg-rose-50 font-black text-xs rounded-xl">
                          <Trash2 size={16} className="mr-3" /> DELETE SESSION
                        </Button>
@@ -364,13 +335,12 @@ const TimetableManager: React.FC = () => {
   );
 };
 
-/* Helper Component for the Status Panel */
 const StatusItem = ({ label, value }: { label: string, value: string | null }) => (
   <div className="flex items-center gap-2">
     <div className={`w-2 h-2 rounded-full ${value ? "bg-emerald-500" : "bg-rose-500 animate-pulse"}`} />
     <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{label}:</span>
     <span className={`text-[9px] font-black uppercase ${value ? "text-white" : "text-slate-600"}`}>
-      {value || "MISSING"}
+      {value || "???"}
     </span>
   </div>
 );

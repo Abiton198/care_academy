@@ -50,39 +50,54 @@ const GRADES = [
 
 // Split subjects by stage to ensure age-appropriate registration
 const British_Curriculum_SUBJECTS = {
-  Primary: [
-    "British Curriculum Primary English",
-    "British Curriculum Primary Mathematics",
-    "British Curriculum Primary Science",
-    "British Curriculum Primary Global Perspectives",
-    "British Curriculum Primary Digital Literacy",
-    "British Curriculum Primary Art & Design",
-    "Coding"
-  ],
-  Secondary: [
-    "Mathematics (IGCSE)",
-    "Physics (IGCSE)",
-    "Chemistry (IGCSE)",
-    "Biology (IGCSE)",
-    "Computer Science (IGCSE)",
-    "English Language (IGCSE)",
-    "Business Studies (IGCSE)",
-    "Economics (IGCSE)",
-    "Geography (IGCSE)",
-    "History (IGCSE)",
-    "Mathematics (A-Level)",
-    "Physics (A-Level)",
-    "Chemistry (A-Level)",
-    "Biology (A-Level)",
-    "Computer Science (A-Level)",
-    "English Literature (A-Level)",
-    "Business Studies (A-Level)",
-    "Economics (A-Level)",
-    "Geography (A-Level)",
-    "History (A-Level)",
-    "Further Mathematics (A-Level)",
-    "Coding (IGCSE)"
-  ]
+  Primary: {
+    Core: [
+      "British Curriculum Primary English",
+      "British Curriculum Primary Mathematics",
+      "British Curriculum Primary Science"
+    ],
+    Electives: [
+      "British Curriculum Primary Global Perspectives",
+      "British Curriculum Primary Digital Literacy",
+      "British Curriculum Primary Art & Design",
+      "Coding, AI & Robotics"
+    ]
+  },
+  Secondary_IGCSE: {
+    Core: [
+      "English Language (IGCSE)",
+      "Mathematics (IGCSE)",
+      "Science (Co-ordinated or Combined)"
+    ],
+    Electives: [
+      "Physics (IGCSE)",
+      "Chemistry (IGCSE)",
+      "Biology (IGCSE)",
+      "Computer Science (IGCSE)",
+      "Business Studies (IGCSE)",
+      "Economics (IGCSE)",
+      "Geography (IGCSE)",
+      "History (IGCSE)",
+      "Coding, AI & Robotics (IGCSE)"
+    ]
+  },
+  Secondary_ALevel: {
+    Core: [], 
+    Electives: [
+      "Mathematics (A-Level)",
+      "Further Mathematics (A-Level)",
+      "Physics (A-Level)",
+      "Chemistry (A-Level)",
+      "Biology (A-Level)",
+      "Computer Science (A-Level)",
+      "English Literature (A-Level)",
+      "Business Studies (A-Level)",
+      "Economics (A-Level)",
+      "Geography (A-Level)",
+      "History (A-Level)",
+      "Coding, AI & Robotics"
+    ]
+  }
 };
 
 /* ───────────────────────── COMPONENT ───────────────────────── */
@@ -107,6 +122,12 @@ export default function RegistrationSection() {
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+
+  const getCategorizedSubjects = () => {
+  if (grade.startsWith("Stage")) return British_Curriculum_SUBJECTS.Primary;
+  if (grade.includes("AS Level") || grade.includes("A Level")) return British_Curriculum_SUBJECTS.Secondary_ALevel;
+  return British_Curriculum_SUBJECTS.Secondary_IGCSE;
+};
 
   /* =========================
      DATA SYNCHRONIZATION
@@ -266,48 +287,90 @@ export default function RegistrationSection() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+{/* Left Column: Registered List */}
+<div className="lg:col-span-1 space-y-4">
+  <h3 className="text-xs font-black text-indigo-600 uppercase tracking-[0.2em] px-2">Registered Students</h3>
+  {students.length === 0 ? (
+    <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-8 text-center">
+      <p className="text-xs font-bold text-slate-400 uppercase">No students found</p>
+    </div>
+  ) : (
+    students.map((s) => {
+      // Helper to categorize this specific student's subjects for display
+      const getStudentCategorizedSubjects = () => {
+        // 1. Identify which master list to compare against
+        let masterList;
+        if (s.grade.startsWith("Stage")) masterList = British_Curriculum_SUBJECTS.Primary;
+        else if (s.grade.includes("AS Level") || s.grade.includes("A Level")) masterList = British_Curriculum_SUBJECTS.Secondary_ALevel;
+        else masterList = British_Curriculum_SUBJECTS.Secondary_IGCSE;
+
+        // 2. Filter student's flat array into the two buckets
+        const core = s.subjects.filter(sub => masterList.Core.includes(sub));
+        const electives = s.subjects.filter(sub => masterList.Electives.includes(sub));
         
-        {/* Left Column: Registered List */}
-        <div className="lg:col-span-1 space-y-4">
-          <h3 className="text-xs font-black text-indigo-600 uppercase tracking-[0.2em] px-2">Registered Students</h3>
-          {students.length === 0 ? (
-            <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-8 text-center">
-              <p className="text-xs font-bold text-slate-400 uppercase">No students found</p>
-            </div>
-          ) : (
-            students.map((s) => (
-              <motion.div 
-                layout
-                key={s.id} 
-                className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow relative group"
-              >
-                <Badge className="absolute top-4 right-4 bg-emerald-50 text-emerald-600 border-emerald-100 uppercase text-[9px]">
-                  {s.status}
-                </Badge>
-                <p className="font-black text-slate-800 uppercase tracking-tight leading-none">
-                  {s.firstName} {s.lastName}
-                </p>
-                <p className="text-[10px] font-bold text-indigo-500 mt-1 uppercase tracking-widest">{s.grade}</p>
-                
-                <div className="flex flex-wrap gap-1.5 mt-4">
-                  {s.subjects.map((sub) => (
-                    <span key={sub} className="text-[9px] font-bold bg-slate-50 text-slate-500 px-2 py-1 rounded-md border border-slate-100">
+        // 3. Catch any subjects that might not be in the master list (fallback)
+        const others = s.subjects.filter(sub => !masterList.Core.includes(sub) && !masterList.Electives.includes(sub));
+
+        return { core, electives, others };
+      };
+
+      const { core, electives, others } = getStudentCategorizedSubjects();
+
+      return (
+        <motion.div 
+          layout
+          key={s.id} 
+          className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm hover:shadow-xl transition-all relative group"
+        >
+          <Badge className="absolute top-6 right-6 bg-emerald-50 text-emerald-600 border-none uppercase text-[8px] font-black px-2 py-0.5 rounded-lg">
+            {s.status}
+          </Badge>
+          
+          <p className="font-black text-slate-800 uppercase tracking-tight text-base">
+            {s.firstName} {s.lastName}
+          </p>
+          <p className="text-[10px] font-bold text-indigo-500 mt-1 uppercase tracking-widest">{s.grade}</p>
+          
+          <div className="mt-6 space-y-4">
+            {/* Display CORE Bucket */}
+            {core.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Core Modules</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {core.map((sub) => (
+                    <span key={sub} className="text-[9px] font-black bg-indigo-600 text-white px-2.5 py-1 rounded-lg shadow-sm shadow-indigo-100">
                       {sub}
                     </span>
                   ))}
                 </div>
-                
-                <Button 
-                  className="w-full mt-5 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl"
-                  onClick={() => handleEdit(s)}
-                >
-                  Modify Enrollment
-                </Button>
-              </motion.div>
-            ))
-          )}
-        </div>
+              </div>
+            )}
+
+            {/* Display ELECTIVES Bucket */}
+            {(electives.length > 0 || others.length > 0) && (
+              <div className="space-y-1.5">
+                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Electives / Specialization</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[...electives, ...others].map((sub) => (
+                    <span key={sub} className="text-[9px] font-bold bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg border border-slate-200">
+                      {sub}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <Button 
+            className="w-full mt-6 bg-slate-900 hover:bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl h-10 transition-colors"
+            onClick={() => handleEdit(s)}
+          >
+            Modify Enrollment
+          </Button>
+        </motion.div>
+      );
+    })
+  )}
 
         {/* Right Column: Registration Form */}
         <div className="lg:col-span-2 space-y-6">
@@ -361,24 +424,47 @@ export default function RegistrationSection() {
 
                   {/* Dynamic Subjects based on Grade */}
                   {grade && (
-                    <div className="space-y-3 pt-4 border-t border-slate-50">
-                      <Label className="text-[10px] font-black uppercase text-indigo-600 tracking-[0.15em]">
-                        Select Subjects for {grade}
-                      </Label>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {getSubjectList().map((sub) => (
-                          <label key={sub} className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer ${selectedSubjects.includes(sub) ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-50'}`}>
-                            <Checkbox 
-                              checked={selectedSubjects.includes(sub)} 
-                              onCheckedChange={() => toggleSubject(sub)} 
-                              className="border-slate-300"
-                            />
-                            <span className="text-xs font-bold text-slate-600">{sub}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
+  <div className="space-y-6 pt-4 border-t border-slate-50">
+    {Object.entries(getCategorizedSubjects()).map(([category, list]) => (
+      // Only render the category if there are subjects in it
+      list.length > 0 && (
+        <div key={category} className="space-y-3">
+          <div className="flex items-center gap-2 ml-1">
+            <Badge variant={category === 'Core' ? "default" : "outline"} className="text-[8px] font-black uppercase tracking-widest">
+              {category} Subjects
+            </Badge>
+            <div className="h-[1px] flex-1 bg-slate-100" />
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {list.map((sub) => (
+              <label 
+                key={sub} 
+                className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer ${
+                  selectedSubjects.includes(sub) 
+                    ? 'bg-indigo-50 border-indigo-200' 
+                    : 'bg-white border-slate-50 hover:border-slate-200'
+                }`}
+              >
+                <Checkbox 
+                  checked={selectedSubjects.includes(sub)} 
+                  onCheckedChange={() => toggleSubject(sub)} 
+                  className="border-slate-300"
+                />
+                <div className="flex flex-col">
+                  <span className="text-xs font-bold text-slate-700">{sub}</span>
+                  {category === 'Core' && (
+                    <span className="text-[8px] font-medium text-indigo-400 uppercase tracking-tighter">Recommended</span>
                   )}
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+      )
+    ))}
+  </div>
+)}
 
                   <div className="flex gap-3 pt-6 border-t border-slate-50">
                     <Button type="submit" className="flex-1 h-12 bg-indigo-600 hover:bg-indigo-700 rounded-xl font-black text-xs tracking-widest shadow-lg shadow-indigo-100">

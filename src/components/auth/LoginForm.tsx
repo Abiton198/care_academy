@@ -378,10 +378,7 @@ const handleEmailPasswordSignIn = async () => {
                   <form>
                     
                     <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
-                      {/* <TabsList className="grid grid-cols-2 bg-indigo-100 rounded-xl">
-                        <TabsTrigger value="signin">Sign In</TabsTrigger>
-                        <TabsTrigger value="signup">Sign Up</TabsTrigger>
-                      </TabsList> */}
+                    
                         <TabsList className="grid grid-cols-3 bg-indigo-100 rounded-xl p-1">
                           <TabsTrigger value="signin">Staff/Parent</TabsTrigger>
                           <TabsTrigger value="student">Student</TabsTrigger>
