@@ -49,10 +49,10 @@ const AboutUs: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             className="text-4xl md:text-6xl font-black text-slate-900 tracking-tight"
           >
-            Care Academy <span className="text-indigo-600">Cambridge Hybrid School</span>
+            Care Academy <span className="text-indigo-600">British Curriculum Hybrid School</span>
           </motion.h1>
           <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-            A Christian-based academy offering the <strong>Cambridge International Curriculum</strong> 
+            A Christian-based academy offering the <strong>British Curriculum International</strong> 
             from Grade 1 to Grade 12 through a flexible hybrid learning model.
           </p>
         </div>
@@ -67,15 +67,15 @@ const AboutUs: React.FC = () => {
           <div className="relative z-10 flex flex-col md:flex-row items-center gap-10">
             <div className="flex-1 space-y-6 text-center md:text-left">
               <span className="bg-yellow-400 text-indigo-950 px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest">
-                Cambridge International · 2026
+                British Curriculum International · 2026
               </span>
               <h2 className="text-3xl md:text-4xl font-black leading-tight">
-                One Cambridge Pathway. <span className="text-yellow-300">Anywhere.</span>
+                One British Curriculum Pathway. <span className="text-yellow-300">Anywhere.</span>
               </h2>
               <p className="text-indigo-100 text-lg">
                 Study via our <strong>Gqeberha Campus</strong> or our 
                 <strong> Interactive Virtual Classroom</strong>.  
-                Move freely without interrupting your child’s Cambridge education.
+                Move freely without interrupting your child’s British Curriculum education.
               </p>
               <Link
                 to="/login"
@@ -96,7 +96,7 @@ const AboutUs: React.FC = () => {
             <h2 className="text-2xl font-bold text-slate-800 mb-3">The Care Edge</h2>
             <p className="text-sm text-slate-500 mb-6 leading-relaxed">
               Christian values, small class sizes, and a holistic approach within a globally
-              recognised Cambridge academic framework.
+              recognised British Curriculum academic framework.
             </p>
             <Link to="/about/why-choose" className="text-indigo-600 font-bold flex items-center gap-2 hover:gap-4 transition-all">
               Discover Why <ChevronLeft className="rotate-180" size={16} />
@@ -108,7 +108,7 @@ const AboutUs: React.FC = () => {
             <BookOpen className="text-indigo-600 mb-6 group-hover:scale-110 transition-transform" size={40} />
             <h2 className="text-2xl font-bold text-slate-800 mb-3">Curriculum</h2>
             <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-              Cambridge Primary, Lower Secondary, IGCSE and AS/A Levels —
+              British Curriculum Primary, Lower Secondary, IGCSE and AS/A Levels —
               a clear international pathway from Grade 1 to Grade 12.
             </p>
             <Link to="/about/subjects" className="text-indigo-600 font-bold flex items-center gap-2 hover:gap-4 transition-all">
@@ -121,7 +121,7 @@ const AboutUs: React.FC = () => {
             <MapPin className="text-emerald-500 mb-6 group-hover:scale-110 transition-transform" size={40} />
             <h2 className="text-2xl font-bold text-slate-800 mb-3">Examinations</h2>
             <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-              Cambridge examinations are written at registered local or international centres,
+              British Curriculum examinations are written at registered local or international centres,
               with full administrative guidance provided.
             </p>
             <Link to="/about/accreditation" className="text-indigo-600 font-bold flex items-center gap-2 hover:gap-4 transition-all">
@@ -134,7 +134,7 @@ const AboutUs: React.FC = () => {
             <Users className="text-blue-500 mb-6 group-hover:scale-110 transition-transform" size={40} />
             <h2 className="text-2xl font-bold text-slate-800 mb-3">Our Staff</h2>
             <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-              Experienced educators trained in Cambridge delivery,
+              Experienced educators trained in British Curriculum delivery,
               committed to academic excellence and student wellbeing.
             </p>
             <Link to="/about/teaching-staff" className="text-indigo-600 font-bold flex items-center gap-2 hover:gap-4 transition-all">
@@ -147,7 +147,7 @@ const AboutUs: React.FC = () => {
             <Target className="text-yellow-500 mb-6 group-hover:scale-110 transition-transform" size={40} />
             <h2 className="text-2xl font-bold text-slate-800 mb-3">Enrolment</h2>
             <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-              Fully online enrolment for Cambridge learners joining our
+              Fully online enrolment for British Curriculum learners joining our
               virtual or physical campus.
             </p>
             <Link to="/about/enrolment" className="text-indigo-600 font-bold flex items-center gap-2 hover:gap-4 transition-all">
@@ -160,7 +160,7 @@ const AboutUs: React.FC = () => {
             <CreditCard className="text-purple-500 mb-6 group-hover:scale-110 transition-transform" size={40} />
             <h2 className="text-2xl font-bold text-slate-800 mb-3">Pricing</h2>
             <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-              Affordable Cambridge education with flexible payment plans
+              Affordable British Curriculum education with flexible payment plans
               designed for modern families.
             </p>
             <Link to="/about/fees" className="text-indigo-600 font-bold flex items-center gap-2 hover:gap-4 transition-all">
@@ -174,7 +174,7 @@ const AboutUs: React.FC = () => {
           <div className="flex-1 space-y-4">
             <h3 className="text-2xl font-black text-slate-800">Designed for Mobile Families</h3>
             <p className="text-slate-600">
-              Our <strong>mobility-first Cambridge model</strong> ensures learning continuity
+              Our <strong>mobility-first British Curriculum model</strong> ensures learning continuity
               no matter where life takes your family.
             </p>
           </div>
@@ -186,7 +186,7 @@ const AboutUs: React.FC = () => {
             <Trophy className="mb-4" size={32} />
             <h3 className="text-xl font-bold">Our Vision</h3>
             <p className="text-sm text-indigo-100 mt-2">
-              To deliver globally respected Cambridge education with faith, flexibility and excellence.
+              To deliver globally respected British Curriculum education with faith, flexibility and excellence.
             </p>
           </Link>
           <Link to="/about/learning-platform" className="p-8 bg-gradient-to-br from-slate-800 to-slate-900 rounded-[2.5rem] text-white shadow-lg hover:shadow-2xl transition group">
@@ -201,7 +201,7 @@ const AboutUs: React.FC = () => {
         {/* Final CTA */}
         <div className="text-center py-10 space-y-6">
           <p className="text-2xl font-black text-slate-800 italic">
-            “A Cambridge education — <span className="text-indigo-600 underline underline-offset-4">anywhere in the world.</span>”
+            “A British Curriculum education — <span className="text-indigo-600 underline underline-offset-4">anywhere in the world.</span>”
           </p>
           <Link
             to="/login"
