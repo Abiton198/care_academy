@@ -62,6 +62,8 @@ const British_Curriculum_SUBJECTS = {
       "British Curriculum Primary Art & Design",
       "Coding, AI & Robotics",
       "Afrikaans",
+      "Geography",
+      "Nutrition and Sports"
     ]
   },
   Secondary_IGCSE: {
@@ -71,6 +73,7 @@ const British_Curriculum_SUBJECTS = {
       "Science (Co-ordinated or Combined)"
     ],
     Electives: [
+      "Sports Science",
       "Physics (IGCSE)",
       "Chemistry (IGCSE)",
       "Biology (IGCSE)",
@@ -80,7 +83,8 @@ const British_Curriculum_SUBJECTS = {
       "Geography (IGCSE)",
       "History (IGCSE)",
       "Coding, AI & Robotics (IGCSE)",
-      "Afrikaans"
+      "Afrikaans",
+      "Nutrition"
     ]
   },
   Secondary_ALevel: {
