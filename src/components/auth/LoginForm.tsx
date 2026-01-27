@@ -144,41 +144,53 @@ export default function LoginForm() {
   /* =====================================================
      GOOGLE AUTH (SIGN IN & REGISTER)
      ===================================================== */
-  const handleGoogle = async () => {
-    if (authLoading) return;
+ const handleGoogle = async () => {
+  if (authLoading) return;
 
-    if (tab === "signup" && !selectedRole) {
-      setError("Please select a role before continuing with Google");
-      return;
+  // 1. Only require a role if we are definitely on the signup tab
+  if (tab === "signup" && !selectedRole) {
+    setError("Please select a role before continuing with Google");
+    return;
+  }
+
+  setError(null);
+  setAuthLoading(true);
+
+  try {
+    googleProvider.setCustomParameters({ prompt: "select_account" });
+    const result = await signInWithPopup(auth, googleProvider);
+    const user = result.user;
+
+    const ref = doc(db, "users", user.uid);
+    const snap = await getDoc(ref);
+
+    // 2. CHECK: If user exists, WE ARE DONE. 
+    // The useEffect at the top of your file will detect the login and redirect them.
+    if (snap.exists()) {
+      console.log("Existing user found. Role:", snap.data().role);
+      // We don't need to do anything else; the listener takes over.
+      return; 
     }
 
-    setError(null);
-    setAuthLoading(true);
+    // 3. ONLY if the user is BRAND NEW do we create the doc
+    // If they accidentally used the "SignIn" tab for a new account, 
+    // we default to "parent" as a safety net.
+    const finalRole = selectedRole || "parent"; 
+    
+    await setDoc(ref, {
+      uid: user.uid,
+      email: user.email,
+      role: finalRole,
+      applicationStatus: finalRole === "teacher" ? "pending" : "approved",
+      createdAt: serverTimestamp(),
+    });
 
-    try {
-      googleProvider.setCustomParameters({ prompt: "select_account" });
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-
-      const ref = doc(db, "users", user.uid);
-      const snap = await getDoc(ref);
-
-      // Create profile if it doesn't exist
-      if (!snap.exists()) {
-        const finalRole = selectedRole || "parent";
-        await setDoc(ref, {
-          uid: user.uid,
-          email: user.email,
-          role: finalRole,
-          applicationStatus: finalRole === "teacher" ? "pending" : "approved",
-          createdAt: serverTimestamp(),
-        });
-      }
-    } catch (err: any) {
-      setError(err.message || "Google sign-in failed");
-      setAuthLoading(false);
-    }
-  };
+  } catch (err: any) {
+    console.error("Google Auth Error:", err);
+    setError(err.message || "Google sign-in failed");
+    setAuthLoading(false); // Reset loading so they can try again
+  }
+};
 
   /* =====================================================
      STUDENT LOGIN (CUSTOM LOCAL STORAGE SESSION)
