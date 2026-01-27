@@ -38,6 +38,8 @@ import {
 } from "lucide-react";
 /* Signaling Logic (WebRTC) */
 import { Signaling } from "@/lib/signaling";
+import { useAuth } from "../auth/AuthProvider";
+
 
 
 
@@ -185,6 +187,7 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 const teacher = user as unknown as TeacherUser;
 
 const firstName = teacher?.personalInfo?.firstName || teacher?.firstName || "";
+const { logoutAll } = useAuth();
 
 
 
@@ -726,9 +729,13 @@ useEffect(() => {
             </h1>
             <p className="opacity-80 font-medium">Educator: {teacherFullName}</p>
           </div>
-          <Button variant="secondary" className="font-bold shadow-lg" onClick={() => signOut(auth)}>
-            <LogOut className="mr-2" /> Logout
-          </Button>
+         <Button
+  variant="secondary"
+  className="font-bold shadow-lg"
+  onClick={logoutAll}
+>
+  <LogOut className="mr-2" /> Logout
+</Button>
         </div>
       </div>
 

@@ -8,22 +8,26 @@ import { doc, getDoc } from "firebase/firestore";
 /* ============================================================
    TYPES
 ============================================================ */
-export type UserRole = "parent" | "teacher" | "principal" | "admin" | "student";
+export type UserRole =
+  | "parent"
+  | "teacher"
+  | "principal"
+  | "admin"
+  | "student";
 
 export interface AppUser {
   uid: string;
-  email: string | null;
+  email?: string | null;
   role: UserRole;
-  applicationStatus?: "pending" | "approved" | "rejected";
-  classActivated?: boolean;
   firstName?: string;
   lastName?: string;
-  grade?: string;      
-  parentName?: string; 
+  grade?: string;
+  parentName?: string;
+  parentId?: string;
 }
 
 /* ============================================================
-   CONTEXT INTERFACE
+   CONTEXT
 ============================================================ */
 interface AuthContextType {
   user: AppUser | null;
@@ -33,7 +37,6 @@ interface AuthContextType {
   logoutAll: () => Promise<void>;
 }
 
-// Initialize with defaults that match the Interface
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
@@ -49,107 +52,125 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
- useEffect(() => {
-  const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-    setLoading(true);
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      setLoading(true);
 
-    // --- PATH A: FIREBASE AUTH (Parents/Staff) ---
-    if (firebaseUser) {
-      try {
-        const userRef = doc(db, "users", firebaseUser.uid);
-        let snap = await getDoc(userRef);
+      /* ===============================
+         1️⃣ STUDENT SESSION (NO FIREBASE)
+      =============================== */
+      const studentSessionRaw = sessionStorage.getItem("studentSession");
 
-        // Retry guard for brand-new Google registrations
-        if (!snap.exists()) {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-          snap = await getDoc(userRef);
-        }
+      if (!firebaseUser && studentSessionRaw) {
+        try {
+          const studentData = JSON.parse(studentSessionRaw);
 
-        if (snap.exists()) {
-          const data = snap.data();
+          let parentName = studentData.parentName;
+
+          if (studentData.parentId && !parentName) {
+            const parentDoc = await getDoc(
+              doc(db, "users", studentData.parentId)
+            );
+            if (parentDoc.exists()) {
+              const p = parentDoc.data();
+              parentName =
+                `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Parent";
+              studentData.parentName = parentName;
+              sessionStorage.setItem(
+                "studentSession",
+                JSON.stringify(studentData)
+              );
+            }
+          }
+
           setUser({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            role: data.role as UserRole,
-            applicationStatus: data.applicationStatus,
-            // Fallback for naming inconsistencies
-            firstName: data.firstName || data.firstname || "",
-            lastName: data.lastName || data.lastname || "",
+            uid: studentData.uid,
+            role: "student",
+            firstName: studentData.firstName || "Student",
+            lastName: studentData.lastName || "",
+            parentName,
+            parentId: studentData.parentId,
           });
-          setLoading(false);
-          return;
+        } catch (e) {
+          console.error("Student session error:", e);
+          sessionStorage.removeItem("studentSession");
         }
-      } catch (err) {
-        console.error("Firebase profile fetch failed:", err);
-      }
-    }
 
-    // --- PATH B: STUDENT SESSION (Tab-Specific sessionStorage) ---
-    // If we reach here, either there's no Firebase user, or the Firebase user has no profile yet.
-    const studentSessionRaw = sessionStorage.getItem("studentSession");
-    
-    if (studentSessionRaw) {
-      try {
-        const studentData = JSON.parse(studentSessionRaw);
-        
-        setUser({
-          uid: studentData.uid,
-          email: null,
-          role: "student",
-          // Maps names exactly as saved in handleStudentLogin
-          firstName: studentData.firstName || studentData.firstname || "Student",
-          lastName: studentData.lastName || studentData.lastname || "",
-        });
-      } catch (e) {
-        console.error("Student session parse error:", e);
-        sessionStorage.removeItem("studentSession");
-        setUser(null);
+        setLoading(false);
+        return;
       }
-    } else {
-      // No Firebase user and no Student session = Logged Out
+
+      /* ===============================
+         2️⃣ FIREBASE USERS (PARENT/STAFF)
+      =============================== */
+      if (firebaseUser) {
+        try {
+          const snap = await getDoc(doc(db, "users", firebaseUser.uid));
+          if (snap.exists()) {
+            const data = snap.data();
+
+            setUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              role: data.role,
+              firstName: data.firstName || "",
+              lastName: data.lastName || "",
+            });
+          } else {
+            await signOut(auth);
+            setUser(null);
+          }
+        } catch (err) {
+          console.error("Auth sync failed:", err);
+          setUser(null);
+        }
+
+        setLoading(false);
+        return;
+      }
+
+      /* ===============================
+         3️⃣ NO SESSION
+      =============================== */
       setUser(null);
-    }
+      setLoading(false);
+    });
 
-    setLoading(false);
-  });
-
-  return () => unsub();
-}, []);
+    return () => unsub();
+  }, []);
 
   /* ============================================================
-     TARGETED LOGOUT (TAB-SPECIFIC)
+     LOGOUTS
   ============================================================ */
 
   const logoutStudent = () => {
     sessionStorage.removeItem("studentSession");
     setUser(null);
-    window.location.href = "/"; 
+    window.location.href = "/";
   };
 
   const logoutParent = async () => {
-    // 1. Remove the "Lock" for this tab
-    sessionStorage.removeItem("activeTabUser");
-    
-    // 2. IMPORTANT: DO NOT call signOut(auth) if you want other tabs to stay alive.
-    // Simply clear the state for this tab.
+    sessionStorage.removeItem("studentSession");
+    await signOut(auth); // 🔑 REQUIRED
     setUser(null);
     window.location.href = "/";
   };
 
   const logoutAll = async () => {
-    sessionStorage.clear(); // Clears everything for THIS tab only
-    await signOut(auth);    // This will still kill other Firebase tabs 
+    sessionStorage.clear();
+    await signOut(auth);
+    setUser(null);
     window.location.href = "/";
   };
 
   return (
-    <AuthContext.Provider 
-      value={{ 
-        user, 
-        loading, 
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
         logoutStudent,
         logoutParent,
-        logoutAll
+        logoutAll,
       }}
     >
       {children}
