@@ -49,16 +49,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  /* ============================================================
-     AUTH STATE LISTENER (HYBRID LOGIC)
-  ============================================================ */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       setLoading(true);
 
-      // --- PATH A: FIREBASE AUTH (Parents/Teachers/Principals) ---
+      // --- PATH A: FIREBASE AUTH ---
       if (firebaseUser) {
         try {
+          // Check if this specific tab belongs to this Firebase User
+          const activeTabUid = sessionStorage.getItem("activeTabUser");
+          
+          // If the tab has a different user or no user recorded, we can handle it
           const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
           if (userDoc.exists()) {
             const data = userDoc.data();
@@ -70,34 +71,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               firstName: data.firstName || "",
               lastName: data.lastName || "",
             });
-          } else {
-            console.log("Waiting for profile creation...");
+            // Lock this tab to this user
+            sessionStorage.setItem("activeTabUser", firebaseUser.uid);
           }
         } catch (err) {
-          console.error("Auth provider error:", err);
+          console.error(err);
         } finally {
           setLoading(false);
         }
         return; 
       }
 
-      // --- PATH B: CUSTOM SESSION (Students) ---
-      const studentSession = localStorage.getItem("studentSession");
+      // --- PATH B: STUDENT SESSION (Change to sessionStorage) ---
+      const studentSession = sessionStorage.getItem("studentSession");
       if (studentSession) {
-        try {
-          const studentData = JSON.parse(studentSession);
-          setUser({
-            uid: studentData.uid,
-            email: null,
-            role: "student",
-            firstName: studentData.firstName || "Student",
-            lastName: studentData.lastName || "",
-          });
-        } catch (e) {
-          console.error("Invalid student session", e);
-          localStorage.removeItem("studentSession");
-          setUser(null);
-        }
+        const studentData = JSON.parse(studentSession);
+        setUser({
+          uid: studentData.uid,
+          email: null,
+          role: "student",
+          firstName: studentData.firstName || "Student",
+          lastName: studentData.lastName || "",
+        });
       } else {
         setUser(null);
       }
@@ -109,42 +104,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   /* ============================================================
-     TARGETED LOGOUT HANDLERS
+     TARGETED LOGOUT (TAB-SPECIFIC)
   ============================================================ */
 
-  // 1. Logs out ONLY the Student (keeps Parent/Firebase active)
   const logoutStudent = () => {
-    localStorage.removeItem("studentSession");
-    // If current user is a student, clear state and redirect
-    if (user?.role === "student") {
-      setUser(null);
-      window.location.href = "/"; 
-    }
-  };
-
-  // 2. Logs out ONLY the Parent/Admin/Teacher (Firebase Auth)
-  const logoutParent = async () => {
-    try {
-      await signOut(auth);
-      // We do NOT touch studentSession localStorage here
-      if (user?.role !== "student") {
-        setUser(null);
-      }
-      window.location.href = "/";
-    } catch (error) {
-      console.error("Parent logout failed:", error);
-    }
-  };
-
-  // 3. Global Logout (Logs out of everything)
-  const logoutAll = async () => {
-    localStorage.removeItem("studentSession");
-    try {
-      await signOut(auth);
-    } catch (err) {
-      console.error("SignOut error:", err);
-    }
+    sessionStorage.removeItem("studentSession");
     setUser(null);
+    window.location.href = "/"; 
+  };
+
+  const logoutParent = async () => {
+    // 1. Remove the "Lock" for this tab
+    sessionStorage.removeItem("activeTabUser");
+    
+    // 2. IMPORTANT: DO NOT call signOut(auth) if you want other tabs to stay alive.
+    // Simply clear the state for this tab.
+    setUser(null);
+    window.location.href = "/";
+  };
+
+  const logoutAll = async () => {
+    sessionStorage.clear(); // Clears everything for THIS tab only
+    await signOut(auth);    // This will still kill other Firebase tabs 
     window.location.href = "/";
   };
 

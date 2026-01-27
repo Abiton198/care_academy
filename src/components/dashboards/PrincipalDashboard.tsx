@@ -174,7 +174,7 @@ const PrincipalDashboard: React.FC = () => {
 
 
   const navigate = useNavigate();
-   const { user, logout } = useAuth();
+   const { logoutAll, user } = useAuth();
 
 
   // 1. DATA LISTENERS
@@ -429,15 +429,21 @@ useEffect(() => {
           <DollarSign className="mr-2" size={18} /> GLOBAL BILLING
         </Button>
         <Button
-          variant="ghost"
-          className="font-bold text-slate-400"
-          onClick={async () => {
-            await logout();
-            navigate("/");
-          }}
-        >
-          <LogOut className="mr-2 h-4 w-4" /> Logout
-        </Button>
+  variant="ghost"
+  className="font-bold text-slate-400 hover:text-red-500"
+  onClick={async () => {
+    try {
+      // You can also use user.role === 'student' ? logoutStudent() : logoutParent()
+      await logoutAll(); 
+      // Note: logoutAll already handles the window.location.href = "/" 
+      // so navigate("/") might be redundant but safe.
+    } catch (err) {
+      console.error("Logout failed:", err);
+    }
+  }}
+>
+  <LogOut className="mr-2 h-4 w-4" /> Logout
+</Button>
       </div>
     </header>
 
