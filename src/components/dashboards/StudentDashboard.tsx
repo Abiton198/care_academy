@@ -72,7 +72,6 @@ interface StudentProfile {
   email?: string;
 }
 
-
 interface TimetableEntry {
   id: string;
   day: string;
@@ -552,37 +551,50 @@ if (!profile) {
       
       {/* TOP NAV */}
         <div className="min-h-screen bg-[#F8FAFC]">
-     {/* HEADER */}
+    {/* HEADER */}
 <header className="bg-white border-b sticky top-0 z-40">
   <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-    {/* STUDENT HEADER INFO */}
-<div className="flex flex-col">
-  <h1 className="text-xl font-black text-slate-900 uppercase">
-   Welcome {user?.firstName} {user?.lastName}
-  </h1>
-  
-  <p className="text-xs text-slate-400 flex items-center">
-    {/* Fallback logic: check profile first, then user object */}
-    {profile?.grade || user?.grade ? (
-      <span className="font-bold text-indigo-500 uppercase tracking-wider">
-        Grade {profile?.grade || user?.grade}
-      </span>
-    ) : (
-      <span className="animate-pulse italic">Syncing Academic Record...</span>
-    )}
+    
+    {/* STUDENT INFO */}
+    <div className="flex flex-col">
+      <h1 className="text-xl font-black">
+        {profile?.firstName ? (
+          <>
+            Welcome, {profile.firstName} {profile.lastName}
+          </>
+        ) : (
+          "Student Portal"
+        )}
+      </h1>
 
-    {/* Parent Link Info */}
-    {(profile?.parentName || user?.parentName) && (
-      <span className="ml-2 flex items-center gap-2">
-        <span className="text-slate-200">|</span>
-        <span className="text-slate-400 font-medium">
-          Linked to {profile?.parentName || user?.parentName}
-        </span>
-      </span>
-    )}
-  </p>
-</div>
+      <p className="text-xs text-slate-400 flex flex-wrap items-center gap-2 mt-1">
+        
+        {/* Grade */}
+        {profile?.grade ? (
+          <span className="font-semibold text-indigo-600 uppercase tracking-wide">
+            Grade {profile.grade}
+          </span>
+        ) : (
+          <span className="italic animate-pulse">
+            Syncing academic record…
+          </span>
+        )}
 
+        {/* Divider */}
+        {profile?.parentName && (
+          <span className="text-slate-300">•</span>
+        )}
+
+        {/* Parent Link */}
+        {profile?.parentName && (
+          <span className="font-medium text-slate-500">
+            Linked to {profile.parentName}
+          </span>
+        )}
+      </p>
+    </div>
+
+    {/* LOGOUT */}
     <Button variant="ghost" onClick={handleLogout}>
       <LogOut size={16} className="mr-2" />
       Logout

@@ -49,59 +49,72 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-      setLoading(true);
+ useEffect(() => {
+  const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+    setLoading(true);
 
-      // --- PATH A: FIREBASE AUTH ---
-      if (firebaseUser) {
-        try {
-          // Check if this specific tab belongs to this Firebase User
-          const activeTabUid = sessionStorage.getItem("activeTabUser");
-          
-          // If the tab has a different user or no user recorded, we can handle it
-          const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            setUser({
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              role: data.role as UserRole,
-              applicationStatus: data.applicationStatus,
-              firstName: data.firstName || "",
-              lastName: data.lastName || "",
-            });
-            // Lock this tab to this user
-            sessionStorage.setItem("activeTabUser", firebaseUser.uid);
-          }
-        } catch (err) {
-          console.error(err);
-        } finally {
-          setLoading(false);
+    // --- PATH A: FIREBASE AUTH (Parents/Staff) ---
+    if (firebaseUser) {
+      try {
+        const userRef = doc(db, "users", firebaseUser.uid);
+        let snap = await getDoc(userRef);
+
+        // Retry guard for brand-new Google registrations
+        if (!snap.exists()) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          snap = await getDoc(userRef);
         }
-        return; 
-      }
 
-      // --- PATH B: STUDENT SESSION (Change to sessionStorage) ---
-      const studentSession = sessionStorage.getItem("studentSession");
-      if (studentSession) {
-        const studentData = JSON.parse(studentSession);
+        if (snap.exists()) {
+          const data = snap.data();
+          setUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            role: data.role as UserRole,
+            applicationStatus: data.applicationStatus,
+            // Fallback for naming inconsistencies
+            firstName: data.firstName || data.firstname || "",
+            lastName: data.lastName || data.lastname || "",
+          });
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.error("Firebase profile fetch failed:", err);
+      }
+    }
+
+    // --- PATH B: STUDENT SESSION (Tab-Specific sessionStorage) ---
+    // If we reach here, either there's no Firebase user, or the Firebase user has no profile yet.
+    const studentSessionRaw = sessionStorage.getItem("studentSession");
+    
+    if (studentSessionRaw) {
+      try {
+        const studentData = JSON.parse(studentSessionRaw);
+        
         setUser({
           uid: studentData.uid,
           email: null,
           role: "student",
-          firstName: studentData.firstName || "Student",
-          lastName: studentData.lastName || "",
+          // Maps names exactly as saved in handleStudentLogin
+          firstName: studentData.firstName || studentData.firstname || "Student",
+          lastName: studentData.lastName || studentData.lastname || "",
         });
-      } else {
+      } catch (e) {
+        console.error("Student session parse error:", e);
+        sessionStorage.removeItem("studentSession");
         setUser(null);
       }
+    } else {
+      // No Firebase user and no Student session = Logged Out
+      setUser(null);
+    }
 
-      setLoading(false);
-    });
+    setLoading(false);
+  });
 
-    return () => unsub();
-  }, []);
+  return () => unsub();
+}, []);
 
   /* ============================================================
      TARGETED LOGOUT (TAB-SPECIFIC)

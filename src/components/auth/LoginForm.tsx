@@ -195,47 +195,66 @@ export default function LoginForm() {
   /* =====================================================
      STUDENT LOGIN (CUSTOM LOCAL STORAGE SESSION)
      ===================================================== */
-  const handleStudentLogin = async () => {
-    if (!username || !password) {
-      setError("Please enter both username and password.");
-      return;
+const handleStudentLogin = async () => {
+  if (!username || !password) {
+    setError("Please enter both username and password.");
+    return;
+  }
+
+  setStudentAuthLoading(true);
+  setError(null);
+
+  try {
+    // 1. Search Firestore for the student
+    const q = query(
+      collection(db, "students"),
+      where("username", "==", username.toLowerCase().trim())
+    );
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+      throw new Error("Student account not found.");
     }
-    setStudentAuthLoading(true);
-    setError(null);
 
-    try {
-      const q = query(
-        collection(db, "students"),
-        where("username", "==", username.toLowerCase().trim())
-      );
-      const querySnapshot = await getDocs(q);
+    const studentDoc = querySnapshot.docs[0];
+    const studentData = studentDoc.data();
 
-      if (querySnapshot.empty) throw new Error("Student account not found.");
-
-      const studentDoc = querySnapshot.docs[0];
-      const studentData = studentDoc.data();
-      const encodedInput = btoa(password);
-
-      if (encodedInput !== studentData.passwordHash) throw new Error("Invalid credentials.");
-      if (studentData.loginEnabled === false) throw new Error("Account disabled by parent.");
-
-      const studentSession = {
-        uid: studentDoc.id,
-        firstName: studentData.firstName,
-        role: "student",
-        parentId: studentData.parentId,
-        loginTime: Date.now(),
-      };
-
-      localStorage.setItem("studentSession", JSON.stringify(studentSession));
-      window.location.href = `/student-dashboard/${studentDoc.id}`;
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setStudentAuthLoading(false);
+    // 2. Verify Password (Base64 match)
+    const encodedInput = btoa(password);
+    if (encodedInput !== studentData.passwordHash) {
+      throw new Error("Invalid username or password.");
     }
-  };
 
+    // 3. Check if account is active
+    if (studentData.loginEnabled === false) {
+      throw new Error("This account has been disabled by the parent.");
+    }
+
+    // 4. CONSTRUCT SESSION DATA
+    // We include BOTH names and check for lowercase fallbacks (firstname/lastname)
+    const studentSession = {
+      uid: studentDoc.id,
+      role: "student",
+      firstName: studentData.firstName || studentData.firstname || "Student",
+      lastName: studentData.lastName || studentData.lastname || "",
+      parentId: studentData.parentId || "",
+      loginTime: Date.now(),
+    };
+
+    // 5. SAVE TO SESSION STORAGE (Tab-Specific)
+    // This allows different tabs to have different users logged in
+    sessionStorage.setItem("studentSession", JSON.stringify(studentSession));
+
+    // 6. REDIRECT
+    window.location.href = `/student-dashboard/${studentDoc.id}`;
+
+  } catch (err: any) {
+    console.error("Student Login Error:", err);
+    setError(err.message || "An error occurred during login.");
+  } finally {
+    setStudentAuthLoading(false);
+  }
+};
   /* =====================================================
      EMAIL SIGN IN (STAFF/PARENTS)
      ===================================================== */
