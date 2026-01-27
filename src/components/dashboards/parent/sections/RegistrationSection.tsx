@@ -54,7 +54,8 @@ const British_Curriculum_SUBJECTS = {
     Core: [
       "British Curriculum Primary English",
       "British Curriculum Primary Mathematics",
-      "British Curriculum Primary Science"
+      "British Curriculum Primary Science",
+      "Bible Studies"
     ],
     Electives: [
       "British Curriculum Primary Global Perspectives",
@@ -63,14 +64,16 @@ const British_Curriculum_SUBJECTS = {
       "Coding, AI & Robotics",
       "Afrikaans",
       "Geography",
-      "Nutrition and Sports"
+      "Nutrition and Sports",
+      
     ]
   },
   Secondary_IGCSE: {
     Core: [
       "English Language (IGCSE)",
       "Mathematics (IGCSE)",
-      "Science (Co-ordinated or Combined)"
+      "Science (Co-ordinated or Combined)",
+      "Bible Studie"
     ],
     Electives: [
       "Sports Science",
@@ -84,7 +87,8 @@ const British_Curriculum_SUBJECTS = {
       "History (IGCSE)",
       "Coding, AI & Robotics (IGCSE)",
       "Afrikaans",
-      "Nutrition"
+      "Nutrition",
+      
     ]
   },
   Secondary_ALevel: {
@@ -102,7 +106,8 @@ const British_Curriculum_SUBJECTS = {
       "Geography (A-Level)",
       "History (A-Level)",
       "Coding, AI & Robotics",
-      "Afrikaans"
+      "Afrikaans",
+      "Bible Studies"
     ]
   }
 };
