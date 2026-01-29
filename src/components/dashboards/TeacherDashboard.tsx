@@ -47,6 +47,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+// 1. Unified Firestore Sync Function (Using setDoc to prevent "Missing Document" errors)
+import { arrayUnion, arrayRemove} from "firebase/firestore";
+
+
 
 
 
@@ -204,7 +208,6 @@ const TeacherDashboard: React.FC = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Derived State
-  const teacherFullName = `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim();
   const [status, setStatus] = useState<string | null>(null);
 
   // WebRTC State
@@ -240,8 +243,20 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
 const teacher = user as unknown as TeacherUser;
 
-const firstName = teacher?.personalInfo?.firstName || teacher?.firstName || "";
+
 const { logoutAll } = useAuth();
+
+const teacherFullName = useMemo(() => {
+  if (!profile) return "";
+
+  const first = profile.firstName?.trim();
+  const last = profile.lastName?.trim();
+
+  return [first, last].filter(Boolean).join(" ");
+}, [profile]);
+ const writeTimeout = useRef<any>(null);
+
+
 
 
 
@@ -273,27 +288,61 @@ const { logoutAll } = useAuth();
   }
 };
 
-  useEffect(() => {
-    if (!user) return;
-    const qProfile = query(collection(db, "teacherApplications"), where("uid", "==", user.uid));
-    const unsub = onSnapshot(qProfile, (snap) => {
-      if (!snap.empty) {
-        const data = snap.docs[0].data();
-        setProfile({
-          firstName: data.personalInfo?.firstName,
-          lastName: data.personalInfo?.lastName,
-          email: data.personalInfo?.email,
-          phone: data.personalInfo?.phone,
-          bio: data.personalInfo?.bio,
-          subjects: data.subjects,
-          status: data.status,
-        });
-        setEditProfile({ phone: data.personalInfo?.phone || "", bio: data.personalInfo?.bio || "" });
-      }
+
+useEffect(() => {
+  if (!user?.uid) return;
+
+  console.log("🔍 Resolving teacher application by UID:", user.uid);
+  setLoading(true);
+
+  const q = query(
+    collection(db, "teacherApplications"),
+    where("uid", "==", user.uid)
+  );
+
+  const unsub = onSnapshot(q, (snap) => {
+    if (snap.empty) {
+      console.warn("⚠️ No teacher application found for UID");
       setLoading(false);
+      return;
+    }
+
+    // ✅ Use the MOST COMPLETE document
+    const docSnap =
+      snap.docs.find(d => d.data()?.personalInfo?.firstName) ?? snap.docs[0];
+
+    const data = docSnap.data();
+    const p = data.personalInfo ?? {};
+
+    console.log("📄 Using application doc:", docSnap.id);
+    console.log("👤 Raw personalInfo:", p);
+
+    const firstName = p.firstName ?? "Teacher";
+    const lastName = p.lastName ?? "";
+
+    console.log("✅ Resolved name:", firstName, lastName);
+
+    setProfile({
+      firstName,
+      lastName,
+      email: p.email ?? data.email ?? "",
+      phone: p.phone ?? "",
+      bio: p.bio ?? "",
+      subjects: data.subjects ?? p.subjects ?? [],
+      status: data.status ?? "pending",
     });
-    return () => unsub();
-  }, [user]);
+
+    setEditProfile({
+      phone: p.phone ?? "",
+      bio: p.bio ?? "",
+    });
+
+    setLoading(false);
+  });
+
+  return () => unsub();
+}, [user?.uid]);
+
 
   /* ======================================================
      2. SYNC TIMETABLE, STUDENTS & GRADES
@@ -770,63 +819,91 @@ useEffect(() => {
 }, [isLive, mobileMenuOpen, signaling.peerConnection]);
 
 // EDIT TEACHER PROFILE
-// 1. Unified Firestore Sync Function (Using setDoc to prevent "Missing Document" errors)
-const updateTeacherFirestore = async (newSubjects: any[]) => {
+
+// Assuming:
+// - user comes from useAuth / context
+// - profile is your local state (useState)
+// - setProfile is the setter
+// - writeTimeout is a useRef<ReturnType<typeof setTimeout>>(null)
+// ────────────────────────────────────────────────
+// Unified Firestore Sync (Handles both Add & Remove)
+// ────────────────────────────────────────────────
+const updateTeacherFirestore = async (
+  operation: "add" | "remove",
+  subject: any
+) => {
   if (!user?.uid) return;
 
+  const teacherRef = doc(db, "teachers", user.uid);
+  const appRef = doc(db, "teacherApplications", user.uid);
+
+  // Use the specific Firestore field transformations
+  const op = operation === "add" ? arrayUnion(subject) : arrayRemove(subject);
+
   try {
-    const teacherRef = doc(db, "teachers", user.uid);
-    const appRef = doc(db, "teacherApplications", user.uid);
-
-    const payload = {
-      subjects: newSubjects,
-      updatedAt: serverTimestamp(),
-    };
-
-    // Update Teachers Collection
-    await setDoc(teacherRef, payload, { merge: true });
-
-    // Update Applications Collection (including nested personalInfo)
-    await setDoc(appRef, {
-      ...payload,
-      uid: user.uid,
-      personalInfo: {
-        subjects: newSubjects
-      }
+    // 1. Update the 'teachers' collection
+    await setDoc(teacherRef, {
+      subjects: op,
+      updatedAt: serverTimestamp()
     }, { merge: true });
 
-    // Update local state for immediate UI feedback
-    setProfile((prev: any) => ({ ...prev, subjects: newSubjects }));
-    console.log("✅ Subjects synced successfully!");
+    // 2. Update the 'teacherApplications' collection (syncing both locations)
+    await setDoc(appRef, {
+      subjects: op,
+      personalInfo: {
+        subjects: op
+      },
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+
+    console.log(`✅ Firestore Sync: ${operation} successful`);
   } catch (err) {
-    console.error("❌ Failed to update subjects:", err);
-    alert("Error updating specializations. Please check your connection.");
+    console.error("❌ Firestore Sync Error:", err);
+    alert("Database sync failed. Please check your internet connection.");
   }
 };
 
-// 2. Add Subject Handler
+// ────────────────────────────────────────────────
+// Add Subject Handler
+// ────────────────────────────────────────────────
 const addSubject = async (subjectName: string) => {
-  if (!subjectName) return;
+  if (!subjectName.trim() || !user?.uid) return;
 
-  // Prevent duplicates
-  const isDuplicate = profile?.subjects?.some((s: any) => s.name === subjectName);
-  
-  if (!isDuplicate) {
-    const newSubject = { name: subjectName, curriculum: "British Curriculum" };
-    const updatedSubjects = [...(profile?.subjects || []), newSubject];
-    await updateTeacherFirestore(updatedSubjects);
+  // 1. Duplicate Check
+  const exists = profile?.subjects?.some(
+    (s: any) => s.name.toLowerCase() === subjectName.toLowerCase()
+  );
+  if (exists) {
+    alert("This subject is already in your profile.");
+    setSelectValue("");
+    return;
   }
 
-  // Always reset the dropdown so the user can add another one immediately
+  const newSubject = {
+    name: subjectName.trim(),
+    curriculum: "British Curriculum"
+  };
+
+  // 2. Clear UI immediately for responsiveness
   setSelectValue("");
+
+  // 3. Trigger Firestore sync (onSnapshot will handle the UI update)
+  await updateTeacherFirestore("add", newSubject);
 };
 
-// 3. Remove Subject Handler
+// ────────────────────────────────────────────────
+// Remove Subject Handler
+// ────────────────────────────────────────────────
 const removeSubject = async (subjectName: string) => {
-  const updatedSubjects = (profile?.subjects || []).filter(
-    (s: any) => s.name !== subjectName
+  if (!profile?.subjects || !user?.uid) return;
+
+  const subjectToRemove = profile.subjects.find(
+    (s: any) => s.name === subjectName
   );
-  await updateTeacherFirestore(updatedSubjects);
+
+  if (subjectToRemove) {
+    await updateTeacherFirestore("remove", subjectToRemove);
+  }
 };
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
@@ -841,7 +918,13 @@ const removeSubject = async (subjectName: string) => {
             <h1 className="text-3xl font-black flex items-center gap-2 tracking-tight">
               <Sparkles className="text-amber-400" /> TEACHER CENTRAL
             </h1>
-            <p className="opacity-80 font-medium">Educator: {teacherFullName}</p>
+        {teacherFullName && (
+  <p className="opacity-80 font-medium">
+    Educator: {teacherFullName}
+  </p>
+)}
+
+
           </div>
          <Button
   variant="secondary"
@@ -1143,55 +1226,48 @@ const removeSubject = async (subjectName: string) => {
 
                 {/* SUBJECTS IN PROFILE */}
              <div className="pt-6 border-t">
-  <Label className="font-black text-[10px] text-slate-400 uppercase mb-4 block">
+  <Label className="font-black text-[10px] text-slate-400 uppercase mb-4 block flex items-center gap-2">
     Manage Specializations
+    {/* Optional: Add a subtle loading indicator if you have a saving state */}
   </Label>
   
-  {/* SUBJECT ADDER - Now controlled by selectValue */}
   <div className="mb-6">
     <Select 
       value={selectValue} 
-      onValueChange={(val) => addSubject(val)}
+      onValueChange={addSubject}
     >
       <SelectTrigger className="w-full h-12 rounded-xl bg-slate-50 border-none font-bold">
         <SelectValue placeholder="Add a new subject..." />
       </SelectTrigger>
       <SelectContent>
-        {/* Added a height limit and scroll to the dropdown for better UX */}
         <div className="max-h-[300px] overflow-y-auto">
           {British_Curriculum_SUBJECTS.map((sub) => (
-            <SelectItem key={sub} value={sub}>
-              {sub}
-            </SelectItem>
+            <SelectItem key={sub} value={sub}>{sub}</SelectItem>
           ))}
         </div>
       </SelectContent>
     </Select>
   </div>
 
-  {/* INTERACTIVE BADGES - Flex wrap ensures they go "down" to the next line */}
   <div className="flex flex-wrap gap-3 items-start">
-    {profile?.subjects?.map((sub: any, i: number) => (
-      <Badge 
-        key={`${sub.name}-${i}`} 
-        className="py-2 pl-6 pr-3 rounded-full bg-slate-900 text-white font-bold flex items-center gap-2 group transition-all animate-in fade-in zoom-in duration-200"
-      >
-        <span className="truncate max-w-[200px]">{sub.name}</span>
-        <button 
-          onClick={() => removeSubject(sub.name)}
-          className="ml-1 p-1 hover:bg-rose-500 rounded-full transition-colors flex items-center justify-center"
-          title="Remove Subject"
-          type="button"
+    {profile?.subjects && profile.subjects.length > 0 ? (
+      profile.subjects.map((sub: any, i: number) => (
+        <Badge 
+          key={`${sub.name}-${i}`} 
+          className="py-2 pl-6 pr-3 rounded-full bg-slate-900 text-white font-bold flex items-center gap-2 animate-in fade-in zoom-in duration-200"
         >
-          <X size={14} className="text-slate-400 group-hover:text-white" />
-        </button>
-      </Badge>
-    ))}
-    
-    {(!profile?.subjects || profile.subjects.length === 0) && (
-      <div className="w-full py-4 text-center border-2 border-dashed border-slate-100 rounded-2xl">
-        <p className="text-xs text-slate-400 italic">No subjects selected. Use the dropdown above to add your specializations.</p>
-      </div>
+          {sub.name}
+          <button 
+            onClick={() => removeSubject(sub.name)}
+            className="ml-1 p-1 hover:bg-rose-500 rounded-full transition-colors"
+            type="button"
+          >
+            <X size={14} className="text-slate-400 group-hover:text-white" />
+          </button>
+        </Badge>
+      ))
+    ) : (
+      <p className="text-xs text-slate-400 italic">No specializations added yet.</p>
     )}
   </div>
 </div>
