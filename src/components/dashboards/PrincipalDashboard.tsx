@@ -35,7 +35,7 @@ import TeacherReviewModal from "@/components/dashboards/TeacherReviewModal";
 import {
   LogOut, Search, Eye, Users, CheckCircle, ChevronDown, ChevronUp, 
   GraduationCap, Megaphone, Calendar, DollarSign, SendHorizontal,
-  ShieldCheck, FileText, Briefcase, Trash2, Loader2
+  ShieldCheck, FileText, Briefcase, Trash2, Loader2,Edit
 } from "lucide-react";
 
 
@@ -171,7 +171,8 @@ const PrincipalDashboard: React.FC = () => {
   const [pendingTeachers, setPendingTeachers] = useState<any[]>([]);
   const [selectedTeacherApp, setSelectedTeacherApp] = useState<any | null>(null);
   const teacherUsersQuery = query(collection(db, "users"), where("role", "==", "teacher"), where("applicationStatus", "==", "submitted"));
-
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
 
   const navigate = useNavigate();
    const { logoutAll, user } = useAuth();
@@ -240,10 +241,22 @@ useEffect(() => {
 }, [selectedItem, selectedType]);
 
   // 3. HANDLERS (DEFINED BEFORE RETURN)
-  const handlePublishAnnouncement = async () => {
-    if (!announcementTitle || !announcementBody) return alert("Fill all fields");
-    setIsPublishing(true);
-    try {
+const handlePublishAnnouncement = async () => {
+  if (!announcementTitle || !announcementBody) return alert("Fill all fields");
+  
+  setIsPublishing(true);
+  try {
+    if (editingId) {
+      // ✏️ UPDATE EXISTING
+      await updateDoc(doc(db, "announcements", editingId), {
+        title: announcementTitle,
+        body: announcementBody,
+        updatedAt: serverTimestamp(), // Track when it was edited
+      });
+      alert("Broadcast updated.");
+      setEditingId(null);
+    } else {
+      // 🆕 CREATE NEW
       await addDoc(collection(db, "announcements"), {
         title: announcementTitle,
         body: announcementBody,
@@ -251,10 +264,38 @@ useEffect(() => {
         createdAt: serverTimestamp(),
         target: "all"
       });
-      setAnnouncementTitle(""); setAnnouncementBody("");
       alert("Broadcast live.");
-    } catch (err) { console.error(err); } finally { setIsPublishing(false); }
-  };
+    }
+
+    // Reset fields
+    setAnnouncementTitle(""); 
+    setAnnouncementBody("");
+  } catch (err) { 
+    console.error(err); 
+    alert("Operation failed.");
+  } finally { 
+    setIsPublishing(false); 
+  }
+};
+
+// 🗑️ DELETE HANDLER
+const handleDeleteAnnouncement = async (id: string) => {
+  if (!confirm("Are you sure you want to delete this broadcast? This cannot be undone.")) return;
+  try {
+    await deleteDoc(doc(db, "announcements", id));
+  } catch (err) {
+    console.error("Delete error:", err);
+  }
+};
+
+// 🛠️ PREPARE EDIT
+const startEditing = (ann: any) => {
+  setEditingId(ann.id);
+  setAnnouncementTitle(ann.title);
+  setAnnouncementBody(ann.body);
+  // Optional: scroll the user back up to the inputs
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
 
   const handleApproveStudent = async (studentId: string) => {
     try {
@@ -322,7 +363,29 @@ useEffect(() => {
   }
 };
 
+useEffect(() => {
+  // Try fetching without orderBy first to verify connection
+  const q = query(collection(db, "announcements"), orderBy("createdAt", "desc"));
 
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    if (snapshot.empty) {
+      console.log("No announcements found in Firestore.");
+      setAnnouncements([]);
+    } else {
+      const list = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      console.log("Fetched Announcements:", list);
+      setAnnouncements(list);
+    }
+  }, (err) => {
+    // 💡 IMPORTANT: Check your browser console for a "Firebase Index" link here!
+    console.error("Firestore Error:", err.code, err.message);
+  });
+
+  return () => unsubscribe();
+}, []);
 
   const clearSingleInvoice = async (invoiceId: string, student: any) => {
     try {
@@ -521,13 +584,67 @@ useEffect(() => {
 
         {/* MANAGEMENT CARDS */}
         <div className="grid grid-cols-1 lg:grid-cols-1 gap-8">
-            <ManagementCard title="Broadcast" icon={<Megaphone/>} color="bg-amber-100" expanded={announcementExpanded} onToggle={() => setAnnouncementExpanded(!announcementExpanded)}>
-                <Input placeholder="Subject" value={announcementTitle} onChange={(e) => setAnnouncementTitle(e.target.value)} className="rounded-xl bg-slate-50 font-bold" />
-                <Textarea placeholder="Message..." value={announcementBody} onChange={(e) => setAnnouncementBody(e.target.value)} className="rounded-xl bg-slate-50 min-h-[100px]" />
-                <Button disabled={isPublishing} onClick={handlePublishAnnouncement} className="w-full bg-slate-900 text-white rounded-xl font-black h-12">
-                    {isPublishing ? "SENDING..." : "PUBLISH BROADCAST"}
-                </Button>
-            </ManagementCard>
+            <ManagementCard 
+  title="Broadcast" 
+  icon={<Megaphone/>} 
+  color="bg-amber-100" 
+  expanded={announcementExpanded} 
+  onToggle={() => setAnnouncementExpanded(!announcementExpanded)}
+>
+  {/* Current Inputs */}
+  <div className="space-y-3 mb-6">
+    <Input 
+      placeholder="Subject" 
+      value={announcementTitle} 
+      onChange={(e) => setAnnouncementTitle(e.target.value)} 
+      className="rounded-xl bg-slate-50 font-bold" 
+    />
+    <Textarea 
+      placeholder="Message..." 
+      value={announcementBody} 
+      onChange={(e) => setAnnouncementBody(e.target.value)} 
+      className="rounded-xl bg-slate-50 min-h-[100px]" 
+    />
+    <div className="flex gap-2">
+      <Button 
+        disabled={isPublishing} 
+        onClick={handlePublishAnnouncement} 
+        className={`flex-1 rounded-xl font-black h-12 transition-colors ${editingId ? 'bg-indigo-600' : 'bg-slate-900'}`}
+      >
+        {isPublishing ? "PROCESSING..." : editingId ? "UPDATE BROADCAST" : "PUBLISH BROADCAST"}
+      </Button>
+      {editingId && (
+        <Button variant="outline" className="rounded-xl" onClick={() => {setEditingId(null); setAnnouncementTitle(""); setAnnouncementBody("");}}>
+          CANCEL
+        </Button>
+      )}
+    </div>
+  </div>
+
+  {/* 📜 AUDIT TRAIL SECTION */}
+  <div className="border-t border-slate-100 pt-4 space-y-3">
+    <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-1">Message History</h4>
+    <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2 scrollbar-hide">
+      {announcements.map((ann) => (
+  <div key={ann.id} className="p-3 bg-white border border-slate-100 rounded-xl mb-2">
+    <div className="flex justify-between items-start">
+      <h5 className="font-bold text-slate-800 text-sm">{ann.title || "No Title"}</h5>
+      <div className="flex gap-2">
+         <button onClick={() => startEditing(ann)} className="text-indigo-600"><Edit size={14}/></button>
+         <button onClick={() => handleDeleteAnnouncement(ann.id)} className="text-rose-500"><Trash2 size={14}/></button>
+      </div>
+    </div>
+    <p className="text-xs text-slate-500 mt-1">{ann.body}</p>
+    <p className="text-[9px] text-slate-400 mt-2 font-bold">
+      {/* 💡 The ?. prevents crashing if the timestamp is missing */}
+      {ann.createdAt?.toDate ? ann.createdAt.toDate().toLocaleString() : "Sending..."}
+    </p>
+  </div>
+))}
+    </div>
+  </div>
+</ManagementCard>
+
             <ManagementCard title="Timetable" icon={<Calendar/>} color="bg-indigo-100" expanded={timetableExpanded} onToggle={() => setTimetableExpanded(!timetableExpanded)}>
                 <TimetableManager onSave={saveTimetableSlot} />
             </ManagementCard>
