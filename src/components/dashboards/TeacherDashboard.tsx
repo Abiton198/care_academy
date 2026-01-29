@@ -30,6 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+
 /* Icons */
 import {
   Loader2, LogOut, Edit2, Save, ExternalLink, Video, Check, X, 
@@ -39,6 +40,13 @@ import {
 /* Signaling Logic (WebRTC) */
 import { Signaling } from "@/lib/signaling";
 import { useAuth } from "../auth/AuthProvider";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 
 
@@ -113,6 +121,51 @@ interface Message {
   timestamp: any;
 }
 
+const British_Curriculum_SUBJECTS = [
+  /* Primary Curriculum */
+  "English (Primary)",
+  "Mathematics (Primary)",
+  "Science (Primary)",
+  "Computing (Primary)",
+  "Geography (Primary)",
+  "History (Primary)",
+  "Art & Design (Primary)",
+  "Design & Technology (Primary)",
+  "Music (Primary)",
+  "Physical Education (Primary)",
+  "Religious Education (Primary)",
+  "PSHE (Primary)",
+
+  /* IGCSE */
+  "Mathematics (IGCSE)",
+  "Physics (IGCSE)",
+  "Chemistry (IGCSE)",
+  "Biology (IGCSE)",
+  "Computer Science (IGCSE)",
+  "English Language (IGCSE)",
+  "Business Studies (IGCSE)",
+  "Economics (IGCSE)",
+  "Geography (IGCSE)",
+  "History (IGCSE)",
+  "Coding (IGCSE)",
+
+  /* A-Level */
+  "Mathematics (A-Level)",
+  "Further Mathematics (A-Level)",
+  "Physics (A-Level)",
+  "Chemistry (A-Level)",
+  "Biology (A-Level)",
+  "Computer Science (A-Level)",
+  "English Literature (A-Level)",
+  "Business Studies (A-Level)",
+  "Economics (A-Level)",
+  "Geography (A-Level)",
+  "History (A-Level)",
+
+  /* Extras */
+  "Bible Study (All Grades)"
+];
+
 const TeacherDashboard: React.FC = () => {
   const navigate = useNavigate();
   const auth = getAuth();
@@ -167,6 +220,7 @@ const [isExtending, setIsExtending] = useState(false);
 
 // State to track students currently in the WebRTC room
 const [activeParticipants, setActiveParticipants] = useState<any[]>([]);
+const [selectValue, setSelectValue] = useState("");
 
 
   /* ======================================================
@@ -715,6 +769,66 @@ useEffect(() => {
   };
 }, [isLive, mobileMenuOpen, signaling.peerConnection]);
 
+// EDIT TEACHER PROFILE
+// 1. Unified Firestore Sync Function (Using setDoc to prevent "Missing Document" errors)
+const updateTeacherFirestore = async (newSubjects: any[]) => {
+  if (!user?.uid) return;
+
+  try {
+    const teacherRef = doc(db, "teachers", user.uid);
+    const appRef = doc(db, "teacherApplications", user.uid);
+
+    const payload = {
+      subjects: newSubjects,
+      updatedAt: serverTimestamp(),
+    };
+
+    // Update Teachers Collection
+    await setDoc(teacherRef, payload, { merge: true });
+
+    // Update Applications Collection (including nested personalInfo)
+    await setDoc(appRef, {
+      ...payload,
+      uid: user.uid,
+      personalInfo: {
+        subjects: newSubjects
+      }
+    }, { merge: true });
+
+    // Update local state for immediate UI feedback
+    setProfile((prev: any) => ({ ...prev, subjects: newSubjects }));
+    console.log("✅ Subjects synced successfully!");
+  } catch (err) {
+    console.error("❌ Failed to update subjects:", err);
+    alert("Error updating specializations. Please check your connection.");
+  }
+};
+
+// 2. Add Subject Handler
+const addSubject = async (subjectName: string) => {
+  if (!subjectName) return;
+
+  // Prevent duplicates
+  const isDuplicate = profile?.subjects?.some((s: any) => s.name === subjectName);
+  
+  if (!isDuplicate) {
+    const newSubject = { name: subjectName, curriculum: "British Curriculum" };
+    const updatedSubjects = [...(profile?.subjects || []), newSubject];
+    await updateTeacherFirestore(updatedSubjects);
+  }
+
+  // Always reset the dropdown so the user can add another one immediately
+  setSelectValue("");
+};
+
+// 3. Remove Subject Handler
+const removeSubject = async (subjectName: string) => {
+  const updatedSubjects = (profile?.subjects || []).filter(
+    (s: any) => s.name !== subjectName
+  );
+  await updateTeacherFirestore(updatedSubjects);
+};
+
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
 
   return (
@@ -1026,14 +1140,61 @@ useEffect(() => {
                   <Label className="font-black text-[10px] text-slate-400 uppercase">Professional Biography</Label>
                   <Textarea className={`rounded-2xl border-2 font-medium leading-relaxed ${isEditingProfile ? 'border-indigo-200' : 'bg-slate-50 border-none text-slate-900'}`} rows={5} value={isEditingProfile ? editProfile.bio : profile?.bio} disabled={!isEditingProfile} onChange={e => setEditProfile({...editProfile, bio: e.target.value})} />
                 </div>
-                <div className="pt-6 border-t">
-                   <Label className="font-black text-[10px] text-slate-400 uppercase mb-4 block">Specializations</Label>
-                   <div className="flex flex-wrap gap-3">
-                    {profile?.subjects?.map((sub, i) => (
-                      <Badge key={i} className="py-2 px-6 rounded-full bg-slate-900 text-white font-bold">{sub.name} • {sub.curriculum}</Badge>
-                    ))}
-                  </div>
-                </div>
+
+                {/* SUBJECTS IN PROFILE */}
+             <div className="pt-6 border-t">
+  <Label className="font-black text-[10px] text-slate-400 uppercase mb-4 block">
+    Manage Specializations
+  </Label>
+  
+  {/* SUBJECT ADDER - Now controlled by selectValue */}
+  <div className="mb-6">
+    <Select 
+      value={selectValue} 
+      onValueChange={(val) => addSubject(val)}
+    >
+      <SelectTrigger className="w-full h-12 rounded-xl bg-slate-50 border-none font-bold">
+        <SelectValue placeholder="Add a new subject..." />
+      </SelectTrigger>
+      <SelectContent>
+        {/* Added a height limit and scroll to the dropdown for better UX */}
+        <div className="max-h-[300px] overflow-y-auto">
+          {British_Curriculum_SUBJECTS.map((sub) => (
+            <SelectItem key={sub} value={sub}>
+              {sub}
+            </SelectItem>
+          ))}
+        </div>
+      </SelectContent>
+    </Select>
+  </div>
+
+  {/* INTERACTIVE BADGES - Flex wrap ensures they go "down" to the next line */}
+  <div className="flex flex-wrap gap-3 items-start">
+    {profile?.subjects?.map((sub: any, i: number) => (
+      <Badge 
+        key={`${sub.name}-${i}`} 
+        className="py-2 pl-6 pr-3 rounded-full bg-slate-900 text-white font-bold flex items-center gap-2 group transition-all animate-in fade-in zoom-in duration-200"
+      >
+        <span className="truncate max-w-[200px]">{sub.name}</span>
+        <button 
+          onClick={() => removeSubject(sub.name)}
+          className="ml-1 p-1 hover:bg-rose-500 rounded-full transition-colors flex items-center justify-center"
+          title="Remove Subject"
+          type="button"
+        >
+          <X size={14} className="text-slate-400 group-hover:text-white" />
+        </button>
+      </Badge>
+    ))}
+    
+    {(!profile?.subjects || profile.subjects.length === 0) && (
+      <div className="w-full py-4 text-center border-2 border-dashed border-slate-100 rounded-2xl">
+        <p className="text-xs text-slate-400 italic">No subjects selected. Use the dropdown above to add your specializations.</p>
+      </div>
+    )}
+  </div>
+</div>
               </CardContent>
             </Card>
           </TabsContent>
