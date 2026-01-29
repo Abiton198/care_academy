@@ -87,7 +87,7 @@ const British_Curriculum_SUBJECTS = {
       "History (IGCSE)",
       "Coding, AI & Robotics (IGCSE)",
       "Afrikaans",
-      "Nutrition",
+      "Nutrition & Sports",
       
     ]
   },
