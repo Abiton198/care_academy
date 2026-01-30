@@ -1,0 +1,15 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.netlify.care_academy.twa",
+      "sha256_cert_fingerprints": [
+        "5D:94:60:C0:51:15:49:87:F6:32:51:26:51:ED:5F:C2:8F:60:AF:90:E3:FE:43:E7:EB:6D:C6:A9:02:E8:7F:A6"
+      ]
+    }
+  }
+]
