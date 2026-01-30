@@ -46,7 +46,7 @@ import {
   MessageCircle,
   LayoutDashboard,
   Clock,
-  ExternalLink
+  ExternalLink,
 } from "lucide-react";
 
 
@@ -70,6 +70,7 @@ interface StudentProfile {
   parentId?: string;     
   parentName?: string;   
   email?: string;
+  dashboardLocked?:boolean;
 }
 
 interface TimetableEntry {
@@ -159,6 +160,8 @@ const StudentDashboard: React.FC = () => {
     "overview"
   );
 const { studentId } = useParams<{ studentId: string }>();
+const dashboardLocked = profile?.dashboardLocked ?? false;
+
   const [parent, setParent] = useState<{
     firstName: string;
     lastName: string;
@@ -545,6 +548,26 @@ if (!profile) {
   );
 }
 
+if (profile?.dashboardLocked) {
+  return (
+    <div className="h-screen flex items-center justify-center bg-slate-50">
+      <div className="max-w-md bg-white p-10 rounded-3xl shadow-xl text-center">
+        <AlertCircle className="mx-auto text-rose-500 mb-4" size={48} />
+        <h2 className="text-xl font-black mb-2">Access Temporarily Restricted</h2>
+        <p className="text-sm text-slate-500 mb-6">
+          Your dashboard has been locked due to {profile.lockReason || "administrative reasons"}.
+          Please ask your parent or guardian to settle the invoice.
+        </p>
+        <Button onClick={handleLogout} variant="outline">
+          Logout
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+
+
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
@@ -628,6 +651,8 @@ if (!profile) {
        <MoodleCard/>
 
       <main className="max-w-7xl mx-auto p-6 md:p-10">
+
+
         
         {/* 1. OVERVIEW TAB */}
         {activeTab === "overview" && (

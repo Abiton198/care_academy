@@ -37,6 +37,7 @@ import {
   GraduationCap, Megaphone, Calendar, DollarSign, SendHorizontal,
   ShieldCheck, FileText, Briefcase, Trash2, Loader2,Edit
 } from "lucide-react";
+import StudentLockButton from "@/lib/StudentLockButton";
 
 
 const British_Curriculum_SUBJECTS = {
@@ -239,6 +240,7 @@ useEffect(() => {
     setPendingAmount(pending);
   });
 }, [selectedItem, selectedType]);
+
 
   // 3. HANDLERS (DEFINED BEFORE RETURN)
 const handlePublishAnnouncement = async () => {
@@ -556,28 +558,66 @@ useEffect(() => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {filteredData.map((item: any) => (
-                  <tr key={item.id} className="hover:bg-indigo-50/20 transition-all group">
-                    <td className="px-8 py-6">
-                      <div className="font-black text-slate-800 text-sm">{viewMode === "students" ? `${item.firstName} ${item.lastName}` : `${item.personalInfo?.firstName} ${item.personalInfo?.lastName}`}</div>
-                      <div className="text-[10px] text-slate-400 font-bold uppercase">{item.parentEmail || item.personalInfo?.email}</div>
-                    </td>
-                    <td className="px-8 py-6 text-xs font-bold text-slate-500 uppercase">{viewMode === "students" ? item.grade : item.personalInfo?.gradePhase}</td>
-                    <td className="px-8 py-6">
-                      {viewMode === "students" ? (
-                        <Badge className={`rounded-lg px-3 py-1 text-[9px] font-black border-none ${item.paymentReceived ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"}`}>
-                           {item.paymentReceived ? "CLEARED" : "OWING"}
-                        </Badge>
-                      ) : <Badge className="bg-indigo-100 text-indigo-600 uppercase text-[9px] font-black border-none">{item.status || "active"}</Badge>}
-                    </td>
-                    <td className="px-8 py-6 text-right">
-                      <Button variant="ghost" size="icon" className="group-hover:bg-white rounded-xl shadow-sm" onClick={() => {setSelectedItem(item); setSelectedType(viewMode === "students" ? "student" : "teacher"); setShowModal(true);}}>
-                        <Eye size={18} className="text-indigo-600"/>
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
+  {filteredData.map((item: any) => (
+    <tr key={item.id} className="hover:bg-indigo-50/20 transition-all group">
+      {/* Student/Teacher Info */}
+      <td className="px-8 py-6">
+        <div className="font-black text-slate-800 text-sm">
+          {viewMode === "students"
+            ? `${item.firstName} ${item.lastName}`
+            : `${item.personalInfo?.firstName} ${item.personalInfo?.lastName}`}
+        </div>
+        <div className="text-[10px] text-slate-400 font-bold uppercase">
+          {item.parentEmail || item.personalInfo?.email}
+        </div>
+      </td>
+
+      {/* Grade */}
+      <td className="px-8 py-6 text-xs font-bold text-slate-500 uppercase">
+        {viewMode === "students" ? item.grade : item.personalInfo?.gradePhase}
+      </td>
+
+      {/* Payment / Status Badge */}
+      <td className="px-8 py-6">
+        {viewMode === "students" ? (
+          <Badge
+            className={`rounded-lg px-3 py-1 text-[9px] font-black border-none ${
+              item.paymentReceived
+                ? "bg-emerald-100 text-emerald-600"
+                : "bg-rose-100 text-rose-600"
+            }`}
+          >
+            {item.paymentReceived ? "CLEARED" : "OWING"}
+          </Badge>
+        ) : (
+          <Badge className="bg-indigo-100 text-indigo-600 uppercase text-[9px] font-black border-none">
+            {item.status || "active"}
+          </Badge>
+        )}
+      </td>
+
+      {/* Actions: Lock + View */}
+      <td className="px-8 py-6 text-right flex items-center justify-end gap-2">
+  {viewMode === "students" && <StudentLockButton studentId={item.id} />}
+  
+  <Button
+    variant="ghost"
+    size="icon"
+    className="group-hover:bg-white rounded-xl shadow-sm"
+    onClick={() => {
+      setSelectedItem(item);
+      setSelectedType(viewMode === "students" ? "student" : "teacher");
+      setShowModal(true);
+    }}
+  >
+    <Eye size={18} className="text-indigo-600" />
+  </Button>
+</td>
+
+    </tr>
+  ))}
+</tbody>
+
             </table>
           </CardContent>
         </Card>
@@ -735,14 +775,18 @@ useEffect(() => {
                   {selectedType === "student" ? (
                     <div className="space-y-6">
                       <div className="flex justify-between items-center bg-slate-900 p-8 rounded-[2.5rem] text-white">
-                        <div>
-                          <p className="text-[10px] font-black text-indigo-400 uppercase mb-1">Balance Owed</p>
-                          <h3 className="text-4xl font-black italic">R{pendingAmount.toFixed(2)}</h3>
-                        </div>
-                        <Badge className={`h-10 px-6 rounded-xl font-black text-[10px] uppercase border-none ${selectedItem?.paymentReceived ? "bg-emerald-500" : "bg-rose-500"}`}>
-                          {selectedItem?.paymentReceived ? "CLEARED" : "PENDING"}
-                        </Badge>
-                      </div>
+  <div>
+    <p className="text-[10px] font-black text-indigo-400 uppercase mb-1">
+      Balance Owed
+    </p>
+    <h3 className="text-4xl font-black italic">
+      R{pendingAmount.toFixed(2)}
+    </h3>
+  </div>
+
+  {/* 🔒 STUDENT ACCESS CONTROL (DOSSIER ONLY) */}
+</div>
+
                       <div className="overflow-hidden border border-slate-100 rounded-[2rem]">
                         <table className="w-full text-left">
                           <thead className="bg-slate-50 border-b border-slate-100">
