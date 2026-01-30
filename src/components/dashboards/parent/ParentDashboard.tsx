@@ -54,6 +54,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Settings } from "lucide-react";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import PendingInvoiceModal from "./PendingInvoiceModal";
 
 /* ======================================================
    CONSTANTS & TYPES
@@ -201,6 +202,9 @@ const [creatingStudent, setCreatingStudent] = useState(false);
 const [selectedStudentForLogin, setSelectedStudentForLogin] = useState<string>("");
 const [showPassword, setShowPassword] = useState(false);
 const [isPasswordCardOpen, setIsPasswordCardOpen] = useState(false);
+const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+const [pendingInvoiceCount, setPendingInvoiceCount] = useState(0);
+
 
   // Load parent profile + real-time data
   useEffect(() => {
@@ -275,6 +279,40 @@ const [isPasswordCardOpen, setIsPasswordCardOpen] = useState(false);
   }, [user?.uid, selectedChildId]);
 
  
+// MODAL POPUP INVOICE
+useEffect(() => {
+  if (!user?.uid) return;
+
+  const q = query(
+    collection(db, "invoices"),
+    where("parentId", "==", user.uid),
+    where("status", "==", "pending")
+  );
+
+  const unsub = onSnapshot(q, (snap) => {
+    if (!snap.empty) {
+      setPendingInvoiceCount(snap.size);
+      setShowInvoiceModal(true);
+    } else {
+      setShowInvoiceModal(false);
+    }
+  });
+
+  return () => unsub();
+}, [user?.uid]);
+
+
+const handlePayNow = () => {
+  setShowInvoiceModal(false);
+  navigate("/parent-dashboard?sections=payments&tab=history"); 
+};
+
+
+const handleLater = () => {
+  setShowInvoiceModal(false);
+};
+
+
 const handleLogout = async () => {
   try {
     if (user?.role === "parent") {
@@ -653,6 +691,15 @@ const saveProfileAndContinue = async () => {
     {creatingStudent ? "Syncing..." : "Enable Student Access"}
   </Button>
 </div>
+
+
+{/* INVOICE POPUP MODAL */}
+<PendingInvoiceModal
+  open={showInvoiceModal}
+  invoiceCount={pendingInvoiceCount}
+  onPayNow={handlePayNow}
+  onLater={handleLater}
+/>
 
 
         {/* Main Content */}
