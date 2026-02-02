@@ -65,6 +65,14 @@ const British_Curriculum_SUBJECTS = {
       "Afrikaans",
       "Geography",
       "Nutrition and Sports",
+      "Electrical Engineering",
+      "Advanced Bible Studies",
+      "Computing",
+      "Music",
+      "Physical Education",
+      "Well Being",
+      "Global Perspectives",
+      "Digital Literacy"
       
     ]
   },
@@ -73,7 +81,7 @@ const British_Curriculum_SUBJECTS = {
       "English Language (IGCSE)",
       "Mathematics (IGCSE)",
       "Science (Co-ordinated or Combined)",
-      "Bible Studie"
+      "Bible Studies"
     ],
     Electives: [
       "Sports Science",
@@ -89,6 +97,13 @@ const British_Curriculum_SUBJECTS = {
       "Afrikaans",
       "Nutrition & Sports",
       "Design & Technology",
+      "Art & Design",
+      "Enterprises",
+      "Drama",
+      "Commerce",
+      "Environmental Management",
+      "Global Perspectives and Research"
+
       
     ]
   },
@@ -109,7 +124,14 @@ const British_Curriculum_SUBJECTS = {
       "Coding, AI & Robotics",
       "Afrikaans",
       "Art & Design",
-      "Bible Studies"
+      "Bible Studies",
+            "Sociology",
+      "Music",
+      "Media Studies",
+      "Marine Science",
+      "History",
+      "Travel & Tourism",
+      "Psychology"
     ]
   }
 };
