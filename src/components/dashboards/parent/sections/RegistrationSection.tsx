@@ -88,6 +88,7 @@ const British_Curriculum_SUBJECTS = {
       "Coding, AI & Robotics (IGCSE)",
       "Afrikaans",
       "Nutrition & Sports",
+      "Design & Technology",
       
     ]
   },
@@ -107,6 +108,7 @@ const British_Curriculum_SUBJECTS = {
       "History (A-Level)",
       "Coding, AI & Robotics",
       "Afrikaans",
+      "Art & Design",
       "Bible Studies"
     ]
   }
