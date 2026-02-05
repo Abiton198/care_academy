@@ -96,6 +96,12 @@ const TimetableManager: React.FC = () => {
   const [grade, setGrade] = useState("");
   const [subject, setSubject] = useState("");
   const [selectedTeacherId, setSelectedTeacherId] = useState("");
+  const allowedOverlaps = [
+    ["Stage 4", "Stage 5"],
+    ["IGCSE 1 (Yr 10)", "IGCSE 2 (Yr 11)"],
+    ["AS Level", "A Level"],
+    ["Checkpoint", "IGCSE 1 (Yr 10)"] 
+  ];
 
   useEffect(() => {
     const q = query(collection(db, "teacherApplications"), where("status", "==", "approved"));
@@ -143,39 +149,43 @@ const TimetableManager: React.FC = () => {
   // ✅ UPDATED CONFLICT LOGIC:
   // Allow same teacher for Stage 4 & Stage 5 simultaneously
   const teacherBusy = entries.some(e => {
+    // Check if it's the same teacher at the same time/day
     const isSameTime = e.day === day && e.time === time && e.teacherUid === selectedTeacherId;
     if (!isSameTime) return false;
 
-    // EXCEPTION: If current selection is Stage 4 and existing entry is Stage 5 (or vice versa)
-    // they are NOT considered "busy" (blocked), they are allowed to co-teach.
-    const isCoTeachingStage = 
-      (grade === "Stage 4" && e.grade === "Stage 5") || 
-      (grade === "Stage 5" && e.grade === "Stage 4");
+    // 🎯 REFINED EXCEPTION LOGIC
+    // Check if the current 'grade' and the existing entry 'e.grade' belong to an allowed pair
+    const isCoTeachingStage = allowedOverlaps.some(pair => 
+      (pair.includes(grade.trim()) && pair.includes(e.grade.trim()))
+    );
 
-    return !isCoTeachingStage; // Block only if it's NOT a valid co-teaching stage
+    // If they are NOT in an allowed co-teaching pair, return true (Conflict Found)
+    return !isCoTeachingStage; 
   });
 
   const classExists = entries.some(
     e => e.day === day && e.time === time && e.grade === grade && e.subject === subject
   );
 
+  // 2. Conflict Alerts
   if (teacherBusy) {
-    alert(`Conflict: Teacher ${teacherObj?.name} is already teaching a different level at ${time} on ${day}.`);
+    alert(`Teacher Conflict: ${teacherObj?.name} is already assigned to a different class during this slot. (Note: Only IGCSE 1/2 or AS/A Level overlaps are permitted).`);
     setIsSaving(false);
     return;
   }
 
   if (classExists) {
-    alert(`Conflict: ${grade} already has ${subject} scheduled at ${time} on ${day}.`);
+    alert(`Class Conflict: ${grade} already has ${subject} scheduled at ${time} on ${day}.`);
     setIsSaving(false);
     return;
   }
 
+  // 3. Database Write
   try {
     await addDoc(collection(db, "timetable"), {
       day,
       time,
-      grade,
+      grade: grade.trim(),
       subject,
       curriculum: "Cambridge",
       teacherName: teacherObj?.name || "Unknown",
@@ -183,8 +193,10 @@ const TimetableManager: React.FC = () => {
       createdAt: serverTimestamp(),
     });
     
+    // Clear form on success
     setSubject("");
     setSelectedTeacherId("");
+    alert("Timetable updated successfully!");
   } catch (err: any) {
     console.error("Firestore Error:", err);
     alert("Database Error: " + err.message);
