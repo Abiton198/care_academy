@@ -38,6 +38,8 @@ import {
   ShieldCheck, FileText, Briefcase, Trash2, Loader2,Edit
 } from "lucide-react";
 import StudentLockButton from "@/lib/StudentLockButton";
+import { BulkDeleteTool } from "@/lib/BulkDeleteTool";
+// import { createProfile } from "@/lib/createTempTeacher";
 
 
 const British_Curriculum_SUBJECTS = {
@@ -174,6 +176,7 @@ const PrincipalDashboard: React.FC = () => {
   const teacherUsersQuery = query(collection(db, "users"), where("role", "==", "teacher"), where("applicationStatus", "==", "submitted"));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [announcements, setAnnouncements] = useState<any[]>([]);
+  //  const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
    const { logoutAll, user } = useAuth();
@@ -452,6 +455,23 @@ useEffect(() => {
     return teachers.filter(t => `${t.personalInfo?.firstName} ${t.personalInfo?.lastName}`.toLowerCase().includes(searchLower) && (t.status === "approved" || t.status === "submitted"));
   }, [viewMode, students, teachers, searchTerm, paymentFilter]);
 
+
+// 5. DEV OVERRIDE (FOR TESTING PURPOSES ONLY - NOT FOR PRODUCTION)
+  // const handleOverride = async () => {
+  //   if (!window.confirm("Force-approve Jason? This will bypass all application steps.")) return;
+    
+  //   setLoading(true);
+  //   try {
+  //     await createProfile(); // Your script from earlier
+  //     alert("✅ Jason is now fully active.");
+  //   } catch (err) {
+  //     console.error(err);
+  //     alert("Permission Denied: Make sure YOUR account is marked as a Principal in Firestore.");
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
 
   return (
@@ -690,6 +710,7 @@ useEffect(() => {
             </ManagementCard>
         </div>
 
+
         {/* DOSSIER MODAL */}
         <Dialog open={showModal} onOpenChange={setShowModal}>
           <DialogContent className="max-w-3xl rounded-[3rem] p-0 overflow-hidden border-none shadow-2xl">
@@ -699,7 +720,33 @@ useEffect(() => {
                     <p className="text-indigo-400 font-bold text-[10px] uppercase tracking-[0.3em]">{selectedType} record profile</p>
                 </div>
                 <div className="bg-white/10 p-4 rounded-3xl backdrop-blur-md z-10">
-                    {selectedType === "teacher" ? <Briefcase size={32} /> : <Users size={32} />}
+                    {/* Teacher Subjects Taught */}
+{selectedType === "teacher" && (
+  <div className="mt-8 space-y-4 pt-6 border-t border-slate-200">
+    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 ml-1">
+      Subjects Taught
+    </h4>
+
+    {Array.isArray(selectedItem?.subjects) && selectedItem.subjects.length > 0 ? (
+      <div className="flex flex-wrap gap-2">
+        {selectedItem.subjects.map((sub: any) => (
+          <Badge
+            key={sub.name}
+            className="bg-white text-emerald-700 border border-emerald-200 text-[10px] font-bold px-3 py-1"
+          >
+            {sub.name}
+          </Badge>
+        ))}
+      </div>
+    ) : (
+      <p className="text-xs text-slate-400 italic ml-1">
+        No subjects assigned yet
+      </p>
+    )}
+  </div>
+)}
+
+                    
                 </div>
             </div>
             
@@ -711,65 +758,105 @@ useEffect(() => {
                 </TabsList>
                 
                <TabsContent value="overview" className="space-y-6">
+
   {/* Basic Info Grid */}
   <div className="grid grid-cols-2 gap-6">
-    <InfoBox label="Full Name" value={selectedType === "student" ? `${selectedItem?.firstName} ${selectedItem?.lastName}` : `${selectedItem?.personalInfo?.firstName} ${selectedItem?.personalInfo?.lastName}`} />
-    <InfoBox label="Email" value={selectedItem?.personalInfo?.email || selectedItem?.parentEmail || "N/A"} />
-    <InfoBox label="Level" value={selectedItem?.grade || selectedItem?.personalInfo?.gradePhase || "N/A"} />
+    <InfoBox
+      label="Full Name"
+      value={
+        selectedType === "student"
+          ? `${selectedItem?.firstName} ${selectedItem?.lastName}`
+          : `${selectedItem?.personalInfo?.firstName} ${selectedItem?.personalInfo?.lastName}`
+      }
+    />
+    <InfoBox
+      label="Email"
+      value={selectedItem?.personalInfo?.email || selectedItem?.parentEmail || "N/A"}
+    />
+    <InfoBox
+      label="Level"
+      value={selectedItem?.grade || selectedItem?.personalInfo?.gradePhase || "N/A"}
+    />
     <InfoBox label="Status" value={selectedItem?.status || "Active"} />
   </div>
 
-  {/* NEW: Categorized Subjects Section */}
-  {selectedType === "student" && selectedItem?.subjects && (
-    <div className="mt-8 space-y-4 pt-6 border-t border-slate-100">
-      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 ml-1">Academic Curriculum Breakdown</h4>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Core Subjects Box */}
-        <div className="bg-indigo-50/50 rounded-2xl p-4 border border-indigo-100">
-          <p className="text-[9px] font-black text-indigo-400 uppercase mb-3 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" /> Core Modules
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {selectedItem.subjects
-              .filter(sub => {
-                const master = selectedItem.grade?.startsWith("Stage") 
-                  ? British_Curriculum_SUBJECTS.Primary.Core 
-                  : British_Curriculum_SUBJECTS.Secondary_IGCSE.Core;
-                return master.includes(sub);
-              })
-              .map(sub => (
-                <Badge key={sub} className="bg-white text-indigo-700 border-indigo-200 text-[10px] font-bold px-3 py-1">
-                  {sub}
-                </Badge>
-              ))}
-          </div>
-        </div>
+  {/* Subjects */}
+ {selectedType === "student" && Array.isArray(selectedItem?.subjects) && (
+  <div className="mt-8 space-y-4 pt-6 border-t border-slate-100">
+    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 ml-1">
+      Academic Curriculum Breakdown
+    </h4>
 
-        {/* Elective Subjects Box */}
-        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
-          <p className="text-[9px] font-black text-slate-400 uppercase mb-3 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" /> Electives
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {selectedItem.subjects
-              .filter(sub => {
-                const master = selectedItem.grade?.startsWith("Stage") 
-                  ? British_Curriculum_SUBJECTS.Primary.Core 
-                  : British_Curriculum_SUBJECTS.Secondary_IGCSE.Core;
-                return !master.includes(sub);
-              })
-              .map(sub => (
-                <Badge key={sub} variant="outline" className="bg-white text-slate-600 border-slate-200 text-[10px] font-bold px-3 py-1">
-                  {sub}
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+      {/* Core Subjects */}
+      <div className="bg-indigo-50/50 rounded-2xl p-4 border border-indigo-100">
+        <p className="text-[9px] font-black text-indigo-400 uppercase mb-3 flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+          Core Modules
+        </p>
+
+        <div className="flex flex-wrap gap-2">
+          {selectedItem.subjects
+            .filter(sub => {
+              const name = typeof sub === "string" ? sub : sub.name;
+              return ["English", "Mathematics", "Science"].some(core =>
+                name.toLowerCase().includes(core.toLowerCase())
+              );
+            })
+            .map(sub => {
+              const name = typeof sub === "string" ? sub : sub.name;
+
+              return (
+                <Badge
+                  key={name}
+                  className="bg-white text-indigo-700 border-indigo-200 text-[10px] font-bold px-3 py-1"
+                >
+                  {name}
                 </Badge>
-              ))}
-          </div>
+              );
+            })}
         </div>
       </div>
+
+      {/* Electives */}
+      <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+        <p className="text-[9px] font-black text-slate-400 uppercase mb-3 flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+          Electives
+        </p>
+
+        <div className="flex flex-wrap gap-2">
+          {selectedItem.subjects
+            .filter(sub => {
+              const name = typeof sub === "string" ? sub : sub.name;
+              return !["English", "Mathematics", "Science"].some(core =>
+                name.toLowerCase().includes(core.toLowerCase())
+              );
+            })
+            .map(sub => {
+              const name = typeof sub === "string" ? sub : sub.name;
+
+              return (
+                <Badge
+                  key={name}
+                  variant="outline"
+                  className="bg-white text-slate-600 border-slate-200 text-[10px] font-bold px-3 py-1"
+                >
+                  {name}
+                </Badge>
+              );
+            })}
+        </div>
+      </div>
+
     </div>
-  )}
+  </div>
+  
+)}
+
 </TabsContent>
+
 
                 <TabsContent value="action">
                   {selectedType === "student" ? (
@@ -839,6 +926,25 @@ useEffect(() => {
         {/* MODALS */}
         <GlobalBillingModal students={students.filter(s => s.status === "enrolled")} isOpen={isBillingModalOpen} onOpenChange={setIsBillingModalOpen} onBill={handleBulkBill} isPublishing={isPublishing} />
         <TeacherReviewModal application={selectedTeacherApp} onClose={() => setSelectedTeacherApp(null)} onApprove={(appId, uid) => { handleApproveTeacher(appId, uid); setSelectedTeacherApp(null); }} />
+
+
+
+{/* APPROVE TEACHER */}
+{/* <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl mt-4">
+      <h3 className="text-amber-800 font-bold mb-2">Administrative Actions</h3>
+      <Button 
+        onClick={handleOverride}
+        disabled={loading}
+        className="bg-amber-600 hover:bg-amber-700 text-white"
+      >
+        {loading ? "Processing..." : "Force-Approve Teacher"}
+      </Button>
+    </div> */}
+
+
+{/* Delete Profile */}
+<BulkDeleteTool teachers={teachers} students={students} />
+
       </div>
     </div>
   );
