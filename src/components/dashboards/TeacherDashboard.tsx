@@ -242,6 +242,8 @@ const [connectionStatus, setConnectionStatus] = useState<'searching' | 'connecte
 const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
 const teacher = user as unknown as TeacherUser;
+const [applicationDocId, setApplicationDocId] = useState<string | null>(null);
+
 
 
 const { logoutAll } = useAuth();
@@ -287,6 +289,17 @@ const teacherFullName = useMemo(() => {
     console.error("Error ending session:", error);
   }
 };
+
+// This effect is to keep the "current time" updated for any time-based UI elements (like the session timer)
+const [now, setNow] = React.useState(new Date());
+
+React.useEffect(() => {
+  const interval = setInterval(() => {
+    setNow(new Date());
+  }, 60 * 1000); // update every minute
+
+  return () => clearInterval(interval);
+}, []);
 
 
 useEffect(() => {
@@ -828,40 +841,33 @@ useEffect(() => {
 // ────────────────────────────────────────────────
 // Unified Firestore Sync (Handles both Add & Remove)
 // ────────────────────────────────────────────────
+
+
 const updateTeacherFirestore = async (
   operation: "add" | "remove",
   subject: any
 ) => {
-  if (!user?.uid) return;
+  if (!user?.uid || !applicationDocId) return;
 
-  const teacherRef = doc(db, "teachers", user.uid);
-  const appRef = doc(db, "teacherApplications", user.uid);
+  const appRef = doc(db, "teacherApplications", applicationDocId);
 
-  // Use the specific Firestore field transformations
-  const op = operation === "add" ? arrayUnion(subject) : arrayRemove(subject);
+  const op =
+    operation === "add"
+      ? arrayUnion(subject)
+      : arrayRemove(subject);
 
   try {
-    // 1. Update the 'teachers' collection
-    await setDoc(teacherRef, {
-      subjects: op,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
+    await updateDoc(appRef, {
+      "personalInfo.subjects": op,
+      updatedAt: serverTimestamp(),
+    });
 
-    // 2. Update the 'teacherApplications' collection (syncing both locations)
-    await setDoc(appRef, {
-      subjects: op,
-      personalInfo: {
-        subjects: op
-      },
-      updatedAt: serverTimestamp()
-    }, { merge: true });
-
-    console.log(`✅ Firestore Sync: ${operation} successful`);
+    console.log("✅ Subject add synced");
   } catch (err) {
     console.error("❌ Firestore Sync Error:", err);
-    alert("Database sync failed. Please check your internet connection.");
   }
 };
+
 
 // ────────────────────────────────────────────────
 // Add Subject Handler
@@ -905,6 +911,47 @@ const removeSubject = async (subjectName: string) => {
     await updateTeacherFirestore("remove", subjectToRemove);
   }
 };
+
+// Helper to parse time strings like "08:00 AM" and calculate start/end Date objects
+const parseTime = (timeStr: string) => {
+  // Handles "08:00 AM" or "08:00 AM - 09:00 AM"
+  const start = timeStr.split("-")[0].trim();
+  const [clock, meridian] = start.split(" ");
+  const [h, m] = clock.split(":").map(Number);
+
+  let hours = h;
+  if (meridian === "PM" && h !== 12) hours += 12;
+  if (meridian === "AM" && h === 12) hours = 0;
+
+  const startDate = new Date(now);
+  startDate.setHours(hours, m, 0, 0);
+
+  const endDate = new Date(startDate);
+  endDate.setMinutes(endDate.getMinutes() + 60); // default 1 hour
+
+  return { startDate, endDate };
+};
+
+const getLessonStatus = (day: string, time: string) => {
+  const todayName = now.toLocaleDateString("en-US", { weekday: "long" });
+
+  if (day !== todayName) return "upcoming";
+
+  const { startDate, endDate } = parseTime(time);
+
+  if (now > endDate) return "finished";
+  if (now >= startDate && now <= endDate) return "current";
+  return "upcoming";
+};
+
+// Mapping of lesson status to Tailwind CSS classes for dynamic styling
+const statusStyles: Record<string, string> = {
+  finished: "bg-red-100 text-red-700 border-red-200",
+  current: "bg-green-100 text-green-700 border-green-200 animate-pulse",
+  upcoming: "bg-yellow-100 text-yellow-700 border-yellow-200"
+};
+
+
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
 
@@ -1186,7 +1233,22 @@ const removeSubject = async (subjectName: string) => {
                     <tr key={t.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-8 py-6 font-black text-slate-700">{t.day}</td>
                       <td className="px-8 py-6 font-medium text-slate-500">{t.time}</td>
-                      <td className="px-8 py-6"><Badge className="bg-indigo-100 text-indigo-700 border-none font-black">{t.subject}</Badge></td>
+                      <td className="px-8 py-6 flex items-center gap-2">
+  <Badge className="bg-indigo-100 text-indigo-700 border-none font-black">
+    {t.subject}
+  </Badge>
+
+  {(() => {
+    const status = getLessonStatus(t.day, t.time);
+
+    return (
+      <Badge className={statusStyles[status]}>
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </Badge>
+    );
+  })()}
+</td>
+
                       <td className="px-8 py-6 font-bold text-slate-400">GRADE {t.grade}</td>
                     </tr>
                   ))}

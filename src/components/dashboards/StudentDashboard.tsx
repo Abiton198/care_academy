@@ -71,6 +71,8 @@ interface StudentProfile {
   parentName?: string;   
   email?: string;
   dashboardLocked?:boolean;
+  lockReason?:string;
+  subjects?: Array<{ name: string } | string>; // Supports both object and string formats
 }
 
 interface TimetableEntry {
@@ -84,12 +86,15 @@ interface TimetableEntry {
 
 interface ClassLink {
   id: string;
-  title: string;
+  name: string;
   url: string;
-  type: "classroom" | "resource";
-  teacherName: string;
   grade: string;
-  createdAt: any;
+  type: 'classroom' | 'external';
+  subject: string; // Add this!
+  teacherUid?: string;
+  targetGrade: string;
+  teacherName: string; // For display purposes
+  title: string; // For display purposes
 }
 
 // =============================================================================
@@ -155,6 +160,7 @@ const StudentDashboard: React.FC = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const signaling = useMemo(() => new Signaling())
+  const {loading } = useAuth();
 
    const [activeTab, setActiveTab] = useState<"overview" | "timetable" | "links">(
     "overview"
@@ -169,6 +175,10 @@ const dashboardLocked = profile?.dashboardLocked ?? false;
     grade:string;
   } | null>(null);
    const { student } = useStudentAuth();
+
+const [searchTerm, setSearchTerm] = useState("");
+
+  
 
 
 
@@ -206,38 +216,98 @@ const dashboardLocked = profile?.dashboardLocked ?? false;
   loadProfile();
 }, [studentId]); 
 
+// TIME SETTING (For Timetable Highlighting)
+const [now, setNow] = React.useState(new Date());
 
-  useEffect(() => {
-    if (!profile?.grade) return;
+React.useEffect(() => {
+  const interval = setInterval(() => {
+    setNow(new Date());
+  }, 60 * 1000); // update every minute
 
-    // Load Timetable
-    const qTime = query(collection(db, "timetable"), where("grade", "==", profile.grade));
-    const unsubTime = onSnapshot(qTime, (snap) => {
-      setTimetable(snap.docs.map(d => ({ id: d.id, ...d.data() } as TimetableEntry)));
-    });
+  return () => clearInterval(interval);
+}, []);
 
-    // Load Links & Watch for "Live" status
-    const qLinks = query(collection(db, "class_links"), where("grade", "in", [profile.grade, "all"]));
-    const unsubLinks = onSnapshot(qLinks, (snap) => {
-      const links = snap.docs.map(d => ({ id: d.id, ...d.data() } as ClassLink));
-      setClassLinks(links);
-      
-      // Look for any classroom link that is currently active in the 'rooms' collection
-      links.forEach(link => {
-        if (link.type === 'classroom') {
-          onSnapshot(doc(db, "rooms", link.id), (roomSnap) => {
-            if (roomSnap.exists() && roomSnap.data().status === "live") {
-              setIsTeacherLive(true);
-            } else {
-              setIsTeacherLive(false);
-            }
-          });
-        }
+
+useEffect(() => {
+  if (!profile?.grade) return;
+
+  // Load Timetable
+  const qTime = query(collection(db, "timetable"), where("grade", "==", profile.grade));
+  const unsubTime = onSnapshot(qTime, (snap) => {
+    setTimetable(snap.docs.map(d => ({ id: d.id, ...d.data() } as TimetableEntry)));
+  }); 
+
+   // 2. Main listener for class links
+  // Use 'targetGrade' to match your Firestore document field
+  const qLinks = query(
+    collection(db, "class_links"),
+    where("targetGrade", "in", [profile.grade, "all"])
+  );
+
+  const unsubLinks = onSnapshot(qLinks, (snap) => {
+    const allLinks = snap.docs.map(d => ({ 
+      id: d.id, 
+      ...d.data() 
+    } as ClassLink));
+
+    const studentLinks = allLinks.filter(link => {
+      // 🎯 FIX: Handle missing 'subject' field for global links
+      // If targetGrade is 'all', we show it regardless of subject
+      if (link.targetGrade === "all") return true;
+
+      const linkSub = (link.subject || "").toLowerCase();
+      if (linkSub === "all" || linkSub === "general") return true;
+
+      return profile.subjects?.some(s => {
+        const studentSubName = (typeof s === 'string' ? s : s.name) || "";
+        return studentSubName.trim().toLowerCase() === linkSub.trim();
       });
     });
 
-    return () => { unsubTime(); unsubLinks(); };
-  }, [profile?.grade]);
+    setClassLinks(studentLinks);
+
+    // 🎯 LIVE STATUS: Only track rooms for links the student actually has
+    const classroomIds = studentLinks
+      .filter(l => l.type === 'classroom')
+      .map(l => l.id);
+
+    if (classroomIds.length === 0) {
+      setIsTeacherLive(false);
+      return;
+    }
+
+    // Secondary listener for the 'rooms' collection
+    // We listen to the whole collection to see if ANY of the student's rooms are live
+    const qRooms = query(collection(db, "rooms"), where("status", "==", "live"));
+    const unsubRooms = onSnapshot(qRooms, (roomSnap) => {
+      // If any live room ID matches one of the student's classroom link IDs
+      const activeLiveRooms = roomSnap.docs.filter(doc => classroomIds.includes(doc.id));
+      setIsTeacherLive(activeLiveRooms.length > 0);
+    });
+
+    return () => unsubRooms(); // Cleanup inner listener
+  });
+
+  return () => {
+    unsubLinks();
+    // if you have an unsubTime from a different listener, include it here
+  };
+}, [profile?.grade, profile?.subjects]); 
+// Added subjects to dependency array so it re-filters if subjects change
+
+
+// search
+const filteredLinks = useMemo(() => {
+  return classLinks.filter((link) => {
+    // 1. Search Logic: Match title, subject, or teacher name
+    const searchMatch = 
+      link.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      link.subject?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      link.teacherName?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    return searchMatch;
+  });
+}, [classLinks, searchTerm]);
 
   /* ---------------- 2. JOIN LIVE CLASSROOM ---------------- */
   const joinClass = async (link: ClassLink) => {
@@ -538,6 +608,14 @@ if (!profileLoaded) {
   );
 }
 
+if (loading || !profile) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
 // If profile is loaded but no data was found
 if (!profile) {
   return (
@@ -566,7 +644,39 @@ if (profile?.dashboardLocked) {
   );
 }
 
+// This function determines if a lesson is done, ongoing, or upcoming based on the current time and the lesson's scheduled time. It assumes each lesson is 1 hour long for simplicity.
+const getLessonStatus = (time: string) => {
+  // Example time: "08:00 AM"
+  const [clock, meridian] = time.split(" ");
+  const [hours, minutes] = clock.split(":").map(Number);
 
+  let lessonHour = hours;
+  if (meridian === "PM" && hours !== 12) lessonHour += 12;
+  if (meridian === "AM" && hours === 12) lessonHour = 0;
+
+  const lessonStart = new Date(now);
+  lessonStart.setHours(lessonHour, minutes, 0, 0);
+
+  const lessonEnd = new Date(lessonStart);
+  lessonEnd.setMinutes(lessonEnd.getMinutes() + 60); // 1-hour lesson
+
+  if (now > lessonEnd) return "done";
+  if (now >= lessonStart && now <= lessonEnd) return "ongoing";
+  return "upcoming";
+};
+
+// These styles will be applied to the lesson badges based on their status
+const statusStyles: Record<string, string> = {
+  done: "bg-red-200 text-emerald-700 border-emerald-200",
+  ongoing: "bg-green-500 text-indigo-700 border-indigo-200 animate-pulse",
+  upcoming: "bg-yellow-200 text-slate-500 border-slate-200"
+};
+
+const statusLabel: Record<string, string> = {
+  done: "Done",
+  ongoing: "Current",
+  upcoming: "Upcoming"
+};
 
 
   return (
@@ -701,7 +811,17 @@ if (profile?.dashboardLocked) {
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{item.teacherName}</p>
                       </div>
                     </div>
-                    <Badge className="bg-white text-slate-500 border-slate-200">Upcoming</Badge>
+
+                    {(() => {
+  const status = getLessonStatus(item.time);
+
+  return (
+    <Badge className={statusStyles[status]}>
+      {statusLabel[status]}
+    </Badge>
+  );
+})()}
+
                   </div>
                 )) : <p className="text-slate-400 italic text-sm">No lessons scheduled for today.</p>}
               </div>
@@ -741,74 +861,11 @@ if (profile?.dashboardLocked) {
         )}
 
         {/* 3. LINKS TAB */}
-        {activeTab === "links" && (
-  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 animate-in zoom-in-95 duration-500">
-    {classLinks.map((link) => (
-      <Card 
-        key={link.id} 
-        className="group border-0 shadow-xl rounded-[2.5rem] overflow-hidden hover:scale-[1.03] transition-all cursor-pointer bg-white"
-        onClick={() => {
-          // Logic: Check if the link is external or if we should use internal joinClass
-          const isExternal = link.url?.startsWith('http') || link.url?.includes('.') ;
-          
-          if (isExternal) {
-            // Ensure the URL has a protocol
-            const destination = link.url.startsWith('http') ? link.url : `https://${link.url}`;
-            window.open(destination, '_blank');
-          } else {
-            // Fallback to internal logic if it's just a room ID
-            joinClass(link);
-          }
-        }}
-      >
-        <CardContent className="p-8">
-          <div className="flex items-center gap-5 mb-6">
-            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-sm ${
-              link.type === 'classroom' 
-                ? 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white' 
-                : 'bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white'
-            }`}>
-              {link.type === 'classroom' ? <Video size={24} /> : <FileText size={24} />}
-            </div>
-            <div className="flex-1 min-w-0">
-              <h4 className="font-black text-slate-800 uppercase text-sm truncate tracking-tight group-hover:text-indigo-600 transition-colors">
-                {link.title}
-              </h4>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
-                Authored by: <span className="text-slate-600">{link.teacherName}</span>
-              </p>
-            </div>
-          </div>
-
-          {/* URL PREVIEW AREA */}
-          <div className="mb-6 p-3 bg-slate-50 rounded-xl border border-slate-100 group-hover:bg-indigo-50/50 transition-colors">
-            <p className="text-[10px] font-mono text-indigo-400 truncate">
-              {link.url}
-            </p>
-          </div>
-          
-          <div className="flex items-center justify-between pt-6 border-t border-slate-100">
-            <Badge className={`border-none font-black text-[9px] uppercase tracking-widest px-4 py-1.5 rounded-xl ${
-              link.type === 'classroom' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'
-            }`}>
-              {link.type === 'classroom' ? '● Live Session' : 'Resource Material'}
-            </Badge>
-            <div className="flex items-center gap-2 text-[10px] font-black text-slate-300 group-hover:text-indigo-600 transition-all">
-              <span className="opacity-0 group-hover:opacity-100 transition-opacity">OPEN LINK</span>
-              <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-300 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm">
-                <ExternalLink size={18} />
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    ))}
-  </div>
-)}
+       
       </main>
     </div>
 
-      <main className="max-w-7xl mx-auto p-6 md:p-10">
+      <main className="max-w-7xl mx-auto p-1 md:p-10">
         
         {/* LIVE ALERT BANNER */}
         {isClassLive && !isLive && (
@@ -834,64 +891,110 @@ if (profile?.dashboardLocked) {
           </div>
         )}
 
+
        {/* RESOURCE GRID */}
-<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-  {classLinks.map((link) => (
-    <Card 
-      key={link.id} 
-      className="group border-0 shadow-xl rounded-[2.5rem] overflow-hidden hover:scale-[1.02] transition-all cursor-pointer bg-white" 
-      onClick={() => {
-        // logic: If it's a classroom type but has a valid external URL, go to the URL.
-        // If you still want the OPTION for internal WebRTC, you can check if the URL includes 'internal'
-        if (link.url && (link.url.startsWith('http') || link.url.includes('zoom.us') || link.url.includes('meet.google'))) {
-          window.open(link.url.startsWith('http') ? link.url : `https://${link.url}`, '_blank');
-        } else if (link.type === 'classroom') {
-          // Fallback for internal WebRTC if no external URL is provided
-          setActiveSession(link); 
-          setIsLive(true); 
-        } else {
-          window.open(link.url, '_blank');
-        }
-      }}
-    >
-      <CardContent className="p-8">
-        <div className="flex items-center gap-5 mb-6">
-          <div className={`w-14 h-14 rounded-[1.2rem] flex items-center justify-center ${link.type === 'classroom' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'}`}>
-            {link.type === 'classroom' ? <Video size={24} /> : <FileText size={24} />}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-               <h4 className="font-black text-slate-800 uppercase text-sm truncate">{link.title}</h4>
-               {link.type === 'classroom' && (
-                 <span className="flex h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
-               )}
-            </div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-              {link.teacherName}
-            </p>
-          </div>
-        </div>
+<div className="grid flex-col md:grid-cols-2 lg:grid-cols-1 gap-8">
+ {/* 3. LINKS TAB */}
+{activeTab === "links" && (
+  <div className="space-y-8 animate-in fade-in duration-500">
+    
+        {/* SEARCH BAR AREA */}
+    <div className="relative max-w-md mx-auto md:mx-0">
+      <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+        <Loader2 className={`animate-spin text-indigo-500 ${linksLoaded ? 'hidden' : 'block'}`} size={18} />
+        {!linksLoaded && <div className="w-4 h-4 bg-slate-100 rounded-full" />}
+        {linksLoaded && <Users className="text-slate-400" size={18} />}
+      </div>
+      <Input
+        type="text"
+        placeholder="Search by subject or teacher..."
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        className="pl-12 h-14 bg-white border-slate-100 rounded-2xl shadow-sm focus:ring-2 focus:ring-indigo-500/20 transition-all font-medium"
+      />
+    </div>
+    
 
-        <div className="space-y-3">
-          <p className="text-[11px] text-slate-500 font-medium line-clamp-1 italic bg-slate-50 p-2 rounded-lg border border-slate-100">
-            {link.url}
-          </p>
-          
-          <div className="flex items-center justify-between pt-4 border-t border-slate-50">
-             <Badge className={`border-none font-black text-[9px] px-3 py-1 rounded-full ${
-               link.type === 'classroom' ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-600'
-             }`}>
-               {link.type === 'classroom' ? 'LIVE SESSION' : 'STUDY MATERIAL'}
-             </Badge>
-             <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white group-hover:bg-indigo-600 transition-all shadow-lg">
-               <ExternalLink size={18} />
-             </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  ))}
+    {/* GRID */}
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-8">
+      {filteredLinks.length > 0 ? (
+        filteredLinks.map((link) => (
+          <Card 
+            key={link.id} 
+            className="group border-0 shadow-xl rounded-[2.5rem] overflow-hidden hover:scale-[1.03] transition-all cursor-pointer bg-white"
+            onClick={() => {
+              const isExternal = link.url?.startsWith('http') || link.url?.includes('.');
+              if (isExternal) {
+                const destination = link.url.startsWith('http') ? link.url : `https://${link.url}`;
+                window.open(destination, '_blank');
+              } else {
+                joinClass(link);
+              }
+            }}
+          >
+            <CardContent className="p-8">
+              <div className="flex items-center gap-5 mb-6">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-sm ${
+                  link.type === 'classroom' 
+                    ? 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white' 
+                    : 'bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white'
+                }`}>
+                  {link.type === 'classroom' ? <Video size={24} /> : <FileText size={24} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-black text-slate-800 uppercase text-sm truncate tracking-tight group-hover:text-indigo-600 transition-colors">
+                    {link.title}
+                  </h4>
+                  {/* SUBJECT BADGE */}
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[9px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded uppercase">
+                      {link.subject || "General"}
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-400 truncate">
+                      {link.teacherName}
+                    </span>
+                  </div>
+                </div>
+              </div>
 
+              <div className="mb-6 p-3 bg-slate-50 rounded-xl border border-slate-100 group-hover:bg-indigo-50/50 transition-colors">
+                <p className="text-[10px] font-mono text-indigo-400 truncate">
+                  {link.url}
+                </p>
+              </div>
+              
+              <div className="flex items-center justify-between pt-6 border-t border-slate-100">
+                <Badge className={`border-none font-black text-[9px] uppercase tracking-widest px-4 py-1.5 rounded-xl ${
+                  link.type === 'classroom' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {link.type === 'classroom' ? '● Live Session' : 'Resource Material'}
+                </Badge>
+                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-300 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                  <ExternalLink size={18} />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))
+      ) : (
+        <div className="col-span-full py-20 text-center">
+          <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">No matching links found.</p>
+        </div>
+      )}
+    </div>
+  </div>
+)}
+
+{/* Empty State if no links match student's subjects */}
+{classLinks.length === 0 && (
+  <div className="col-span-full py-20 text-center">
+    <div className="bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+      <AlertCircle className="text-slate-400" size={32} />
+    </div>
+    <h3 className="text-slate-800 font-black uppercase text-sm">No Resources Found</h3>
+    <p className="text-slate-400 text-xs mt-1">You don't have any links for your current subjects yet.</p>
+  </div>
+)}
 </div>
       </main>
  
