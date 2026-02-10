@@ -38,7 +38,7 @@ import {
   ShieldCheck, FileText, Briefcase, Trash2, Loader2,Edit
 } from "lucide-react";
 import StudentLockButton from "@/lib/StudentLockButton";
-import { BulkDeleteTool } from "@/lib/BulkDeleteTool";
+// import { BulkDeleteTool } from "@/lib/BulkDeleteTool";
 import TeacherLessonStatsCard from "@/lib/TeacherLessonStatsCard";
 // import { createProfile } from "@/lib/createTempTeacher";
 
@@ -945,7 +945,7 @@ useEffect(() => {
 
 
 {/* Delete Profile */}
-<BulkDeleteTool teachers={teachers} students={students} />
+{/* <BulkDeleteTool teachers={teachers} students={students} /> */}
 
       </div>
     </div>
