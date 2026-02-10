@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import StudentLockButton from "@/lib/StudentLockButton";
 import { BulkDeleteTool } from "@/lib/BulkDeleteTool";
+import TeacherLessonStatsCard from "@/lib/TeacherLessonStatsCard";
 // import { createProfile } from "@/lib/createTempTeacher";
 
 
@@ -926,10 +927,11 @@ useEffect(() => {
         {/* MODALS */}
         <GlobalBillingModal students={students.filter(s => s.status === "enrolled")} isOpen={isBillingModalOpen} onOpenChange={setIsBillingModalOpen} onBill={handleBulkBill} isPublishing={isPublishing} />
         <TeacherReviewModal application={selectedTeacherApp} onClose={() => setSelectedTeacherApp(null)} onApprove={(appId, uid) => { handleApproveTeacher(appId, uid); setSelectedTeacherApp(null); }} />
+          <TeacherLessonStatsCard  />
 
 
 
-{/* APPROVE TEACHER */}
+{/* APPROVE TEACHER  - 3*/}
 {/* <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl mt-4">
       <h3 className="text-amber-800 font-bold mb-2">Administrative Actions</h3>
       <Button 
