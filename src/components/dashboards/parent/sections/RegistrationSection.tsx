@@ -61,7 +61,8 @@ const British_Curriculum_SUBJECTS = {
       "British Curriculum Primary Global Perspectives",
       "British Curriculum Primary Digital Literacy",
       "British Curriculum Primary Art & Design",
-      "Coding, AI & Robotics",
+      "Coding",
+      "AI & Robotics Fundamentals",
       "Afrikaans",
       "Geography",
       "Nutrition and Sports",
@@ -72,7 +73,8 @@ const British_Curriculum_SUBJECTS = {
       "Physical Education",
       "Well Being",
       "Global Perspectives",
-      "Digital Literacy"
+      "Digital Literacy",
+      "Biology",
       
     ]
   },
@@ -93,7 +95,8 @@ const British_Curriculum_SUBJECTS = {
       "Economics (IGCSE)",
       "Geography (IGCSE)",
       "History (IGCSE)",
-      "Coding, AI & Robotics (IGCSE)",
+      "Coding ",
+      "AI & Robotics Fundamentals",
       "Afrikaans",
       "Nutrition & Sports",
       "Design & Technology",
@@ -102,7 +105,8 @@ const British_Curriculum_SUBJECTS = {
       "Drama",
       "Commerce",
       "Environmental Management",
-      "Global Perspectives and Research"
+      "Global Perspectives and Research",
+      "Combined Science (IGCSE)"
 
       
     ]
@@ -121,7 +125,8 @@ const British_Curriculum_SUBJECTS = {
       "Economics (A-Level)",
       "Geography (A-Level)",
       "History (A-Level)",
-      "Coding, AI & Robotics",
+      "Coding",
+      "AI & Robotics Fundamentals",
       "Afrikaans",
       "Art & Design",
       "Bible Studies",
