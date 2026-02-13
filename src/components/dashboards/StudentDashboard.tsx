@@ -679,6 +679,32 @@ const statusLabel: Record<string, string> = {
 };
 
 
+const dayOrder: Record<string, number> = {
+  Monday: 1,
+  Tuesday: 2,
+  Wednesday: 3,
+  Thursday: 4,
+};
+
+const getMinutes = (timeStr: string) => {
+  const [clock, meridian] = timeStr.split(" ");
+  let [hours, minutes] = clock.split(":").map(Number);
+
+  if (meridian === "PM" && hours !== 12) hours += 12;
+  if (meridian === "AM" && hours === 12) hours = 0;
+
+  return hours * 60 + minutes;
+};
+
+const sortedTimetable = [...timetable].sort((a, b) => {
+  const dayDiff = dayOrder[a.day] - dayOrder[b.day];
+  if (dayDiff !== 0) return dayDiff;
+
+  // If same day → sort by time
+  return getMinutes(a.time) - getMinutes(b.time);
+});
+
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       
@@ -842,7 +868,7 @@ const statusLabel: Record<string, string> = {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {timetable.sort((a,b) => a.day.localeCompare(b.day)).map((entry) => (
+                  {sortedTimetable.map((entry) =>(
                     <tr key={entry.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-6 font-black text-slate-800 text-xs uppercase">{entry.day}</td>
                       <td className="p-6 font-bold text-slate-500 text-xs">{entry.time}</td>

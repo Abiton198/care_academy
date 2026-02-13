@@ -931,18 +931,37 @@ const parseTime = (timeStr: string) => {
 
   return { startDate, endDate };
 };
-
 const getLessonStatus = (day: string, time: string) => {
   const todayName = now.toLocaleDateString("en-US", { weekday: "long" });
 
-  if (day !== todayName) return "upcoming";
+  // Get numeric day index (0-6)
+  const dayIndexMap: Record<string, number> = {
+    Sunday: 0,
+    Monday: 1,
+    Tuesday: 2,
+    Wednesday: 3,
+    Thursday: 4,
+    Friday: 5,
+    Saturday: 6,
+  };
 
+  const todayIndex = now.getDay();
+  const lessonDayIndex = dayIndexMap[day];
+
+  // If lesson day is before today → finished
+  if (lessonDayIndex < todayIndex) return "finished";
+
+  // If lesson day is after today → upcoming
+  if (lessonDayIndex > todayIndex) return "upcoming";
+
+  // If same day → calculate time
   const { startDate, endDate } = parseTime(time);
 
   if (now > endDate) return "finished";
   if (now >= startDate && now <= endDate) return "current";
   return "upcoming";
 };
+
 
 // Mapping of lesson status to Tailwind CSS classes for dynamic styling
 const statusStyles: Record<string, string> = {
@@ -951,6 +970,31 @@ const statusStyles: Record<string, string> = {
   upcoming: "bg-yellow-100 text-yellow-700 border-yellow-200"
 };
 
+// ORDER ARRANGEMENT
+const dayOrder: Record<string, number> = {
+  Monday: 1,
+  Tuesday: 2,
+  Wednesday: 3,
+  Thursday: 4,
+};
+
+const getMinutes = (timeStr: string) => {
+  const [clock, meridian] = timeStr.split(" ");
+  let [hours, minutes] = clock.split(":").map(Number);
+
+  if (meridian === "PM" && hours !== 12) hours += 12;
+  if (meridian === "AM" && hours === 12) hours = 0;
+
+  return hours * 60 + minutes;
+};
+
+
+const sortedTimetable = [...timetable].sort((a, b) => {
+  const dayDiff = (dayOrder[a.day] || 99) - (dayOrder[b.day] || 99);
+  if (dayDiff !== 0) return dayDiff;
+
+  return getMinutes(a.time) - getMinutes(b.time);
+});
 
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
@@ -1229,7 +1273,7 @@ const statusStyles: Record<string, string> = {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {timetable.map(t => (
+                  {sortedTimetable.map(t => (
                     <tr key={t.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-8 py-6 font-black text-slate-700">{t.day}</td>
                       <td className="px-8 py-6 font-medium text-slate-500">{t.time}</td>

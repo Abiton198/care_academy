@@ -74,10 +74,34 @@ const British_Curriculum_SUBJECTS = {
       "Well Being",
       "Global Perspectives",
       "Digital Literacy",
-      "Biology",
-      
+      "Biology"
     ]
   },
+
+  Checkpoint: {
+    Core: [
+      "English (Checkpoint)",
+      "Mathematics (Checkpoint)",
+      "Science (Checkpoint)",
+      "Bible Studies"
+    ],
+    Electives: [
+      "Global Perspectives (Checkpoint)",
+      "Computer Science (Checkpoint)",
+      "Digital Literacy",
+      "Coding",
+      "AI & Robotics Fundamentals",
+      "Afrikaans",
+      "Geography",
+      "History",
+      "Art & Design",
+      "Music",
+      "Physical Education",
+      "Well Being",
+      "Environmental Studies"
+    ]
+  },
+
   Secondary_IGCSE: {
     Core: [
       "English Language (IGCSE)",
@@ -86,7 +110,6 @@ const British_Curriculum_SUBJECTS = {
       "Bible Studies"
     ],
     Electives: [
-      "Sports Science",
       "Physics (IGCSE)",
       "Chemistry (IGCSE)",
       "Biology (IGCSE)",
@@ -95,24 +118,52 @@ const British_Curriculum_SUBJECTS = {
       "Economics (IGCSE)",
       "Geography (IGCSE)",
       "History (IGCSE)",
-      "Coding ",
+      "Global Perspectives and Research",
+      "Combined Science (IGCSE)",
+      "Design & Technology",
+      "Art & Design",
+      "Drama",
+      "Environmental Management",
+      "Sports Science",
+      "Coding",
       "AI & Robotics Fundamentals",
       "Afrikaans",
       "Nutrition & Sports",
-      "Design & Technology",
-      "Art & Design",
-      "Enterprises",
-      "Drama",
       "Commerce",
-      "Environmental Management",
-      "Global Perspectives and Research",
-      "Combined Science (IGCSE)"
-
-      
+      "Enterprises"
     ]
   },
-  Secondary_ALevel: {
-    Core: [], 
+
+  AS_Level: {
+    Core: [],
+    Electives: [
+      "Mathematics (AS Level)",
+      "Further Mathematics (AS Level)",
+      "Physics (AS Level)",
+      "Chemistry (AS Level)",
+      "Biology (AS Level)",
+      "Computer Science (AS Level)",
+      "English Literature (AS Level)",
+      "Business Studies (AS Level)",
+      "Economics (AS Level)",
+      "Geography (AS Level)",
+      "History (AS Level)",
+      "Psychology (AS Level)",
+      "Sociology (AS Level)",
+      "Media Studies (AS Level)",
+      "Marine Science (AS Level)",
+      "Travel & Tourism (AS Level)",
+      "Art & Design (AS Level)",
+      "Music (AS Level)",
+      "Bible Studies",
+      "Coding",
+      "AI & Robotics Fundamentals",
+      "Afrikaans"
+    ]
+  },
+
+  A_Level: {
+    Core: [],
     Electives: [
       "Mathematics (A-Level)",
       "Further Mathematics (A-Level)",
@@ -125,21 +176,18 @@ const British_Curriculum_SUBJECTS = {
       "Economics (A-Level)",
       "Geography (A-Level)",
       "History (A-Level)",
-      "Coding",
-      "AI & Robotics Fundamentals",
-      "Afrikaans",
-      "Art & Design",
-      "Bible Studies",
-            "Sociology",
-      "Music",
-      "Media Studies",
-      "Marine Science",
-      "History",
-      "Travel & Tourism",
-      "Psychology"
+      "Psychology (A-Level)",
+      "Sociology (A-Level)",
+      "Media Studies (A-Level)",
+      "Marine Science (A-Level)",
+      "Travel & Tourism (A-Level)",
+      "Art & Design (A-Level)",
+      "Music (A-Level)",
+      "Bible Studies"
     ]
   }
 };
+
 
 /* ───────────────────────── COMPONENT ───────────────────────── */
 export default function RegistrationSection() {
