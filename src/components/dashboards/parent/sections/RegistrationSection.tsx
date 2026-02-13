@@ -52,15 +52,15 @@ const GRADES = [
 const British_Curriculum_SUBJECTS = {
   Primary: {
     Core: [
-      "British Curriculum Primary English",
-      "British Curriculum Primary Mathematics",
-      "British Curriculum Primary Science",
+      "English (Primary)",
+      "Mathematics (Primary)",
+      "Science (Primary)",
       "Bible Studies"
     ],
     Electives: [
-      "British Curriculum Primary Global Perspectives",
-      "British Curriculum Primary Digital Literacy",
-      "British Curriculum Primary Art & Design",
+      "Global Perspectives",
+      "Digital Literacy",
+      "Art & Design",
       "Coding",
       "AI & Robotics Fundamentals",
       "Afrikaans",
