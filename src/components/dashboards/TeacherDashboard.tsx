@@ -29,6 +29,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import NextClassCountdownCard from "@/lib/NextClassCountdownCard";
 
 
 /* Icons */
@@ -1053,7 +1054,15 @@ const sortedTimetable = [...timetable].sort((a, b) => {
 
           {/* DASHBOARD OVERVIEW */}
           <TabsContent value="overview">
+
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+
+              <NextClassCountdownCard
+  userUid={teacher.uid}
+  role="teacher"
+/>
+
               <Card className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white border-0 shadow-2xl rounded-3xl overflow-hidden">
                 <CardHeader><CardTitle className="uppercase tracking-widest text-[10px] opacity-70">Schedule</CardTitle></CardHeader>
                 <CardContent>
@@ -1629,6 +1638,9 @@ const sortedTimetable = [...timetable].sort((a, b) => {
     </div>
   </div>
 </div>
+
+
+
 
       </div>  
     </div>

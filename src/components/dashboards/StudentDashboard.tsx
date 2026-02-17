@@ -26,6 +26,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { getParentInfo } from "@/lib/useParentInfo";
 import { useStudentAuth } from "../auth/StudentAuthContext";
+// import StatCard from "@/StatCard";
+import NextClassCountdownCard from "@/lib/NextClassCountdownCard";
 
 /* Icons */
 import {
@@ -139,6 +141,7 @@ const StudentDashboard: React.FC = () => {
   const [activeSession, setActiveSession] = useState<ClassLink | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'searching' | 'connected' | 'disconnected'>('searching');
   const activeSessionId = activeSession?.id;
+  
 
   // Media Toggles
   const [isMuted, setIsMuted] = useState(false);
@@ -177,7 +180,6 @@ const dashboardLocked = profile?.dashboardLocked ?? false;
    const { student } = useStudentAuth();
 
 const [searchTerm, setSearchTerm] = useState("");
-
   
 
 
@@ -704,7 +706,6 @@ const sortedTimetable = [...timetable].sort((a, b) => {
   return getMinutes(a.time) - getMinutes(b.time);
 });
 
-
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       
@@ -793,6 +794,16 @@ const sortedTimetable = [...timetable].sort((a, b) => {
         {/* 1. OVERVIEW TAB */}
         {activeTab === "overview" && (
           <div className="space-y-10 animate-in fade-in duration-500">
+
+{profile && (
+  <NextClassCountdownCard
+    userUid={profile.id}
+    role="student"
+    grade={profile.grade}
+  />
+)}
+
+
             {/* STAT CARDS */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <StatCard icon={CalendarIcon} title="Today's Lessons" value={todayClasses.length} color="indigo" />
@@ -1162,6 +1173,7 @@ const sortedTimetable = [...timetable].sort((a, b) => {
           )}
         </div>
       )}
+
     </div>
   );
 };
