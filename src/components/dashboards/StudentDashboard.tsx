@@ -889,6 +889,59 @@ const statusLabel: Record<string, string> = {
   upcoming: "Upcoming"
 };
 
+/* ================================
+   FILTER LINKS BY ENROLLMENT
+================================ */
+
+// Normalize student subjects
+const enrolledSubjects =
+  profile?.subjects?.map((s: any) =>
+    (typeof s === "string" ? s : s.name)
+      ?.trim()
+      .toLowerCase()
+  ) || [];
+
+// Only show links that match enrolled subjects
+const enrollmentFilteredLinks = classLinks.filter(link => {
+
+  // Normalize link subject
+  const linkSubject = (link.subject ?? "")
+    .toString()
+    .trim()
+    .toLowerCase();
+
+  const linkGrade = (link.targetGrade ?? "")
+    .toString()
+    .trim()
+    .toLowerCase();
+
+  // Normalize enrolled subjects
+  const normalizedEnrolled = (enrolledSubjects || []).map(s =>
+    s?.toString().trim().toLowerCase()
+  );
+
+  // 1️⃣ Always allow grade-wide links
+  if (linkGrade === "all") {
+    return true;
+  }
+
+  // 2️⃣ Allow general subject links (ONLY if grade matches)
+  if (
+    (linkSubject === "all" || linkSubject === "general") &&
+    (linkGrade === profile?.grade?.toLowerCase())
+  ) {
+    return true;
+  }
+
+  // 3️⃣ Must match BOTH grade and enrolled subject
+  const gradeMatches =
+    linkGrade === profile?.grade?.toLowerCase();
+
+  const subjectMatches =
+    normalizedEnrolled.includes(linkSubject);
+
+  return gradeMatches && subjectMatches;
+});
 
 /* =====================================================
    DAY ORDER
@@ -1101,7 +1154,7 @@ const orderedTodayClasses = [...todayClasses]
 
       orderedTodayClasses.map((item) => {
 
-        const status = getLessonStatus(item.time);
+        const status = getLessonStatus(item, orderedTodayClasses);
 
         return (
 
