@@ -108,6 +108,9 @@ interface ClassLink {
   teacherId: string;   // The UID of the teacher
   teacherName: string; // The flattened name (e.g., "Adel Tops")
   createdAt: any;      // Firestore Timestamp
+  updatedAt?: any;     // Firestore Timestamp
+  status: "active" | "archived"; // For soft deletion and audit trail
+  targetGrade: string; // e.g., "Primary", "A-Level", or "all"
 }
 
 interface Conversation {
@@ -170,6 +173,20 @@ const British_Curriculum_SUBJECTS = [
   /* Extras */
   "Bible Study (All Grades)"
 ];
+
+const formatTimestamp = (timestamp: any) => {
+  if (!timestamp?.toDate) return "—";
+
+  const date = timestamp.toDate();
+
+  return new Intl.DateTimeFormat("en-ZA", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+};
 
 const TeacherDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -244,6 +261,7 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
 const teacher = user as unknown as TeacherUser;
 const [applicationDocId, setApplicationDocId] = useState<string | null>(null);
+
 
 
 
@@ -997,6 +1015,11 @@ const sortedTimetable = [...timetable].sort((a, b) => {
   return getMinutes(a.time) - getMinutes(b.time);
 });
 
+const sortedResources = [...filteredResources].sort((a, b) => {
+  const aTime = a.updatedAt?.toMillis?.() ?? a.createdAt?.toMillis?.() ?? 0;
+  const bTime = b.updatedAt?.toMillis?.() ?? b.createdAt?.toMillis?.() ?? 0;
+  return bTime - aTime; // newest first
+});
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
 
@@ -1183,78 +1206,73 @@ const sortedTimetable = [...timetable].sort((a, b) => {
       <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead>
-            <tr className="bg-slate-100/50 text-[10px] uppercase font-black text-slate-400 tracking-widest">
-              <th className="px-8 py-5">Audience</th>
-              <th className="px-8 py-5">Content Details</th>
-              <th className="px-8 py-5">Navigation</th>
-              <th className="px-8 py-5 text-right">Settings</th>
-            </tr>
-          </thead>
+                    <tr className="bg-slate-100/50 text-[10px] uppercase font-black text-slate-400 tracking-widest">
+                      <th className="px-8 py-5">Audience</th>
+                      <th className="px-8 py-5">Content Details</th>
+                      <th className="px-8 py-5">Navigation</th>
+                      <th className="px-8 py-5">Published</th>
+                      <th className="px-8 py-5 text-right">Settings</th>
+                    </tr>
+                    </thead>
+
+
+
           <tbody className="divide-y divide-slate-100">
-            {filteredResources.map((item) => {
-              const isEditing = editingResourceId === item.id;
-              return (
-                <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">                      
-                  <td className="px-8 py-6">
-                    <Badge variant="outline" className="font-black text-[10px] border-slate-200 text-slate-500 uppercase">
-                      Grade {item.targetGrade}
-                    </Badge>
-                  </td>
-                  <td className="px-8 py-6">
-                    {isEditing ? (
-                      <Input className="h-9 text-sm font-bold" value={editResourceData.title} onChange={e => setEditResourceData({...editResourceData, title: e.target.value})} />
-                    ) : (
-                      <div>
-                        <p className="font-black text-slate-800 text-base flex items-center gap-2">
-                          {item.title}
-                          {item.type === "classroom" && <span className="w-2 h-2 bg-rose-500 rounded-full animate-pulse" />}
-                        </p>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{item.type === 'classroom' ? 'Live Session' : 'Downloadable Resource'}</span>
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-8 py-6">
-                    {isEditing ? (
-                      <Input className="h-9 text-xs font-mono" value={editResourceData.url} onChange={e => setEditResourceData({...editResourceData, url: e.target.value})} />
-                    ) : (
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2 bg-slate-100 px-3 py-2 rounded-xl group-hover:bg-indigo-50 transition-colors">
-                          <p className="text-[11px] text-indigo-600 font-mono truncate max-w-[150px]">{item.url}</p>
-                        </div>
-                        <a 
-                          href={item.url.startsWith('http') ? item.url : `https://${item.url}`} 
-                          target="_blank" 
-                          rel="noreferrer" 
-                          className="bg-slate-900 text-white p-2 rounded-xl hover:bg-indigo-600 transition-all shadow-md"
-                        >
-                          <ExternalLink size={14}/>
-                        </a>
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-8 py-6 text-right">
-                    <div className="flex justify-end gap-2">
-                      {isEditing ? (
-                        <>
-                          <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600" onClick={() => handleUpdateResource(item.id)}>
-                            <Check size={16} />
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => setEditingResourceId(null)}>
-                            <X size={16} />
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <button onClick={() => { setEditingResourceId(item.id); setEditResourceData(item); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"><Edit2 size={16}/></button>
-                          <button onClick={() => handleDeleteResource(item.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={16}/></button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
+  {sortedResources.map((item, index) => {
+    const isEditing = editingResourceId === item.id;
+
+    return (
+      <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
+        
+        {/* Audience */}
+        <td className="px-8 py-6">
+          <Badge variant="outline" className="font-black text-[10px] border-slate-200 text-slate-500 uppercase">
+            Grade {item.targetGrade}
+          </Badge>
+        </td>
+
+        {/* Content */}
+        <td className="px-8 py-6">
+          <p className="font-black text-slate-800 text-base">
+            {item.title}
+          </p>
+        </td>
+
+        {/* Navigation */}
+        <td className="px-8 py-6">
+          <p className="text-[11px] text-indigo-600 font-mono truncate max-w-[150px]">
+            {item.url}
+          </p>
+        </td>
+
+        {/* 🔥 Published Timestamp */}
+        <td className="px-8 py-6">
+          <span className="text-[11px] font-semibold text-slate-600">
+            {formatTimestamp(item.updatedAt || item.createdAt)}
+          </span>
+
+          {index === 0 && (
+            <div className="text-[9px] font-black text-emerald-600 uppercase mt-1">
+              ● Most Recent
+            </div>
+          )}
+        </td>
+
+        
+
+        {/* Settings */}
+        <td className="px-8 py-6 text-right hover:visible color-red-400">
+          <button onClick={() => handleDeleteResource(item.id)} className="text-red-500 hover:text-blue-700">
+            Delete
+          </button>
+        </td>
+
+      </tr>
+    );
+  })}
+</tbody>
+
+
         </table>
         {filteredResources.length === 0 && (
           <div className="py-20 text-center flex flex-col items-center">
