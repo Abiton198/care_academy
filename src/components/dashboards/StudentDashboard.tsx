@@ -180,8 +180,81 @@ const dashboardLocked = profile?.dashboardLocked ?? false;
    const { student } = useStudentAuth();
 
 const [searchTerm, setSearchTerm] = useState("");
-  
+// Always define now ONCE so all functions use the same reference
+const [studentSubjects, setStudentSubjects] = useState<string[]>([]);
+const [now, setNow] = React.useState(new Date());
 
+
+/* ============================= */
+/* DYNAMIC LESSON END CALCULATOR */
+/* ============================= */
+
+const computeLessonsWithDynamicEnd = (
+  lessons: any[]
+) => {
+  if (!lessons || lessons.length === 0)
+    return [];
+
+  // Sort by start time
+  const sorted = [...lessons].sort((a, b) =>
+    a.time.localeCompare(b.time)
+  );
+
+  return sorted.map((lesson, index) => {
+    const start = parseLessonDate(
+      lesson.time
+    );
+
+    let end: Date;
+
+    if (index < sorted.length - 1) {
+      const nextStart = parseLessonDate(
+        sorted[index + 1].time
+      );
+
+      // If next lesson starts later → use it
+      if (nextStart > start) {
+        end = nextStart;
+      } else {
+        // Safety fallback: 30 mins minimum
+        end = new Date(
+          start.getTime() + 30 * 60000
+        );
+      }
+    } else {
+      // Last lesson fallback (40 min default)
+      end = new Date(
+        start.getTime() + 40 * 60000
+      );
+    }
+
+    return {
+      ...lesson,
+      start,
+      end,
+    };
+  });
+};
+
+useEffect(() => {
+  const fetchStudent = async () => {
+    if (!user?.uid) return;
+
+    const studentRef = doc(db, "students", user.uid);
+    const snapshot = await getDoc(studentRef);
+
+    if (snapshot.exists()) {
+      const data = snapshot.data();
+      setStudentSubjects(
+        (data.subjects || []).map((s: string) =>
+          s.trim() // VERY IMPORTANT (removes leading spaces)
+        )
+      );
+    }
+  };
+
+  fetchStudent();
+}, [user]);
 
 
   /* ---------------- 1. LOAD PROFILE & DATA ---------------- */
@@ -219,7 +292,7 @@ const [searchTerm, setSearchTerm] = useState("");
 }, [studentId]); 
 
 // TIME SETTING (For Timetable Highlighting)
-const [now, setNow] = React.useState(new Date());
+
 
 React.useEffect(() => {
   const interval = setInterval(() => {
@@ -233,70 +306,144 @@ React.useEffect(() => {
 useEffect(() => {
   if (!profile?.grade) return;
 
-  // Load Timetable
-  const qTime = query(collection(db, "timetable"), where("grade", "==", profile.grade));
-  const unsubTime = onSnapshot(qTime, (snap) => {
-    setTimetable(snap.docs.map(d => ({ id: d.id, ...d.data() } as TimetableEntry)));
-  }); 
+  const normalizedStudentSubjects =
+    (profile.subjects || []).map((s: any) =>
+      (typeof s === "string" ? s : s.name || "")
+        .trim()
+        .toLowerCase()
+    );
 
-   // 2. Main listener for class links
-  // Use 'targetGrade' to match your Firestore document field
+  /* ========================= */
+  /* 1️⃣ TIMETABLE LISTENER */
+  /* ========================= */
+
+  const qTime = query(
+    collection(db, "timetable"),
+    where("grade", "==", profile.grade)
+  );
+
+  const unsubTime = onSnapshot(qTime, (snap) => {
+    const allLessons = snap.docs.map(
+      (d) =>
+        ({
+          id: d.id,
+          ...d.data(),
+        } as TimetableEntry)
+    );
+
+    // 🎯 FILTER BY ENROLLED SUBJECTS
+    const filteredLessons = allLessons.filter(
+      (lesson) => {
+        const lessonSub = (lesson.subject || "")
+          .trim()
+          .toLowerCase();
+
+        return normalizedStudentSubjects.includes(
+          lessonSub
+        );
+      }
+    );
+
+    // Sort by time ascending
+    filteredLessons.sort((a, b) =>
+      a.time.localeCompare(b.time)
+    );
+
+    setTimetable(filteredLessons);
+  });
+
+  /* ========================= */
+  /* 2️⃣ CLASS LINKS LISTENER */
+  /* ========================= */
+
   const qLinks = query(
     collection(db, "class_links"),
-    where("targetGrade", "in", [profile.grade, "all"])
+    where("targetGrade", "in", [
+      profile.grade,
+      "all",
+    ])
   );
 
   const unsubLinks = onSnapshot(qLinks, (snap) => {
-    const allLinks = snap.docs.map(d => ({ 
-      id: d.id, 
-      ...d.data() 
-    } as ClassLink));
+    const allLinks = snap.docs.map(
+      (d) =>
+        ({
+          id: d.id,
+          ...d.data(),
+        } as ClassLink)
+    );
 
-    const studentLinks = allLinks.filter(link => {
-      // 🎯 FIX: Handle missing 'subject' field for global links
-      // If targetGrade is 'all', we show it regardless of subject
-      if (link.targetGrade === "all") return true;
+    const studentLinks = allLinks.filter(
+      (link) => {
+        // 🌍 Global grade link
+        if (link.targetGrade === "all")
+          return true;
 
-      const linkSub = (link.subject || "").toLowerCase();
-      if (linkSub === "all" || linkSub === "general") return true;
+        const linkSub = (link.subject || "")
+          .trim()
+          .toLowerCase();
 
-      return profile.subjects?.some(s => {
-        const studentSubName = (typeof s === 'string' ? s : s.name) || "";
-        return studentSubName.trim().toLowerCase() === linkSub.trim();
-      });
-    });
+        // 🌍 General subject link
+        if (
+          linkSub === "all" ||
+          linkSub === "general"
+        )
+          return true;
+
+        return normalizedStudentSubjects.includes(
+          linkSub
+        );
+      }
+    );
 
     setClassLinks(studentLinks);
 
-    // 🎯 LIVE STATUS: Only track rooms for links the student actually has
+    /* ========================= */
+    /* 3️⃣ LIVE ROOM DETECTION */
+    /* ========================= */
+
     const classroomIds = studentLinks
-      .filter(l => l.type === 'classroom')
-      .map(l => l.id);
+      .filter((l) => l.type === "classroom")
+      .map((l) => l.id);
 
     if (classroomIds.length === 0) {
       setIsTeacherLive(false);
       return;
     }
 
-    // Secondary listener for the 'rooms' collection
-    // We listen to the whole collection to see if ANY of the student's rooms are live
-    const qRooms = query(collection(db, "rooms"), where("status", "==", "live"));
-    const unsubRooms = onSnapshot(qRooms, (roomSnap) => {
-      // If any live room ID matches one of the student's classroom link IDs
-      const activeLiveRooms = roomSnap.docs.filter(doc => classroomIds.includes(doc.id));
-      setIsTeacherLive(activeLiveRooms.length > 0);
-    });
+    const qRooms = query(
+      collection(db, "rooms"),
+      where("status", "==", "live")
+    );
 
-    return () => unsubRooms(); // Cleanup inner listener
+    const unsubRooms = onSnapshot(
+      qRooms,
+      (roomSnap) => {
+        const activeLiveRooms =
+          roomSnap.docs.filter((doc) =>
+            classroomIds.includes(doc.id)
+          );
+
+        setIsTeacherLive(
+          activeLiveRooms.length > 0
+        );
+      }
+    );
+
+    // ✅ Proper cleanup of nested listener
+    return () => unsubRooms();
   });
 
-  return () => {
-    unsubLinks();
-    // if you have an unsubTime from a different listener, include it here
-  };
-}, [profile?.grade, profile?.subjects]); 
-// Added subjects to dependency array so it re-filters if subjects change
+  /* ========================= */
+  /* CLEANUP */
+  /* ========================= */
 
+  return () => {
+    unsubTime();
+    unsubLinks();
+  };
+
+}, [profile?.grade, profile?.subjects]);
 
 // search
 const filteredLinks = useMemo(() => {
@@ -646,65 +793,174 @@ if (profile?.dashboardLocked) {
   );
 }
 
-// This function determines if a lesson is done, ongoing, or upcoming based on the current time and the lesson's scheduled time. It assumes each lesson is 1 hour long for simplicity.
-const getLessonStatus = (time: string) => {
-  // Example time: "08:00 AM"
-  const [clock, meridian] = time.split(" ");
-  const [hours, minutes] = clock.split(":").map(Number);
-
-  let lessonHour = hours;
-  if (meridian === "PM" && hours !== 12) lessonHour += 12;
-  if (meridian === "AM" && hours === 12) lessonHour = 0;
-
-  const lessonStart = new Date(now);
-  lessonStart.setHours(lessonHour, minutes, 0, 0);
-
-  const lessonEnd = new Date(lessonStart);
-  lessonEnd.setMinutes(lessonEnd.getMinutes() + 60); // 1-hour lesson
-
-  if (now > lessonEnd) return "done";
-  if (now >= lessonStart && now <= lessonEnd) return "ongoing";
-  return "upcoming";
-};
-
-// These styles will be applied to the lesson badges based on their status
-const statusStyles: Record<string, string> = {
-  done: "bg-red-200 text-emerald-700 border-emerald-200",
-  ongoing: "bg-green-500 text-indigo-700 border-indigo-200 animate-pulse",
-  upcoming: "bg-yellow-200 text-slate-500 border-slate-200"
-};
-
-const statusLabel: Record<string, string> = {
-  done: "Done",
-  ongoing: "Current",
-  upcoming: "Upcoming"
-};
 
 
-const dayOrder: Record<string, number> = {
-  Monday: 1,
-  Tuesday: 2,
-  Wednesday: 3,
-  Thursday: 4,
-};
-
-const getMinutes = (timeStr: string) => {
+/* =====================================================
+   TIME PARSER (reusable everywhere)
+===================================================== */
+const parseLessonDate = (timeStr: string) => {
   const [clock, meridian] = timeStr.split(" ");
   let [hours, minutes] = clock.split(":").map(Number);
 
   if (meridian === "PM" && hours !== 12) hours += 12;
   if (meridian === "AM" && hours === 12) hours = 0;
 
-  return hours * 60 + minutes;
+  const lessonDate = new Date(now);
+  lessonDate.setHours(hours, minutes, 0, 0);
+
+  return lessonDate;
 };
 
+/* =====================================================
+   GET LESSON STATUS
+   done     → lesson finished
+   ongoing  → lesson happening now
+   next     → next lesson today
+   upcoming → later today
+===================================================== */
+const getLessonStatus = (
+  lesson: any,
+  todayLessons: any[]
+) => {
+  // const now = new Date();
+
+  const lessonsWithEnd =
+    computeLessonsWithDynamicEnd(todayLessons);
+
+  const currentLesson = lessonsWithEnd.find(
+    l => l.id === lesson.id
+  );
+
+  if (!currentLesson) return "upcoming";
+
+  if (now > currentLesson.end) return "done";
+
+  if (
+    now >= currentLesson.start &&
+    now < currentLesson.end
+  )
+    return "ongoing";
+
+  // Find next lesson
+  const futureLessons = lessonsWithEnd
+    .filter(l => l.start > now)
+    .sort(
+      (a, b) =>
+        a.start.getTime() -
+        b.start.getTime()
+    );
+
+  if (
+    futureLessons.length > 0 &&
+    futureLessons[0].id === lesson.id
+  ) {
+    return "next";
+  }
+
+  return "upcoming";
+};
+
+/* =====================================================
+   BADGE STYLES
+===================================================== */
+const statusStyles: Record<string, string> = {
+
+  done:
+    "bg-slate-100 text-slate-400 border-slate-200",
+
+  ongoing:
+    "bg-green-500 text-white border-green-500 animate-pulse",
+
+  next:
+    "bg-indigo-500 text-white border-indigo-500",
+
+  upcoming:
+    "bg-yellow-100 text-yellow-700 border-yellow-200"
+};
+
+const statusLabel: Record<string, string> = {
+
+  done: "Done",
+
+  ongoing: "Current",
+
+  next: "Next",
+
+  upcoming: "Upcoming"
+};
+
+
+/* =====================================================
+   DAY ORDER
+===================================================== */
+const dayOrder: Record<string, number> = {
+
+  Monday: 1,
+  Tuesday: 2,
+  Wednesday: 3,
+  Thursday: 4,
+  Friday: 5,
+  Saturday: 6,
+  Sunday: 7
+
+};
+
+
+/* =====================================================
+   MINUTES CONVERTER
+===================================================== */
+const getMinutes = (timeStr: string) => {
+  const date = parseLessonDate(timeStr);
+  return date.getHours() * 60 + date.getMinutes();
+};
+
+
+/* =====================================================
+   FULL TIMETABLE SORT (BY DAY → TIME)
+===================================================== */
 const sortedTimetable = [...timetable].sort((a, b) => {
+
   const dayDiff = dayOrder[a.day] - dayOrder[b.day];
+
   if (dayDiff !== 0) return dayDiff;
 
-  // If same day → sort by time
   return getMinutes(a.time) - getMinutes(b.time);
+
 });
+
+
+/* =====================================================
+   TODAY LESSONS SORT
+   Shows:
+   CURRENT → NEXT → UPCOMING → DONE (optional)
+===================================================== */
+const orderedTodayClasses = [...todayClasses]
+  .map(item => ({
+    ...item,
+    lessonDate: parseLessonDate(item.time)
+  }))
+  .sort((a, b) => {
+
+    const aStart = a.lessonDate.getTime();
+    const bStart = b.lessonDate.getTime();
+    const nowTime = now.getTime();
+
+    const aDiff = aStart - nowTime;
+    const bDiff = bStart - nowTime;
+
+    // Current lesson first
+    if (aDiff <= 0 && nowTime <= aStart + 3600000) return -1;
+    if (bDiff <= 0 && nowTime <= bStart + 3600000) return 1;
+
+    // Future lessons sorted ascending
+    if (aDiff >= 0 && bDiff >= 0) return aDiff - bDiff;
+
+    // Past lessons last
+    if (aDiff < 0 && bDiff >= 0) return 1;
+    if (aDiff >= 0 && bDiff < 0) return -1;
+
+    return aDiff - bDiff;
+  });
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
@@ -832,37 +1088,77 @@ const sortedTimetable = [...timetable].sort((a, b) => {
               </div>
             )} */}
 
-            {/* UPCOMING TODAY LIST */}
-            <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
-              <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">Today's Schedule ({today})</h2>
-              <div className="space-y-4">
-                {todayClasses.length > 0 ? todayClasses.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between p-5 bg-slate-50 rounded-3xl border border-slate-100">
-                    <div className="flex items-center gap-5">
-                      <div className="w-12 h-12 bg-white rounded-2xl flex flex-col items-center justify-center shadow-sm">
-                        <span className="text-[10px] font-black text-indigo-600 leading-none">{item.time.split(' ')[1]}</span>
-                        <span className="text-[12px] font-black text-slate-800">{item.time.split(' ')[0]}</span>
-                      </div>
-                      <div>
-                        <h4 className="font-black text-slate-800 text-sm uppercase">{item.subject}</h4>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{item.teacherName}</p>
-                      </div>
-                    </div>
+     {/* UPCOMING TODAY LIST */}
+<div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
 
-                    {(() => {
-  const status = getLessonStatus(item.time);
+  <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">
+    Today's Schedule ({today})
+  </h2>
 
-  return (
-    <Badge className={statusStyles[status]}>
-      {statusLabel[status]}
-    </Badge>
-  );
-})()}
+  <div className="space-y-4">
 
-                  </div>
-                )) : <p className="text-slate-400 italic text-sm">No lessons scheduled for today.</p>}
+    {orderedTodayClasses.length > 0 ? (
+
+      orderedTodayClasses.map((item) => {
+
+        const status = getLessonStatus(item.time);
+
+        return (
+
+          <div
+            key={item.id}
+            className="flex items-center justify-between p-5 bg-slate-50 rounded-3xl border border-slate-100"
+          >
+
+            <div className="flex items-center gap-5">
+
+              <div className="w-12 h-12 bg-white rounded-2xl flex flex-col items-center justify-center shadow-sm">
+
+                <span className="text-[10px] font-black text-indigo-600 leading-none">
+                  {item.time.split(" ")[1]}
+                </span>
+
+                <span className="text-[12px] font-black text-slate-800">
+                  {item.time.split(" ")[0]}
+                </span>
+
               </div>
+
+              <div>
+
+                <h4 className="font-black text-slate-800 text-sm uppercase">
+                  {item.subject}
+                </h4>
+
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  {item.teacherName}
+                </p>
+
+              </div>
+
             </div>
+
+            <Badge className={statusStyles[status]}>
+              {statusLabel[status]}
+            </Badge>
+
+          </div>
+
+        );
+
+      })
+
+    ) : (
+
+      <p className="text-slate-400 italic text-sm">
+        No lessons scheduled for today.
+      </p>
+
+    )}
+
+  </div>
+
+</div>
           </div>
         )}
 

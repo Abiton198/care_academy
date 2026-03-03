@@ -1,11 +1,19 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import {
   collection,
   query,
   where,
-  getDocs
+  getDocs,
+  doc,
+  getDoc
 } from "firebase/firestore";
 import { db } from "./firebaseConfig";
+
+/* ================================
+   Types
+================================ */
 
 interface TimetableItem {
   id: string;
@@ -14,7 +22,11 @@ interface TimetableItem {
   teacherUid: string;
   grade: string;
   day: string;
-  time: string;
+  time: string; // "11:20"
+}
+
+interface StudentProfile {
+  subjects?: string[];
 }
 
 interface Props {
@@ -23,7 +35,9 @@ interface Props {
   grade?: string;
 }
 
-const LESSON_DURATION = 60; // minutes
+/* ================================
+   Component
+================================ */
 
 export default function NextClassCountdownCard({
   userUid,
@@ -31,28 +45,30 @@ export default function NextClassCountdownCard({
   grade
 }: Props) {
 
+  const [todayClasses, setTodayClasses] = useState<TimetableItem[]>([]);
   const [nextClass, setNextClass] = useState<TimetableItem | null>(null);
-  const [timeLeft, setTimeLeft] = useState("");
+
+  const [timeLeft, setTimeLeft] = useState("00:00:00");
   const [progress, setProgress] = useState(0);
   const [isCurrent, setIsCurrent] = useState(false);
+
+  const [studentSubjects, setStudentSubjects] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Get today's day name
+  /* ================================
+     Helpers
+  ================================= */
+
   const getDayName = () =>
-    new Date().toLocaleDateString("en-US", { weekday: "long" });
+    new Date().toLocaleDateString("en-US", {
+      weekday: "long"
+    });
 
-  // Parse Firestore time safely
   const getClassDateTime = (time: string) => {
+    const now = new Date();
+    const [hours, minutes] = time.split(":").map(Number);
 
-    const [timePart, modifier] =
-      time.includes(" ") ? time.split(" ") : [time, null];
-
-    let [hours, minutes] = timePart.split(":").map(Number);
-
-    if (modifier === "PM" && hours !== 12) hours += 12;
-    if (modifier === "AM" && hours === 12) hours = 0;
-
-    const date = new Date();
+    const date = new Date(now);
     date.setHours(hours);
     date.setMinutes(minutes);
     date.setSeconds(0);
@@ -61,16 +77,13 @@ export default function NextClassCountdownCard({
     return date;
   };
 
-  // Format countdown
   const formatTime = (ms: number) => {
-
     if (ms <= 0) return "00:00:00";
 
-    const total = Math.floor(ms / 1000);
-
-    const h = Math.floor(total / 3600);
-    const m = Math.floor((total % 3600) / 60);
-    const s = total % 60;
+    const totalSeconds = Math.floor(ms / 1000);
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
 
     return `${h.toString().padStart(2,"0")}:${m
       .toString()
@@ -79,7 +92,52 @@ export default function NextClassCountdownCard({
       .padStart(2,"0")}`;
   };
 
-  // Fetch timetable
+  /* ================================
+     Detect Dynamic Lesson End
+     End = next lesson start
+     If no next lesson → default 60 min
+  ================================= */
+
+  const computeLessonEnd = (
+    lessons: TimetableItem[],
+    index: number
+  ) => {
+    const start = getClassDateTime(lessons[index].time);
+
+    if (index < lessons.length - 1) {
+      return getClassDateTime(lessons[index + 1].time);
+    }
+
+    // fallback (last lesson of day)
+    return new Date(start.getTime() + 60 * 60000);
+  };
+
+  /* ================================
+     Fetch Student Subjects
+  ================================= */
+
+  useEffect(() => {
+
+    const fetchStudentSubjects = async () => {
+      if (role !== "student") return;
+
+      const snap = await getDoc(doc(db, "students", userUid));
+      if (snap.exists()) {
+        const data = snap.data() as StudentProfile;
+        setStudentSubjects(
+          data.subjects?.map(s => s.trim().toLowerCase()) || []
+        );
+      }
+    };
+
+    fetchStudentSubjects();
+
+  }, [userUid, role]);
+
+  /* ================================
+     Fetch Today's Timetable
+  ================================= */
+
   useEffect(() => {
 
     const fetchData = async () => {
@@ -110,40 +168,32 @@ export default function NextClassCountdownCard({
 
         const snap = await getDocs(q);
 
-        const classes: TimetableItem[] = snap.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as TimetableItem[];
+        let classes =
+          snap.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as TimetableItem[];
 
-        const now = new Date();
+        // 🔥 FILTER: Only enrolled subjects for students
+        if (role === "student") {
+          classes = classes.filter(cls =>
+            studentSubjects.includes(
+              cls.subject.trim().toLowerCase()
+            )
+          );
+        }
 
-        // Sort classes
-        const sorted = classes.sort(
+        // Sort ascending
+        classes.sort(
           (a, b) =>
             getClassDateTime(a.time).getTime() -
             getClassDateTime(b.time).getTime()
         );
 
-        let closest: TimetableItem | null = null;
+        setTodayClasses(classes);
 
-        for (const cls of sorted) {
-
-          const start = getClassDateTime(cls.time);
-          const end = new Date(
-            start.getTime() + LESSON_DURATION * 60000
-          );
-
-          if (now <= end) {
-            closest = cls;
-            break;
-          }
-
-        }
-
-        setNextClass(closest);
-
-      } catch (e) {
-        console.error(e);
+      } catch (error) {
+        console.error("Error fetching timetable:", error);
       }
 
       setLoading(false);
@@ -152,165 +202,143 @@ export default function NextClassCountdownCard({
 
     fetchData();
 
-  }, [userUid, role, grade]);
+  }, [userUid, role, grade, studentSubjects]);
 
-  // Countdown engine
+  /* ================================
+     Countdown Engine
+  ================================= */
+
   useEffect(() => {
+
+    if (!todayClasses.length) return;
 
     const interval = setInterval(() => {
 
-      if (!nextClass) return;
-
       const now = new Date();
 
-      const start = getClassDateTime(nextClass.time);
-      const end = new Date(
-        start.getTime() + LESSON_DURATION * 60000
-      );
+      for (let i = 0; i < todayClasses.length; i++) {
 
-      if (now >= start && now <= end) {
+        const start = getClassDateTime(todayClasses[i].time);
+        const end = computeLessonEnd(todayClasses, i);
 
-        setIsCurrent(true);
+        // CURRENT
+        if (now >= start && now < end) {
 
-        const remaining = end.getTime() - now.getTime();
+          const remaining = end.getTime() - now.getTime();
+          const duration = end.getTime() - start.getTime();
+          const elapsed = now.getTime() - start.getTime();
 
-        setTimeLeft(formatTime(remaining));
+          setIsCurrent(true);
+          setNextClass(todayClasses[i]);
+          setTimeLeft(formatTime(remaining));
+          setProgress((elapsed / duration) * 100);
 
-        const elapsed =
-          now.getTime() - start.getTime();
+          return;
+        }
 
-        setProgress(
-          (elapsed /
-            (LESSON_DURATION * 60000)) * 100
-        );
+        // NEXT
+        if (start > now) {
 
-      } else {
+          const remaining = start.getTime() - now.getTime();
 
-        setIsCurrent(false);
+          setIsCurrent(false);
+          setNextClass(todayClasses[i]);
+          setTimeLeft(formatTime(remaining));
+          setProgress(0);
 
-        const untilStart =
-          start.getTime() - now.getTime();
-
-        setTimeLeft(formatTime(untilStart));
-
-        setProgress(0);
+          return;
+        }
 
       }
+
+      // No more lessons
+      setIsCurrent(false);
+      setNextClass(null);
+      setTimeLeft("00:00:00");
+      setProgress(100);
 
     }, 1000);
 
     return () => clearInterval(interval);
 
-  }, [nextClass]);
+  }, [todayClasses]);
 
-  if (loading)
+  /* ================================
+     UI STATES
+  ================================= */
+
+  if (loading) {
     return (
-      <div className="p-5 rounded-3xl shadow bg-white">
-        Loading next class...
+      <div className="p-6 rounded-3xl shadow bg-white">
+        Loading timetable...
       </div>
     );
+  }
 
-  if (!nextClass)
+  if (!nextClass) {
     return (
       <div className="p-6 rounded-3xl shadow bg-gradient-to-br from-gray-100 to-gray-200">
         🎉 No more classes today
       </div>
     );
+  }
+
+  /* ================================
+     UI
+  ================================= */
 
   return (
-
     <div className="relative overflow-hidden rounded-3xl p-6 shadow-xl text-white bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-700">
 
-      {/* Glow */}
       <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 blur-3xl rounded-full"></div>
 
-      {/* Header */}
       <div className="relative z-10">
 
         <div className="flex items-center gap-2">
-
           {isCurrent && (
             <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
           )}
-
           <p className="text-sm opacity-90">
-
-            {isCurrent
-              ? "Current Class"
-              : "Next Class"}
-
+            {isCurrent ? "Current Class" : "Next Class"}
           </p>
-
         </div>
 
         <h2 className="text-2xl font-bold mt-1">
-
           {nextClass.subject}
-
         </h2>
 
         <p className="opacity-80 text-sm">
-
           {nextClass.teacherName}
-
         </p>
 
-        {/* Timer */}
         <div className="mt-4">
-
           <p className="text-sm opacity-80">
-
-            {isCurrent
-              ? "Ends in"
-              : "Starts in"}
-
+            {isCurrent ? "Ends in" : "Starts in"}
           </p>
-
           <p className="text-4xl font-mono font-bold">
-
             {timeLeft}
-
           </p>
-
         </div>
 
-        {/* Progress */}
         {isCurrent && (
-
           <div className="mt-4">
-
             <div className="w-full bg-white/20 rounded-full h-2">
-
               <div
                 className="bg-green-400 h-2 rounded-full transition-all duration-1000"
-                style={{
-                  width: `${progress}%`
-                }}
+                style={{ width: `${progress}%` }}
               />
-
             </div>
-
             <p className="text-xs mt-1 opacity-80">
-
               {Math.floor(progress)}% complete
-
             </p>
-
           </div>
-
         )}
 
-        {/* Footer */}
         <p className="mt-3 text-xs opacity-70">
-
           {nextClass.day} • {nextClass.time}
-
         </p>
 
       </div>
-
     </div>
-
   );
-
 }

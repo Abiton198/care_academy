@@ -64,6 +64,7 @@ const TimePicker = ({ value, onChange }: { value: string; onChange: (v: string) 
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const CAMBRIDGE_GRADES = [
+  "All Grades",
   "Stage 1", "Stage 2", "Stage 3", "Stage 4", "Stage 5", "Stage 6",
   "Checkpoint (Yr 7-9)", "IGCSE 1 (Yr 10)", "IGCSE 2 (Yr 11)", "AS Level", "A Level"
 ];
@@ -98,7 +99,7 @@ const TimetableManager: React.FC = () => {
   const [selectedTeacherId, setSelectedTeacherId] = useState("");
   const allowedOverlaps = [
     ["Stage 4", "Stage 5"],
-    ["IGCSE 1 (Yr 10)", "IGCSE 2 (Yr 11)"],
+    ["IGCSE 1 (Yr 10)", "IGCSE 2 (Yr 11)", "Checkpoint (Yr 7-9)"],
     ["AS Level", "A Level"],
     ["Checkpoint", "IGCSE 1 (Yr 10)"] 
   ];
@@ -137,72 +138,93 @@ const TimetableManager: React.FC = () => {
     return teachers.filter(t => t.subjects.includes(subject));
   }, [subject, teachers]);
 
-  const createSlot = async () => {
+  // ✅ Main creation function with conflict checks and grade expansion
+ const createSlot = async () => {
   if (!day || !time || !grade || !subject || !selectedTeacherId) {
     alert("Validation Failed: Please ensure all 5 fields are selected.");
     return;
   }
 
   setIsSaving(true);
+
   const teacherObj = teachers.find(t => t.id === selectedTeacherId);
 
-  // ✅ UPDATED CONFLICT LOGIC:
-  // Allow same teacher for Stage 4 & Stage 5 simultaneously
-  const teacherBusy = entries.some(e => {
-    // Check if it's the same teacher at the same time/day
-    const isSameTime = e.day === day && e.time === time && e.teacherUid === selectedTeacherId;
-    if (!isSameTime) return false;
+  try {
 
-    // 🎯 REFINED EXCEPTION LOGIC
-    // Check if the current 'grade' and the existing entry 'e.grade' belong to an allowed pair
-    const isCoTeachingStage = allowedOverlaps.some(pair => 
-      (pair.includes(grade.trim()) && pair.includes(e.grade.trim()))
+    // ✅ If All Grades selected → expand to every real grade
+    const gradesToCreate =
+      grade === "All Grades"
+        ? CAMBRIDGE_GRADES.filter(g => g !== "All Grades")
+        : [grade];
+
+    // ✅ Loop and create each entry
+    for (const g of gradesToCreate) {
+
+      // Teacher conflict check
+      const teacherBusy = entries.some(e => {
+        const isSameTime =
+          e.day === day &&
+          e.time === time &&
+          e.teacherUid === selectedTeacherId;
+
+        if (!isSameTime) return false;
+
+        const isCoTeachingStage = allowedOverlaps.some(pair =>
+          pair.includes(g.trim()) && pair.includes(e.grade.trim())
+        );
+
+        return !isCoTeachingStage;
+      });
+
+      if (teacherBusy) {
+        alert(`Teacher Conflict detected. Cannot assign ${teacherObj?.name} to multiple grades at this time.`);
+        setIsSaving(false);
+        return;
+      }
+
+      // Class conflict check
+      const classExists = entries.some(
+        e =>
+          e.day === day &&
+          e.time === time &&
+          e.grade === g &&
+          e.subject === subject
+      );
+
+      if (classExists) {
+        console.warn(`Skipping existing slot for ${g}`);
+        continue;
+      }
+
+      // Create entry
+      await addDoc(collection(db, "timetable"), {
+        day,
+        time,
+        grade: g,
+        subject,
+        curriculum: "Cambridge",
+        teacherName: teacherObj?.name || "Unknown",
+        teacherUid: selectedTeacherId,
+        createdAt: serverTimestamp(),
+      });
+
+    }
+
+    alert(
+      grade === "All Grades"
+        ? "Slot published for ALL grades successfully!"
+        : "Slot published successfully!"
     );
 
-    // If they are NOT in an allowed co-teaching pair, return true (Conflict Found)
-    return !isCoTeachingStage; 
-  });
-
-  const classExists = entries.some(
-    e => e.day === day && e.time === time && e.grade === grade && e.subject === subject
-  );
-
-  // 2. Conflict Alerts
-  if (teacherBusy) {
-    alert(`Teacher Conflict: ${teacherObj?.name} is already assigned to a different class during this slot. (Note: Only IGCSE 1/2 or AS/A Level overlaps are permitted).`);
-    setIsSaving(false);
-    return;
-  }
-
-  if (classExists) {
-    alert(`Class Conflict: ${grade} already has ${subject} scheduled at ${time} on ${day}.`);
-    setIsSaving(false);
-    return;
-  }
-
-  // 3. Database Write
-  try {
-    await addDoc(collection(db, "timetable"), {
-      day,
-      time,
-      grade: grade.trim(),
-      subject,
-      curriculum: "Cambridge",
-      teacherName: teacherObj?.name || "Unknown",
-      teacherUid: selectedTeacherId,
-      createdAt: serverTimestamp(),
-    });
-    
-    // Clear form on success
     setSubject("");
     setSelectedTeacherId("");
-    alert("Timetable updated successfully!");
+
   } catch (err: any) {
-    console.error("Firestore Error:", err);
-    alert("Database Error: " + err.message);
-  } finally {
-    setIsSaving(false);
+    console.error(err);
+    alert(err.message);
   }
+
+  setIsSaving(false);
 };
 
   const deleteSlot = async (id: string) => {
