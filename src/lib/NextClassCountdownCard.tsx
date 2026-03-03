@@ -98,19 +98,44 @@ export default function NextClassCountdownCard({
      If no next lesson → default 60 min
   ================================= */
 
-  const computeLessonEnd = (
-    lessons: TimetableItem[],
-    index: number
-  ) => {
-    const start = getClassDateTime(lessons[index].time);
+/* ================================
+   Detect Dynamic Lesson End
+   Default = 40 minutes
+   If next lesson is sooner → end at next lesson
+================================ */
 
-    if (index < lessons.length - 1) {
-      return getClassDateTime(lessons[index + 1].time);
+const DEFAULT_LESSON_MINUTES = 40;
+
+const computeLessonEnd = (
+  lessons: TimetableItem[],
+  index: number
+) => {
+
+  const start = getClassDateTime(lessons[index].time);
+
+  // Default end = 40 minutes after start
+  const defaultEnd = new Date(
+    start.getTime() + DEFAULT_LESSON_MINUTES * 60000
+  );
+
+  // If there is a next lesson
+  if (index < lessons.length - 1) {
+
+    const nextStart = getClassDateTime(
+      lessons[index + 1].time
+    );
+
+    // If next lesson starts BEFORE 40 minutes,
+    // lesson ends at next lesson start
+    if (nextStart.getTime() < defaultEnd.getTime()) {
+      return nextStart;
     }
 
-    // fallback (last lesson of day)
-    return new Date(start.getTime() + 60 * 60000);
-  };
+  }
+
+  // Otherwise default 40 min
+  return defaultEnd;
+};
 
   /* ================================
      Fetch Student Subjects
