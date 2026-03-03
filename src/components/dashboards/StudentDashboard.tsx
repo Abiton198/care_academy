@@ -58,6 +58,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { Signaling } from "@/lib/signaling";
 import MoodleCard from "./MoodleCard";
 import { useParams } from "react-router-dom";
+import { Timestamp } from "firebase/firestore";
 
 
 // =============================================================================
@@ -97,6 +98,8 @@ interface ClassLink {
   targetGrade: string;
   teacherName: string; // For display purposes
   title: string; // For display purposes
+   updatedAt?: Timestamp;
+   createdAt?: Timestamp;
 }
 
 // =============================================================================
@@ -119,6 +122,20 @@ function ControlBtn({ icon: Icon, label, active, onClick, danger, success }: any
     </div>
   );
 }
+
+const formatTimestamp = (timestamp: any) => {
+  if (!timestamp?.toDate) return "";
+
+  const date = timestamp.toDate();
+
+  return new Intl.DateTimeFormat("en-ZA", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+};
 
 // =============================================================================
 // MAIN COMPONENT
@@ -890,59 +907,64 @@ const statusLabel: Record<string, string> = {
 };
 
 /* ================================
-   FILTER LINKS BY ENROLLMENT
+   FILTER + SORT LINKS
 ================================ */
+
+// 🔥 Clean subject helper
+const cleanSubject = (value: string = "") =>
+  value
+    .toLowerCase()
+    .replace(/\(.*?\)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const studentGrade = profile?.grade?.toLowerCase().trim();
 
 // Normalize student subjects
 const enrolledSubjects =
   profile?.subjects?.map((s: any) =>
-    (typeof s === "string" ? s : s.name)
-      ?.trim()
-      .toLowerCase()
+    cleanSubject(typeof s === "string" ? s : s.name)
   ) || [];
 
-// Only show links that match enrolled subjects
-const enrollmentFilteredLinks = classLinks.filter(link => {
+const enrollmentFilteredLinks = classLinks
+  .filter((link) => {
+    const linkSubject = cleanSubject(link.subject ?? "");
+    const linkGrade = (link.targetGrade ?? "")
+      .toLowerCase()
+      .trim();
 
-  // Normalize link subject
-  const linkSubject = (link.subject ?? "")
-    .toString()
-    .trim()
-    .toLowerCase();
+    // 1️⃣ Grade-wide links
+    if (linkGrade === "all") return true;
 
-  const linkGrade = (link.targetGrade ?? "")
-    .toString()
-    .trim()
-    .toLowerCase();
+    // 2️⃣ General subject (grade must match)
+    if (
+      (linkSubject === "all" || linkSubject === "general") &&
+      linkGrade === studentGrade
+    ) {
+      return true;
+    }
 
-  // Normalize enrolled subjects
-  const normalizedEnrolled = (enrolledSubjects || []).map(s =>
-    s?.toString().trim().toLowerCase()
-  );
+    // 3️⃣ Must match grade + subject
+    const gradeMatches = linkGrade === studentGrade;
+    const subjectMatches = enrolledSubjects.includes(linkSubject);
 
-  // 1️⃣ Always allow grade-wide links
-  if (linkGrade === "all") {
-    return true;
-  }
+    return gradeMatches && subjectMatches;
+  })
 
-  // 2️⃣ Allow general subject links (ONLY if grade matches)
-  if (
-    (linkSubject === "all" || linkSubject === "general") &&
-    (linkGrade === profile?.grade?.toLowerCase())
-  ) {
-    return true;
-  }
+  // 🔥 SORT NEWEST FIRST
+  .sort((a, b) => {
+    const aTime =
+      a.updatedAt?.seconds ||
+      a.createdAt?.seconds ||
+      0;
 
-  // 3️⃣ Must match BOTH grade and enrolled subject
-  const gradeMatches =
-    linkGrade === profile?.grade?.toLowerCase();
+    const bTime =
+      b.updatedAt?.seconds ||
+      b.createdAt?.seconds ||
+      0;
 
-  const subjectMatches =
-    normalizedEnrolled.includes(linkSubject);
-
-  return gradeMatches && subjectMatches;
-});
-
+    return bTime - aTime; // newest first
+  });
 /* =====================================================
    DAY ORDER
 ===================================================== */
@@ -1302,77 +1324,109 @@ const orderedTodayClasses = [...todayClasses]
     
 
     {/* GRID */}
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-8">
-      {filteredLinks.length > 0 ? (
-        filteredLinks.map((link) => (
-          <Card 
-            key={link.id} 
-            className="group border-0 shadow-xl rounded-[2.5rem] overflow-hidden hover:scale-[1.03] transition-all cursor-pointer bg-white"
-            onClick={() => {
-              const isExternal = link.url?.startsWith('http') || link.url?.includes('.');
-              if (isExternal) {
-                const destination = link.url.startsWith('http') ? link.url : `https://${link.url}`;
-                window.open(destination, '_blank');
-              } else {
-                joinClass(link);
-              }
-            }}
-          >
-            <CardContent className="p-8">
-              <div className="flex items-center gap-5 mb-6">
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-sm ${
-                  link.type === 'classroom' 
-                    ? 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white' 
-                    : 'bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white'
-                }`}>
-                  {link.type === 'classroom' ? <Video size={24} /> : <FileText size={24} />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-black text-slate-800 uppercase text-sm truncate tracking-tight group-hover:text-indigo-600 transition-colors">
-                    {link.title}
-                  </h4>
-                  {/* SUBJECT BADGE */}
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[9px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded uppercase">
-                      {link.subject || "General"}
-                    </span>
-                    <span className="text-[10px] font-bold text-slate-400 truncate">
-                      {link.teacherName}
-                    </span>
-                  </div>
-                </div>
+   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-8">
+  {enrollmentFilteredLinks.length > 0 ? (
+    enrollmentFilteredLinks.map((link) => (
+      <Card
+        key={link.id}
+        className="group border-0 shadow-xl rounded-[2.5rem] overflow-hidden hover:scale-[1.03] transition-all cursor-pointer bg-white"
+        onClick={() => {
+          const isExternal =
+            link.url?.startsWith("http") || link.url?.includes(".");
+          if (isExternal) {
+            const destination = link.url.startsWith("http")
+              ? link.url
+              : `https://${link.url}`;
+            window.open(destination, "_blank");
+          } else {
+            joinClass(link);
+          }
+        }}
+      >
+        <CardContent className="p-8">
+          <div className="flex items-center gap-5 mb-6">
+            <div
+              className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-sm ${
+                link.type === "classroom"
+                  ? "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white"
+                  : "bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white"
+              }`}
+            >
+              {link.type === "classroom" ? (
+                <Video size={24} />
+              ) : (
+                <FileText size={24} />
+              )}
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <h4 className="font-black text-slate-800 uppercase text-sm truncate tracking-tight group-hover:text-indigo-600 transition-colors">
+                {link.title}
+              </h4>
+
+              {/* SUBJECT + TEACHER */}
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[9px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded uppercase">
+                  {link.subject || "General"}
+                </span>
+
+                <span className="text-[10px] font-bold text-slate-400 truncate">
+                  {link.teacherName}
+                </span>
               </div>
 
-              <div className="mb-6 p-3 bg-slate-50 rounded-xl border border-slate-100 group-hover:bg-indigo-50/50 transition-colors">
-                <p className="text-[10px] font-mono text-indigo-400 truncate">
-                  {link.url}
-                </p>
-              </div>
-              
-              <div className="flex items-center justify-between pt-6 border-t border-slate-100">
-                <Badge className={`border-none font-black text-[9px] uppercase tracking-widest px-4 py-1.5 rounded-xl ${
-                  link.type === 'classroom' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'
-                }`}>
-                  {link.type === 'classroom' ? '● Live Session' : 'Resource Material'}
-                </Badge>
-                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-300 group-hover:bg-indigo-600 group-hover:text-white transition-all">
-                  <ExternalLink size={18} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))
-      ) : (
-        <div className="col-span-full py-20 text-center">
-          <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">No matching links found.</p>
-        </div>
-      )}
+              {/* 🔥 TIMESTAMP */}
+              <p className="text-[10px] text-slate-400 mt-1">
+                🕒 {formatTimestamp(link.updatedAt || link.createdAt)}
+              </p>
+            </div>
+          </div>
+
+          <div className="mb-6 p-3 bg-slate-50 rounded-xl border border-slate-100 group-hover:bg-indigo-50/50 transition-colors">
+            <p className="text-[10px] font-mono text-indigo-400 truncate">
+              {link.url}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between pt-6 border-t border-slate-100">
+            <Badge
+              className={`border-none font-black text-[9px] uppercase tracking-widest px-4 py-1.5 rounded-xl ${
+                link.type === "classroom"
+                  ? "bg-emerald-100 text-emerald-600"
+                  : "bg-slate-100 text-slate-500"
+              }`}
+            >
+              {link.type === "classroom"
+                ? "● Live Session"
+                : "Resource Material"}
+            </Badge>
+
+            <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-300 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+              <ExternalLink size={18} />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    ))
+  ) : (
+    <div className="col-span-full py-20 text-center">
+      <div className="bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+        <AlertCircle className="text-slate-400" size={32} />
+      </div>
+      <h3 className="text-slate-800 font-black uppercase text-sm">
+        No Resources Found
+      </h3>
+      <p className="text-slate-400 text-xs mt-1">
+        You don't have any links for your current subjects yet.
+      </p>
     </div>
+  )}
+</div>
   </div>
 )}
 
 {/* Empty State if no links match student's subjects */}
-{classLinks.length === 0 && (
+{enrollmentFilteredLinks.length === 0 && (
   <div className="col-span-full py-20 text-center">
     <div className="bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
       <AlertCircle className="text-slate-400" size={32} />
