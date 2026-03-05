@@ -16,6 +16,7 @@ import {
   doc,
   setDoc,
   getDoc,
+  addDoc,
   serverTimestamp
 } from "firebase/firestore";
 
@@ -202,6 +203,7 @@ const [studentSubjects, setStudentSubjects] = useState<string[]>([]);
 const [now, setNow] = React.useState(new Date());
 
 
+
 /* ============================= */
 /* DYNAMIC LESSON END CALCULATOR */
 /* ============================= */
@@ -273,7 +275,40 @@ useEffect(() => {
   fetchStudent();
 }, [user]);
 
+// This function logs every link access to the "link_audit_logs" collection in Firestore
+const logLinkAccess = async (link: any) => {
+  console.log("CLICKED LINK:", link);
 
+  if (!user?.uid) {
+    console.log("No user UID");
+    return;
+  }
+
+  if (!profile) {
+    console.log("Profile not loaded yet");
+    return;
+  }
+
+  try {
+    await addDoc(
+      collection(db, "class_links", link.id, "auditTrail"),
+      {
+        studentId: user.uid,
+        studentName: profile.firstName,
+        grade: profile.grade,
+        subject: link.subject || "general",
+        linkType: link.type || "resource",
+        url: link.url || "",
+        action: "opened_link",
+        clickedAt: serverTimestamp(),
+      }
+    );
+
+    console.log("Audit log saved successfully");
+  } catch (error) {
+    console.error("Audit log failed:", error);
+  }
+};
   /* ---------------- 1. LOAD PROFILE & DATA ---------------- */
  useEffect(() => {
   // If we have a studentId, try to load it immediately. 
@@ -1330,13 +1365,17 @@ const orderedTodayClasses = [...todayClasses]
       <Card
         key={link.id}
         className="group border-0 shadow-xl rounded-[2.5rem] overflow-hidden hover:scale-[1.03] transition-all cursor-pointer bg-white"
-        onClick={() => {
+       onClick={async () => {
+          await logLinkAccess(link); // 🔥 AUDIT FIRST
+
           const isExternal =
             link.url?.startsWith("http") || link.url?.includes(".");
+
           if (isExternal) {
             const destination = link.url.startsWith("http")
               ? link.url
               : `https://${link.url}`;
+
             window.open(destination, "_blank");
           } else {
             joinClass(link);
