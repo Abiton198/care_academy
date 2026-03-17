@@ -46,6 +46,8 @@ import TeachingStaff from "./components/about/TeachingStaff";
 import Accreditation from "./components/about/Accreditation";
 import AccountDeletionPolicy from "./pages/AccountDeletionPolicy";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import LandingPage from "./components/LandingPage";
+
 
 const queryClient = new QueryClient();
 class DashboardErrorBoundary extends React.Component<
@@ -83,7 +85,8 @@ const App: React.FC = () => {
             <BrowserRouter>
               <Routes>
                 {/* Default Home/Landing Page */}
-                <Route path="/" element={<AppLayout />} />
+                {/* <Route path="/" element={<AppLayout />} />   */}
+                <Route path="/" element={<LandingPage />} />
 
                 {/* Public Pages */}
                 <Route path="/about" element={<AboutUs />} />
@@ -99,6 +102,7 @@ const App: React.FC = () => {
                 <Route path="/about/accreditation" element={<Accreditation />} />
                 <Route path="/delete-account-request" element={<AccountDeletionPolicy />} />
                 <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+
 
                 {/* Parent Dashboard Layout */}
                 <Route path="/parent" element={<ParentDashboardLayout />}>
