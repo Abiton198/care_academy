@@ -36,12 +36,17 @@ const LandingPage: React.FC = () => {
                         <div className="flex gap-4 flex-wrap">
                             <button
                                 onClick={() => navigate("/login")}
-                                className="bg-yellow-400 text-black px-6 py-3 rounded-xl font-semibold shadow hover:bg-yellow-300 transition"
+                                className="bg-yellow-400 text-black px-6 py-3 rounded-xl font-semibold shadow hover:bg-blue-300 transition"
                             >
                                 Register on Platform
                             </button>
 
-
+                            <button
+                                onClick={() => navigate("/login")}
+                                className="bg-green-400 text-black px-6 py-3 rounded-xl font-semibold shadow hover:bg-slate-300 transition"
+                            >
+                                Sign in
+                            </button>
                         </div>
                     </div>
 
@@ -104,7 +109,7 @@ const LandingPage: React.FC = () => {
 
                         <button
                             onClick={() => navigate("/about/enrolment")}
-                            className="bg-indigo-600 text-white py-3 px-6 rounded-xl font-semibold hover:bg-indigo-500 transition"
+                            className="bg-indigo-600 text-white py-3 px-6 rounded-xl font-semibold hover:bg-green-500 transition"
                         >
                             Enrollment Info
                         </button>
@@ -122,7 +127,7 @@ const LandingPage: React.FC = () => {
 
                 <button
                     onClick={() => navigate("/login")}
-                    className="bg-yellow-400 text-black px-8 py-4 rounded-xl font-semibold shadow hover:bg-yellow-300 transition"
+                    className="bg-yellow-400 text-black px-8 py-4 rounded-xl font-semibold shadow hover:bg-green-300 transition"
                 >
                     Start Learning Today
                 </button>

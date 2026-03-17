@@ -49,8 +49,8 @@ export default function TeacherApplicationModal({
         {/* The Form Content */}
         <div className="p-8">
           <TeacherApplicationForm
-            applicationId={applicationId} // The draft ID
-            userId={applicationId}        // Also pass as userId (since we used the UID as the draft ID)
+            applicationId={applicationId} // The draft ID 
+            userId={userId || applicationId}      // Also pass as userId (since we used the UID as the draft ID)
             onClose={onClose}
             onSubmitted={onSubmitted}
           />

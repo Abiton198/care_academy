@@ -34,8 +34,8 @@ import NextClassCountdownCard from "@/lib/NextClassCountdownCard";
 
 /* Icons */
 import {
-  Loader2, LogOut, Edit2, Save, ExternalLink, Video, Check, X, 
-  Sparkles, BookOpen, Send, MessageCircle, Users, PlusCircle, Trash2, Settings, VideoOff,Mic, MicOff,
+  Loader2, LogOut, Edit2, Save, ExternalLink, Video, Check, X,
+  Sparkles, BookOpen, Send, MessageCircle, Users, PlusCircle, Trash2, Settings, VideoOff, Mic, MicOff,
   Clock
 } from "lucide-react";
 /* Signaling Logic (WebRTC) */
@@ -49,7 +49,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 // 1. Unified Firestore Sync Function (Using setDoc to prevent "Missing Document" errors)
-import { arrayUnion, arrayRemove} from "firebase/firestore";
+import { arrayUnion, arrayRemove } from "firebase/firestore";
+import logo from "@/img/care.png";
 
 
 
@@ -215,11 +216,11 @@ const TeacherDashboard: React.FC = () => {
   const [selectedGradeFilter, setSelectedGradeFilter] = useState<string>("all");
   const [editingResourceId, setEditingResourceId] = useState<string | null>(null);
   const [editResourceData, setEditResourceData] = useState<any>(null);
-  const [newResource, setNewResource] = useState({ 
-    title: "", 
-    url: "", 
-    type: "classroom", 
-    targetGrade: "all" 
+  const [newResource, setNewResource] = useState({
+    title: "",
+    url: "",
+    type: "classroom",
+    targetGrade: "all"
   });
 
   // Profile Edit State
@@ -240,31 +241,31 @@ const TeacherDashboard: React.FC = () => {
   const [selectValue, setSelectValue] = useState("");
 
 
-  
+
 
   /* ======================================================
      NEW: LIVE SESSION STATE
   ====================================================== */
- 
-const teacher = user as unknown as TeacherUser;
-const [applicationDocId, setApplicationDocId] = useState<string | null>(null);
-const [selectedResource, setSelectedResource] = useState<any>(null);
-const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+
+  const teacher = user as unknown as TeacherUser;
+  const [applicationDocId, setApplicationDocId] = useState<string | null>(null);
+  const [selectedResource, setSelectedResource] = useState<any>(null);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
 
 
 
-const { logoutAll } = useAuth();
+  const { logoutAll } = useAuth();
 
-const teacherFullName = useMemo(() => {
-  if (!profile) return "";
+  const teacherFullName = useMemo(() => {
+    if (!profile) return "";
 
-  const first = profile.firstName?.trim();
-  const last = profile.lastName?.trim();
+    const first = profile.firstName?.trim();
+    const last = profile.lastName?.trim();
 
-  return [first, last].filter(Boolean).join(" ");
-}, [profile]);
- const writeTimeout = useRef<any>(null);
+    return [first, last].filter(Boolean).join(" ");
+  }, [profile]);
+  const writeTimeout = useRef<any>(null);
 
 
 
@@ -276,104 +277,104 @@ const teacherFullName = useMemo(() => {
   }, [auth, navigate]);
 
 
- 
-
-// This effect is to keep the "current time" updated for any time-based UI elements (like the session timer)
-const [now, setNow] = React.useState(new Date());
-
-React.useEffect(() => {
-  const interval = setInterval(() => {
-    setNow(new Date());
-  }, 60 * 1000); // update every minute
-
-  return () => clearInterval(interval);
-}, []);
 
 
-useEffect(() => {
-  if (!user?.uid) return;
+  // This effect is to keep the "current time" updated for any time-based UI elements (like the session timer)
+  const [now, setNow] = React.useState(new Date());
 
-  console.log("🔍 Resolving teacher application by UID:", user.uid);
-  setLoading(true);
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(new Date());
+    }, 60 * 1000); // update every minute
 
-  const q = query(
-    collection(db, "teacherApplications"),
-    where("uid", "==", user.uid)
-  );
+    return () => clearInterval(interval);
+  }, []);
 
-  const unsub = onSnapshot(q, (snap) => {
-    if (snap.empty) {
-      console.warn("⚠️ No teacher application found for UID");
+
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    console.log("🔍 Resolving teacher application by UID:", user.uid);
+    setLoading(true);
+
+    const q = query(
+      collection(db, "teacherApplications"),
+      where("uid", "==", user.uid)
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      if (snap.empty) {
+        console.warn("⚠️ No teacher application found for UID");
+        setLoading(false);
+        return;
+      }
+
+      // ✅ Use the MOST COMPLETE document
+      const docSnap =
+        snap.docs.find(d => d.data()?.personalInfo?.firstName) ?? snap.docs[0];
+
+      const data = docSnap.data();
+      const p = data.personalInfo ?? {};
+
+      console.log("📄 Using application doc:", docSnap.id);
+      console.log("👤 Raw personalInfo:", p);
+
+      const firstName = p.firstName ?? "Teacher";
+      const lastName = p.lastName ?? "";
+
+      console.log("✅ Resolved name:", firstName, lastName);
+
+      setProfile({
+        firstName,
+        lastName,
+        email: p.email ?? data.email ?? "",
+        phone: p.phone ?? "",
+        bio: p.bio ?? "",
+        subjects: data.subjects ?? p.subjects ?? [],
+        status: data.status ?? "pending",
+      });
+
+      setEditProfile({
+        phone: p.phone ?? "",
+        bio: p.bio ?? "",
+      });
+
       setLoading(false);
-      return;
-    }
-
-    // ✅ Use the MOST COMPLETE document
-    const docSnap =
-      snap.docs.find(d => d.data()?.personalInfo?.firstName) ?? snap.docs[0];
-
-    const data = docSnap.data();
-    const p = data.personalInfo ?? {};
-
-    console.log("📄 Using application doc:", docSnap.id);
-    console.log("👤 Raw personalInfo:", p);
-
-    const firstName = p.firstName ?? "Teacher";
-    const lastName = p.lastName ?? "";
-
-    console.log("✅ Resolved name:", firstName, lastName);
-
-    setProfile({
-      firstName,
-      lastName,
-      email: p.email ?? data.email ?? "",
-      phone: p.phone ?? "",
-      bio: p.bio ?? "",
-      subjects: data.subjects ?? p.subjects ?? [],
-      status: data.status ?? "pending",
     });
 
-    setEditProfile({
-      phone: p.phone ?? "",
-      bio: p.bio ?? "",
+    return () => unsub();
+  }, [user?.uid]);
+
+
+  // Audit Trail Logic: When a resource is clicked, we open a modal and listen to its auditTrail sub-collection in real-time
+  const openAuditModal = async (resource: any) => {
+    setSelectedResource(resource);
+
+    const q = collection(db, "class_links", resource.id, "auditTrail");
+
+    onSnapshot(q, (snapshot) => {
+      const logs: AuditLog[] = snapshot.docs.map(doc => {
+        const data = doc.data();
+
+        return {
+          id: doc.id,
+          studentId: data.studentId,
+          studentName: data.studentName,
+          grade: data.grade,
+          subject: data.subject,
+          linkType: data.linkType,
+          clickedAt: data.clickedAt,
+        };
+      });
+
+      setAuditLogs(
+        logs.sort((a, b) =>
+          (b.clickedAt?.seconds || 0) -
+          (a.clickedAt?.seconds || 0)
+        )
+      );
     });
-
-    setLoading(false);
-  });
-
-  return () => unsub();
-}, [user?.uid]);
-
-
-// Audit Trail Logic: When a resource is clicked, we open a modal and listen to its auditTrail sub-collection in real-time
-const openAuditModal = async (resource: any) => {
-  setSelectedResource(resource);
-
-  const q = collection(db, "class_links", resource.id, "auditTrail");
-
-  onSnapshot(q, (snapshot) => {
-  const logs: AuditLog[] = snapshot.docs.map(doc => {
-    const data = doc.data();
-
-    return {
-      id: doc.id,
-      studentId: data.studentId,
-      studentName: data.studentName,
-      grade: data.grade,
-      subject: data.subject,
-      linkType: data.linkType,
-      clickedAt: data.clickedAt,
-    };
-  });
-
-  setAuditLogs(
-    logs.sort((a, b) =>
-      (b.clickedAt?.seconds || 0) -
-      (a.clickedAt?.seconds || 0)
-    )
-  );
-});
-};
+  };
 
 
   /* ======================================================
@@ -405,81 +406,81 @@ const openAuditModal = async (resource: any) => {
      3. RESOURCE ENGINE (CRUD & AUDIT TRAIL)
   ===================================================== */
 
-// UPDATE: Refined handleUpdateResource
-const handleAddResource = async () => {
-  if (!newResource.title || !newResource.url) return alert("Title and URL are required");
+  // UPDATE: Refined handleUpdateResource
+  const handleAddResource = async () => {
+    if (!newResource.title || !newResource.url) return alert("Title and URL are required");
 
-  // 1. Identify exactly where the name is stored. 
-  // We check 'personalInfo' first, then the top-level 'displayName'
-  const firstName = user?.personalInfo?.firstName || user?.firstName || "";
-  const lastName = user?.personalInfo?.lastName || user?.lastName || "";
-  
-  // 2. Combine and verify
-  const fullName = `${firstName} ${lastName}`.trim();
-  
-  // 3. Final Fallback: If name is still empty, use email or "Teacher" 
-  // instead of just "Educator" to make it look more professional
-  const finalName = fullName || user?.email?.split('@')[0] || "Teacher";
+    // 1. Identify exactly where the name is stored. 
+    // We check 'personalInfo' first, then the top-level 'displayName'
+    const firstName = user?.personalInfo?.firstName || user?.firstName || "";
+    const lastName = user?.personalInfo?.lastName || user?.lastName || "";
 
-  try {
-    await addDoc(collection(db, "class_links"), {
-      title: newResource.title,
-      url: newResource.url,
-      type: newResource.type,
-      targetGrade: newResource.targetGrade,
-      teacherId: user?.uid,
-      teacherName: finalName, // Use the verified name here
-      createdAt: serverTimestamp(),
-      status: "active"
-    });
+    // 2. Combine and verify
+    const fullName = `${firstName} ${lastName}`.trim();
 
-    setNewResource({ ...newResource, title: "", url: "" });
-  } catch (err) {
-    console.error("Error adding resource:", err);
-  }
-};
+    // 3. Final Fallback: If name is still empty, use email or "Teacher" 
+    // instead of just "Educator" to make it look more professional
+    const finalName = fullName || user?.email?.split('@')[0] || "Teacher";
 
-// DELETE: Permanent removal
-const handleDeleteResource = async (id: string) => {
-  if (window.confirm("Permanently remove this link from student dashboards and audit history?")) {
     try {
-      await deleteDoc(doc(db, "class_links", id));
+      await addDoc(collection(db, "class_links"), {
+        title: newResource.title,
+        url: newResource.url,
+        type: newResource.type,
+        targetGrade: newResource.targetGrade,
+        teacherId: user?.uid,
+        teacherName: finalName, // Use the verified name here
+        createdAt: serverTimestamp(),
+        status: "active"
+      });
+
+      setNewResource({ ...newResource, title: "", url: "" });
     } catch (err) {
-      console.error("Delete failed:", err);
+      console.error("Error adding resource:", err);
     }
-  }
-};
+  };
 
-// FILTER: Ensure the filter uses 'targetGrade' to match the database
-const filteredResources = resources.filter(r => 
-  selectedGradeFilter === "all" ? true : r.targetGrade === selectedGradeFilter
-);
+  // DELETE: Permanent removal
+  const handleDeleteResource = async (id: string) => {
+    if (window.confirm("Permanently remove this link from student dashboards and audit history?")) {
+      try {
+        await deleteDoc(doc(db, "class_links", id));
+      } catch (err) {
+        console.error("Delete failed:", err);
+      }
+    }
+  };
 
-useEffect(() => {
-  if (!user?.uid) return;
-
-  // This is the specific query for the Audit Trail
-  const q = query(
-    collection(db, "class_links"),
-    where("teacherId", "==", user.uid), // This matches the ID you saved in handleAddResource
-    orderBy("createdAt", "desc")
+  // FILTER: Ensure the filter uses 'targetGrade' to match the database
+  const filteredResources = resources.filter(r =>
+    selectedGradeFilter === "all" ? true : r.targetGrade === selectedGradeFilter
   );
 
-  const unsub = onSnapshot(q, (snap) => {
-    const fetchedLinks = snap.docs.map(d => ({ 
-      id: d.id, 
-      ...d.data() 
-    }));
-    
-    // This fills the 'resources' state which 'filteredResources' uses
-    setResources(fetchedLinks); 
-  }, (error) => {
-    // If you see an error here about "indexes", click the link in the console
-    console.error("Audit Trail Fetch Error:", error);
-  });
+  useEffect(() => {
+    if (!user?.uid) return;
 
-  return () => unsub();
-}, [user?.uid]);
+    // This is the specific query for the Audit Trail
+    const q = query(
+      collection(db, "class_links"),
+      where("teacherId", "==", user.uid), // This matches the ID you saved in handleAddResource
+      orderBy("createdAt", "desc")
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      const fetchedLinks = snap.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      }));
+
+      // This fills the 'resources' state which 'filteredResources' uses
+      setResources(fetchedLinks);
+    }, (error) => {
+      // If you see an error here about "indexes", click the link in the console
+      console.error("Audit Trail Fetch Error:", error);
+    });
+
+    return () => unsub();
+  }, [user?.uid]);
 
   /* ======================================================
      4. CHAT & MESSAGING LOGIC
@@ -489,7 +490,7 @@ useEffect(() => {
     const qConv = query(collection(db, "conversations"), where("participants", "array-contains", user.uid));
     const unsubConv = onSnapshot(qConv, (snap) => {
       setConversations(snap.docs.map(d => ({ id: d.id, ...d.data() } as Conversation)));
-      setTotalUnread(snap.docs.length); 
+      setTotalUnread(snap.docs.length);
     });
     return () => unsubConv();
   }, [user]);
@@ -572,204 +573,205 @@ useEffect(() => {
     return () => unsub();
   }, [user]);
 
-// EDIT TEACHER PROFILE
+  // EDIT TEACHER PROFILE
 
-// Assuming:
-// - user comes from useAuth / context
-// - profile is your local state (useState)
-// - setProfile is the setter
-// - writeTimeout is a useRef<ReturnType<typeof setTimeout>>(null)
-// ────────────────────────────────────────────────
-// Unified Firestore Sync (Handles both Add & Remove)
-// ────────────────────────────────────────────────
-
-
-const updateTeacherFirestore = async (
-  operation: "add" | "remove",
-  subject: any
-) => {
-  if (!user?.uid || !applicationDocId) return;
-
-  const appRef = doc(db, "teacherApplications", applicationDocId);
-
-  const op =
-    operation === "add"
-      ? arrayUnion(subject)
-      : arrayRemove(subject);
-
-  try {
-    await updateDoc(appRef, {
-      "personalInfo.subjects": op,
-      updatedAt: serverTimestamp(),
-    });
-
-    console.log("✅ Subject add synced");
-  } catch (err) {
-    console.error("❌ Firestore Sync Error:", err);
-  }
-};
+  // Assuming:
+  // - user comes from useAuth / context
+  // - profile is your local state (useState)
+  // - setProfile is the setter
+  // - writeTimeout is a useRef<ReturnType<typeof setTimeout>>(null)
+  // ────────────────────────────────────────────────
+  // Unified Firestore Sync (Handles both Add & Remove)
+  // ────────────────────────────────────────────────
 
 
-// ────────────────────────────────────────────────
-// Add Subject Handler
-// ────────────────────────────────────────────────
-const addSubject = async (subjectName: string) => {
-  if (!subjectName.trim() || !user?.uid) return;
+  const updateTeacherFirestore = async (
+    operation: "add" | "remove",
+    subject: any
+  ) => {
+    if (!user?.uid || !applicationDocId) return;
 
-  // 1. Duplicate Check
-  const exists = profile?.subjects?.some(
-    (s: any) => s.name.toLowerCase() === subjectName.toLowerCase()
-  );
-  if (exists) {
-    alert("This subject is already in your profile.");
-    setSelectValue("");
-    return;
-  }
+    const appRef = doc(db, "teacherApplications", applicationDocId);
 
-  const newSubject = {
-    name: subjectName.trim(),
-    curriculum: "British Curriculum"
+    const op =
+      operation === "add"
+        ? arrayUnion(subject)
+        : arrayRemove(subject);
+
+    try {
+      await updateDoc(appRef, {
+        "personalInfo.subjects": op,
+        updatedAt: serverTimestamp(),
+      });
+
+      console.log("✅ Subject add synced");
+    } catch (err) {
+      console.error("❌ Firestore Sync Error:", err);
+    }
   };
 
-  // 2. Clear UI immediately for responsiveness
-  setSelectValue("");
 
-  // 3. Trigger Firestore sync (onSnapshot will handle the UI update)
-  await updateTeacherFirestore("add", newSubject);
-};
+  // ────────────────────────────────────────────────
+  // Add Subject Handler
+  // ────────────────────────────────────────────────
+  const addSubject = async (subjectName: string) => {
+    if (!subjectName.trim() || !user?.uid) return;
 
-// ────────────────────────────────────────────────
-// Remove Subject Handler
-// ────────────────────────────────────────────────
-const removeSubject = async (subjectName: string) => {
-  if (!profile?.subjects || !user?.uid) return;
+    // 1. Duplicate Check
+    const exists = profile?.subjects?.some(
+      (s: any) => s.name.toLowerCase() === subjectName.toLowerCase()
+    );
+    if (exists) {
+      alert("This subject is already in your profile.");
+      setSelectValue("");
+      return;
+    }
 
-  const subjectToRemove = profile.subjects.find(
-    (s: any) => s.name === subjectName
-  );
+    const newSubject = {
+      name: subjectName.trim(),
+      curriculum: "British Curriculum"
+    };
 
-  if (subjectToRemove) {
-    await updateTeacherFirestore("remove", subjectToRemove);
-  }
-};
+    // 2. Clear UI immediately for responsiveness
+    setSelectValue("");
 
-// Helper to parse time strings like "08:00 AM" and calculate start/end Date objects
-const parseTime = (timeStr: string) => {
-  // Handles "08:00 AM" or "08:00 AM - 09:00 AM"
-  const start = timeStr.split("-")[0].trim();
-  const [clock, meridian] = start.split(" ");
-  const [h, m] = clock.split(":").map(Number);
+    // 3. Trigger Firestore sync (onSnapshot will handle the UI update)
+    await updateTeacherFirestore("add", newSubject);
+  };
 
-  let hours = h;
-  if (meridian === "PM" && h !== 12) hours += 12;
-  if (meridian === "AM" && h === 12) hours = 0;
+  // ────────────────────────────────────────────────
+  // Remove Subject Handler
+  // ────────────────────────────────────────────────
+  const removeSubject = async (subjectName: string) => {
+    if (!profile?.subjects || !user?.uid) return;
 
-  const startDate = new Date(now);
-  startDate.setHours(hours, m, 0, 0);
+    const subjectToRemove = profile.subjects.find(
+      (s: any) => s.name === subjectName
+    );
 
-  const endDate = new Date(startDate);
-  endDate.setMinutes(endDate.getMinutes() + 60); // default 1 hour
+    if (subjectToRemove) {
+      await updateTeacherFirestore("remove", subjectToRemove);
+    }
+  };
 
-  return { startDate, endDate };
-};
-const getLessonStatus = (day: string, time: string) => {
-  const todayName = now.toLocaleDateString("en-US", { weekday: "long" });
+  // Helper to parse time strings like "08:00 AM" and calculate start/end Date objects
+  const parseTime = (timeStr: string) => {
+    // Handles "08:00 AM" or "08:00 AM - 09:00 AM"
+    const start = timeStr.split("-")[0].trim();
+    const [clock, meridian] = start.split(" ");
+    const [h, m] = clock.split(":").map(Number);
 
-  // Get numeric day index (0-6)
-  const dayIndexMap: Record<string, number> = {
-    Sunday: 0,
+    let hours = h;
+    if (meridian === "PM" && h !== 12) hours += 12;
+    if (meridian === "AM" && h === 12) hours = 0;
+
+    const startDate = new Date(now);
+    startDate.setHours(hours, m, 0, 0);
+
+    const endDate = new Date(startDate);
+    endDate.setMinutes(endDate.getMinutes() + 60); // default 1 hour
+
+    return { startDate, endDate };
+  };
+  const getLessonStatus = (day: string, time: string) => {
+    const todayName = now.toLocaleDateString("en-US", { weekday: "long" });
+
+    // Get numeric day index (0-6)
+    const dayIndexMap: Record<string, number> = {
+      Sunday: 0,
+      Monday: 1,
+      Tuesday: 2,
+      Wednesday: 3,
+      Thursday: 4,
+      Friday: 5,
+      Saturday: 6,
+    };
+
+    const todayIndex = now.getDay();
+    const lessonDayIndex = dayIndexMap[day];
+
+    // If lesson day is before today → finished
+    if (lessonDayIndex < todayIndex) return "finished";
+
+    // If lesson day is after today → upcoming
+    if (lessonDayIndex > todayIndex) return "upcoming";
+
+    // If same day → calculate time
+    const { startDate, endDate } = parseTime(time);
+
+    if (now > endDate) return "finished";
+    if (now >= startDate && now <= endDate) return "current";
+    return "upcoming";
+  };
+
+
+  // Mapping of lesson status to Tailwind CSS classes for dynamic styling
+  const statusStyles: Record<string, string> = {
+    finished: "bg-red-100 text-red-700 border-red-200",
+    current: "bg-green-100 text-green-700 border-green-200 animate-pulse",
+    upcoming: "bg-yellow-100 text-yellow-700 border-yellow-200"
+  };
+
+  // ORDER ARRANGEMENT
+  const dayOrder: Record<string, number> = {
     Monday: 1,
     Tuesday: 2,
     Wednesday: 3,
     Thursday: 4,
-    Friday: 5,
-    Saturday: 6,
   };
 
-  const todayIndex = now.getDay();
-  const lessonDayIndex = dayIndexMap[day];
+  const getMinutes = (timeStr: string) => {
+    const [clock, meridian] = timeStr.split(" ");
+    let [hours, minutes] = clock.split(":").map(Number);
 
-  // If lesson day is before today → finished
-  if (lessonDayIndex < todayIndex) return "finished";
+    if (meridian === "PM" && hours !== 12) hours += 12;
+    if (meridian === "AM" && hours === 12) hours = 0;
 
-  // If lesson day is after today → upcoming
-  if (lessonDayIndex > todayIndex) return "upcoming";
-
-  // If same day → calculate time
-  const { startDate, endDate } = parseTime(time);
-
-  if (now > endDate) return "finished";
-  if (now >= startDate && now <= endDate) return "current";
-  return "upcoming";
-};
+    return hours * 60 + minutes;
+  };
 
 
-// Mapping of lesson status to Tailwind CSS classes for dynamic styling
-const statusStyles: Record<string, string> = {
-  finished: "bg-red-100 text-red-700 border-red-200",
-  current: "bg-green-100 text-green-700 border-green-200 animate-pulse",
-  upcoming: "bg-yellow-100 text-yellow-700 border-yellow-200"
-};
+  const sortedTimetable = [...timetable].sort((a, b) => {
+    const dayDiff = (dayOrder[a.day] || 99) - (dayOrder[b.day] || 99);
+    if (dayDiff !== 0) return dayDiff;
 
-// ORDER ARRANGEMENT
-const dayOrder: Record<string, number> = {
-  Monday: 1,
-  Tuesday: 2,
-  Wednesday: 3,
-  Thursday: 4,
-};
+    return getMinutes(a.time) - getMinutes(b.time);
+  });
 
-const getMinutes = (timeStr: string) => {
-  const [clock, meridian] = timeStr.split(" ");
-  let [hours, minutes] = clock.split(":").map(Number);
-
-  if (meridian === "PM" && hours !== 12) hours += 12;
-  if (meridian === "AM" && hours === 12) hours = 0;
-
-  return hours * 60 + minutes;
-};
-
-
-const sortedTimetable = [...timetable].sort((a, b) => {
-  const dayDiff = (dayOrder[a.day] || 99) - (dayOrder[b.day] || 99);
-  if (dayDiff !== 0) return dayDiff;
-
-  return getMinutes(a.time) - getMinutes(b.time);
-});
-
-const sortedResources = [...filteredResources].sort((a, b) => {
-  const aTime = a.updatedAt?.toMillis?.() ?? a.createdAt?.toMillis?.() ?? 0;
-  const bTime = b.updatedAt?.toMillis?.() ?? b.createdAt?.toMillis?.() ?? 0;
-  return bTime - aTime; // newest first
-});
+  const sortedResources = [...filteredResources].sort((a, b) => {
+    const aTime = a.updatedAt?.toMillis?.() ?? a.createdAt?.toMillis?.() ?? 0;
+    const bTime = b.updatedAt?.toMillis?.() ?? b.createdAt?.toMillis?.() ?? 0;
+    return bTime - aTime; // newest first
+  });
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 pb-20 font-sans">
-      
+
       {/* HEADER SECTION */}
       <div className="bg-indigo-600 text-white shadow-xl">
         <div className="max-w-7xl mx-auto px-6 py-8 flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-black flex items-center gap-2 tracking-tight">
+              <img src={logo} alt="Logo" className="w-12 h-12" />
               <Sparkles className="text-amber-400" /> TEACHER CENTRAL
             </h1>
-        {teacherFullName && (
-  <p className="opacity-80 font-medium">
-    Educator: {teacherFullName}
-  </p>
-)}
+            {teacherFullName && (
+              <p className="opacity-80 font-medium">
+                Educator: {teacherFullName}
+              </p>
+            )}
 
 
           </div>
-         <Button
-  variant="secondary"
-  className="font-bold shadow-lg"
-  onClick={logoutAll}
->
-  <LogOut className="mr-2" /> Logout
-</Button>
+          <Button
+            variant="secondary"
+            className="font-bold shadow-lg"
+            onClick={logoutAll}
+          >
+            <LogOut className="mr-2" /> Logout
+          </Button>
         </div>
       </div>
 
@@ -781,21 +783,21 @@ const sortedResources = [...filteredResources].sort((a, b) => {
             <TabsTrigger value="links" className="px-8 py-3 font-bold">Link Engine</TabsTrigger>
             <TabsTrigger value="timetable" className="px-8 py-3 font-bold">Timetable</TabsTrigger>
             <TabsTrigger value="profile" className="px-8 py-3 font-bold">My Profile</TabsTrigger>
-                        
+
           </TabsList>
 
-{/* STATUS BANNER */}
-        {status === "submitted" && (
-          <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-[2rem] flex items-center gap-6 mb-8 animate-in slide-in-from-top-4">
-            <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-lg">
-              <Clock size={24} />
+          {/* STATUS BANNER */}
+          {status === "submitted" && (
+            <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-[2rem] flex items-center gap-6 mb-8 animate-in slide-in-from-top-4">
+              <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-lg">
+                <Clock size={24} />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-amber-900 uppercase tracking-tight">Application Under Review</h2>
+                <p className="text-sm text-amber-700 font-medium">The Principal is currently verifying your credentials. Full portal access will unlock upon approval.</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-lg font-black text-amber-900 uppercase tracking-tight">Application Under Review</h2>
-              <p className="text-sm text-amber-700 font-medium">The Principal is currently verifying your credentials. Full portal access will unlock upon approval.</p>
-            </div>
-          </div>
-        )}
+          )}
 
           {/* DASHBOARD OVERVIEW */}
           <TabsContent value="overview">
@@ -804,15 +806,15 @@ const sortedResources = [...filteredResources].sort((a, b) => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
 
               <NextClassCountdownCard
-  userUid={teacher.uid}
-  role="teacher"
-/>
+                userUid={teacher.uid}
+                role="teacher"
+              />
 
               <Card className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white border-0 shadow-2xl rounded-3xl overflow-hidden">
                 <CardHeader><CardTitle className="uppercase tracking-widest text-[10px] opacity-70">Schedule</CardTitle></CardHeader>
                 <CardContent>
-                   <p className="text-5xl font-black">{timetable.length}</p>
-                   <p className="text-sm mt-2 opacity-80">Classes assigned this week</p>
+                  <p className="text-5xl font-black">{timetable.length}</p>
+                  <p className="text-sm mt-2 opacity-80">Classes assigned this week</p>
                 </CardContent>
               </Card>
               <Card className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white border-0 shadow-2xl rounded-3xl overflow-hidden">
@@ -854,198 +856,198 @@ const sortedResources = [...filteredResources].sort((a, b) => {
             </Card>
           </TabsContent>
 
-          <MoodleCard/>
+          <MoodleCard />
 
           {/* LINK ENGINE TAB */}
-         <TabsContent value="links">
-  <div className="space-y-6">
-    
-    {/* PUBLISHING ENGINE */}
-    <Card className="border-0 shadow-2xl bg-indigo-900 text-white rounded-[2rem] overflow-hidden">
-      <div className="p-8 border-b border-white/10 bg-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-         <div>
-           <h2 className="text-2xl font-black italic tracking-tighter">LINK PUBLISHING ENGINE</h2>
-           <p className="text-xs text-indigo-300 font-bold uppercase tracking-widest mt-1">Updates Student Dashboards instantly</p>
-         </div>
-         <div className="bg-white/10 p-2 rounded-xl border border-white/20">
-           <Label className="text-[10px] font-black uppercase text-indigo-200 block mb-1">Filter Audit Trail</Label>
-           <select 
-              className="bg-transparent text-xs font-bold outline-none cursor-pointer text-white"
-              value={selectedGradeFilter}
-              onChange={(e) => setSelectedGradeFilter(e.target.value)}
-            >
-              <option className="text-black" value="all">View All Grades</option>
-              {availableGrades.map(g => <option className="text-black" key={g} value={g}>{g}</option>)}
-            </select>
-         </div>
-      </div>
-      <CardContent className="p-8">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-end">
-          <div className="space-y-2">
-            <Label className="text-[10px] uppercase font-black text-indigo-200">Target Grade</Label>
-            <select 
-              className="w-full h-12 px-4 rounded-xl bg-white/10 border-2 border-white/10 text-white text-sm font-bold focus:border-white/40 transition-all outline-none"
-              value={newResource.targetGrade}
-              onChange={e => setNewResource({...newResource, targetGrade: e.target.value})}
-            >
-              <option className="text-black" value="all">All Grades</option>
-              {availableGrades.map(g => <option className="text-black" key={g} value={g}>{g}</option>)}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-[10px] uppercase font-black text-indigo-200">Link Title</Label>
-            <Input className="h-12 bg-white/10 border-2 border-white/10 text-white placeholder:text-white/30 rounded-xl focus:border-white/40 font-bold" placeholder="e.g. Maths Live Session" value={newResource.title} onChange={e => setNewResource({...newResource, title: e.target.value})} />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-[10px] uppercase font-black text-indigo-200">URL / Zoom Link</Label>
-            <Input className="h-12 bg-white/10 border-2 border-white/10 text-white placeholder:text-white/30 rounded-xl focus:border-white/40 font-mono text-xs" placeholder="https://zoom.us/..." value={newResource.url} onChange={e => setNewResource({...newResource, url: e.target.value})} />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-[10px] uppercase font-black text-indigo-200">Category</Label>
-            <select 
-              className="w-full h-12 px-4 rounded-xl bg-white/10 border-2 border-white/10 text-white text-sm font-bold focus:border-white/40 outline-none"
-              value={newResource.type} 
-              onChange={e => setNewResource({...newResource, type: e.target.value})}
-            >
-              <option className="text-black" value="classroom">Classroom / Live</option>
-              <option className="text-black" value="resource">Study Material</option>
-            </select>
-          </div>
-          <Button onClick={handleAddResource} className="h-12 bg-amber-400 hover:bg-amber-500 text-black font-black rounded-xl shadow-xl transition-transform active:scale-95">
-            <PlusCircle className="mr-2 h-5 w-5" /> PUBLISH LINK
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+          <TabsContent value="links">
+            <div className="space-y-6">
 
-    {/* AUDIT TRAIL / MANAGEMENT TABLE */}
-    <div className="bg-white rounded-[2rem] shadow-2xl border-0 overflow-hidden">
-      <div className="p-8 border-b bg-slate-50 flex justify-between items-center">
-        <h3 className="font-black text-slate-800 text-xl tracking-tight uppercase">Audit Trail & Record Management</h3>
-        <Badge className="px-4 py-1 rounded-full font-black bg-indigo-100 text-indigo-600 border-none">{filteredResources.length} RECORDS ACTIVE</Badge>
-      </div>
-      
-      <div className="overflow-x-auto">
-        <table className="w-full text-left">
-          <thead>
-                    <tr className="bg-slate-100/50 text-[10px] uppercase font-black text-slate-400 tracking-widest">
-                      <th className="px-8 py-5">Audience</th>
-                      <th className="px-8 py-5">Content Details</th>
-                      <th className="px-8 py-5">Navigation</th>
-                      <th className="px-8 py-5">Published</th>
-                      <th className="px-8 py-5 text-right">Settings</th>
-                    </tr>
+              {/* PUBLISHING ENGINE */}
+              <Card className="border-0 shadow-2xl bg-indigo-900 text-white rounded-[2rem] overflow-hidden">
+                <div className="p-8 border-b border-white/10 bg-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div>
+                    <h2 className="text-2xl font-black italic tracking-tighter">LINK PUBLISHING ENGINE</h2>
+                    <p className="text-xs text-indigo-300 font-bold uppercase tracking-widest mt-1">Updates Student Dashboards instantly</p>
+                  </div>
+                  <div className="bg-white/10 p-2 rounded-xl border border-white/20">
+                    <Label className="text-[10px] font-black uppercase text-indigo-200 block mb-1">Filter Audit Trail</Label>
+                    <select
+                      className="bg-transparent text-xs font-bold outline-none cursor-pointer text-white"
+                      value={selectedGradeFilter}
+                      onChange={(e) => setSelectedGradeFilter(e.target.value)}
+                    >
+                      <option className="text-black" value="all">View All Grades</option>
+                      {availableGrades.map(g => <option className="text-black" key={g} value={g}>{g}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <CardContent className="p-8">
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-end">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] uppercase font-black text-indigo-200">Target Grade</Label>
+                      <select
+                        className="w-full h-12 px-4 rounded-xl bg-white/10 border-2 border-white/10 text-white text-sm font-bold focus:border-white/40 transition-all outline-none"
+                        value={newResource.targetGrade}
+                        onChange={e => setNewResource({ ...newResource, targetGrade: e.target.value })}
+                      >
+                        <option className="text-black" value="all">All Grades</option>
+                        {availableGrades.map(g => <option className="text-black" key={g} value={g}>{g}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] uppercase font-black text-indigo-200">Link Title</Label>
+                      <Input className="h-12 bg-white/10 border-2 border-white/10 text-white placeholder:text-white/30 rounded-xl focus:border-white/40 font-bold" placeholder="e.g. Maths Live Session" value={newResource.title} onChange={e => setNewResource({ ...newResource, title: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] uppercase font-black text-indigo-200">URL / Zoom Link</Label>
+                      <Input className="h-12 bg-white/10 border-2 border-white/10 text-white placeholder:text-white/30 rounded-xl focus:border-white/40 font-mono text-xs" placeholder="https://zoom.us/..." value={newResource.url} onChange={e => setNewResource({ ...newResource, url: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] uppercase font-black text-indigo-200">Category</Label>
+                      <select
+                        className="w-full h-12 px-4 rounded-xl bg-white/10 border-2 border-white/10 text-white text-sm font-bold focus:border-white/40 outline-none"
+                        value={newResource.type}
+                        onChange={e => setNewResource({ ...newResource, type: e.target.value })}
+                      >
+                        <option className="text-black" value="classroom">Classroom / Live</option>
+                        <option className="text-black" value="resource">Study Material</option>
+                      </select>
+                    </div>
+                    <Button onClick={handleAddResource} className="h-12 bg-amber-400 hover:bg-amber-500 text-black font-black rounded-xl shadow-xl transition-transform active:scale-95">
+                      <PlusCircle className="mr-2 h-5 w-5" /> PUBLISH LINK
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* AUDIT TRAIL / MANAGEMENT TABLE */}
+              <div className="bg-white rounded-[2rem] shadow-2xl border-0 overflow-hidden">
+                <div className="p-8 border-b bg-slate-50 flex justify-between items-center">
+                  <h3 className="font-black text-slate-800 text-xl tracking-tight uppercase">Audit Trail & Record Management</h3>
+                  <Badge className="px-4 py-1 rounded-full font-black bg-indigo-100 text-indigo-600 border-none">{filteredResources.length} RECORDS ACTIVE</Badge>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-slate-100/50 text-[10px] uppercase font-black text-slate-400 tracking-widest">
+                        <th className="px-8 py-5">Audience</th>
+                        <th className="px-8 py-5">Content Details</th>
+                        <th className="px-8 py-5">Navigation</th>
+                        <th className="px-8 py-5">Published</th>
+                        <th className="px-8 py-5 text-right">Settings</th>
+                      </tr>
                     </thead>
 
 
 
-          <tbody className="divide-y divide-slate-100">
-  {sortedResources.map((item, index) => {
-    const isEditing = editingResourceId === item.id;
+                    <tbody className="divide-y divide-slate-100">
+                      {sortedResources.map((item, index) => {
+                        const isEditing = editingResourceId === item.id;
 
-    return (
-      <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
-        
-        {/* Audience */}
-        <td className="px-8 py-6">
-          <Badge variant="outline" className="font-black text-[10px] border-slate-200 text-slate-500 uppercase">
-            Grade {item.targetGrade}
-          </Badge>
-        </td>
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
 
-        {/* Content */}
-        <td className="px-8 py-6">
-          <p className="font-black text-slate-800 text-base">
-            {item.title}
-          </p>
-        </td>
+                            {/* Audience */}
+                            <td className="px-8 py-6">
+                              <Badge variant="outline" className="font-black text-[10px] border-slate-200 text-slate-500 uppercase">
+                                Grade {item.targetGrade}
+                              </Badge>
+                            </td>
 
-        {/* Navigation */}
-      <td className="px-8 py-6">
-  <button
-    onClick={async () => {
-      try {
-        // 🔥 Save attendance audit
-        await addDoc(
-          collection(db, "class_links", item.id, "auditTrail"),
-          {
-            studentId: userUid,
-            studentName: userData?.name || "",
-            grade: userData?.grade || "",
-            subject: item.subject || "general",
-            linkTitle: item.title || "",
-            linkType: item.type || "resource",
-            url: item.url || "",
-            clickedAt: serverTimestamp(),
-          }
-        );
+                            {/* Content */}
+                            <td className="px-8 py-6">
+                              <p className="font-black text-slate-800 text-base">
+                                {item.title}
+                              </p>
+                            </td>
 
-      } catch (error) {
-        console.error("Attendance log failed:", error);
-      }
+                            {/* Navigation */}
+                            <td className="px-8 py-6">
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    // 🔥 Save attendance audit
+                                    await addDoc(
+                                      collection(db, "class_links", item.id, "auditTrail"),
+                                      {
+                                        studentId: userUid,
+                                        studentName: userData?.name || "",
+                                        grade: userData?.grade || "",
+                                        subject: item.subject || "general",
+                                        linkTitle: item.title || "",
+                                        linkType: item.type || "resource",
+                                        url: item.url || "",
+                                        clickedAt: serverTimestamp(),
+                                      }
+                                    );
 
-      // 🚀 Open Zoom / link
-      const destination = item.url.startsWith("http")
-        ? item.url
-        : `https://${item.url}`;
+                                  } catch (error) {
+                                    console.error("Attendance log failed:", error);
+                                  }
 
-      window.open(destination, "_blank");
-    }}
-    className="text-[11px] text-indigo-600 font-mono truncate max-w-[150px] hover:underline"
-  >
-    {item.url}
-  </button>
-</td>
+                                  // 🚀 Open Zoom / link
+                                  const destination = item.url.startsWith("http")
+                                    ? item.url
+                                    : `https://${item.url}`;
 
-        {/* 🔥 Published Timestamp */}
-        <td className="px-8 py-6">
-          <span className="text-[11px] font-semibold text-slate-600">
-            {formatTimestamp(item.updatedAt || item.createdAt)}
-          </span>
+                                  window.open(destination, "_blank");
+                                }}
+                                className="text-[11px] text-indigo-600 font-mono truncate max-w-[150px] hover:underline"
+                              >
+                                {item.url}
+                              </button>
+                            </td>
 
-          {index === 0 && (
-            <div className="text-[9px] font-black text-emerald-600 uppercase mt-1">
-              ● Most Recent
+                            {/* 🔥 Published Timestamp */}
+                            <td className="px-8 py-6">
+                              <span className="text-[11px] font-semibold text-slate-600">
+                                {formatTimestamp(item.updatedAt || item.createdAt)}
+                              </span>
+
+                              {index === 0 && (
+                                <div className="text-[9px] font-black text-emerald-600 uppercase mt-1">
+                                  ● Most Recent
+                                </div>
+                              )}
+                            </td>
+
+
+
+                            {/* Settings */}
+                            <td className="px-8 py-6 text-right hover:visible color-red-400">
+                              <button
+                                onClick={() => openAuditModal(item)}
+                                className="text-indigo-600 hover:text-indigo-800 font-semibold mr-4"
+                              >
+                                View Attendance
+                              </button>
+
+                              <button onClick={() => handleDeleteResource(item.id)} className="text-red-500 hover:text-blue-700">
+                                Delete
+                              </button>
+
+                            </td>
+
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+
+
+                  </table>
+                  {filteredResources.length === 0 && (
+                    <div className="py-20 text-center flex flex-col items-center">
+                      <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                        <BookOpen className="text-slate-300 w-8 h-8" />
+                      </div>
+                      <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">No link records found in audit trail</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          )}
-        </td>
-
-        
-
-        {/* Settings */}
-        <td className="px-8 py-6 text-right hover:visible color-red-400">
-          <button
-            onClick={() => openAuditModal(item)}
-            className="text-indigo-600 hover:text-indigo-800 font-semibold mr-4"
-          >
-            View Attendance
-          </button>
-
-          <button onClick={() => handleDeleteResource(item.id)} className="text-red-500 hover:text-blue-700">
-            Delete
-          </button>
-
-        </td>
-
-      </tr>
-    );
-  })}
-</tbody>
-
-
-        </table>
-        {filteredResources.length === 0 && (
-          <div className="py-20 text-center flex flex-col items-center">
-             <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-                <BookOpen className="text-slate-300 w-8 h-8" />
-             </div>
-             <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">No link records found in audit trail</p>
-          </div>
-        )}
-      </div>
-    </div>
-  </div>
-</TabsContent>
+          </TabsContent>
 
           {/* TIMETABLE VIEW */}
           <TabsContent value="timetable">
@@ -1065,20 +1067,20 @@ const sortedResources = [...filteredResources].sort((a, b) => {
                       <td className="px-8 py-6 font-black text-slate-700">{t.day}</td>
                       <td className="px-8 py-6 font-medium text-slate-500">{t.time}</td>
                       <td className="px-8 py-6 flex items-center gap-2">
-  <Badge className="bg-indigo-100 text-indigo-700 border-none font-black">
-    {t.subject}
-  </Badge>
+                        <Badge className="bg-indigo-100 text-indigo-700 border-none font-black">
+                          {t.subject}
+                        </Badge>
 
-  {(() => {
-    const status = getLessonStatus(t.day, t.time);
+                        {(() => {
+                          const status = getLessonStatus(t.day, t.time);
 
-    return (
-      <Badge className={statusStyles[status]}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </Badge>
-    );
-  })()}
-</td>
+                          return (
+                            <Badge className={statusStyles[status]}>
+                              {status.charAt(0).toUpperCase() + status.slice(1)}
+                            </Badge>
+                          );
+                        })()}
+                      </td>
 
                       <td className="px-8 py-6 font-bold text-slate-400">GRADE {t.grade}</td>
                     </tr>
@@ -1109,61 +1111,61 @@ const sortedResources = [...filteredResources].sort((a, b) => {
                   <div className="space-y-2"><Label className="font-black text-[10px] text-slate-400 uppercase">Registered Email</Label><Input className="h-12 rounded-xl bg-slate-50 border-none font-bold text-slate-900" value={profile?.email} disabled /></div>
                   <div className="space-y-2">
                     <Label className="font-black text-[10px] text-slate-400 uppercase">Contact Number</Label>
-                    <Input className={`h-12 rounded-xl border-2 font-bold ${isEditingProfile ? 'border-indigo-200' : 'bg-slate-50 border-none text-slate-900'}`} value={isEditingProfile ? editProfile.phone : profile?.phone} disabled={!isEditingProfile} onChange={e => setEditProfile({...editProfile, phone: e.target.value})} />
+                    <Input className={`h-12 rounded-xl border-2 font-bold ${isEditingProfile ? 'border-indigo-200' : 'bg-slate-50 border-none text-slate-900'}`} value={isEditingProfile ? editProfile.phone : profile?.phone} disabled={!isEditingProfile} onChange={e => setEditProfile({ ...editProfile, phone: e.target.value })} />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label className="font-black text-[10px] text-slate-400 uppercase">Professional Biography</Label>
-                  <Textarea className={`rounded-2xl border-2 font-medium leading-relaxed ${isEditingProfile ? 'border-indigo-200' : 'bg-slate-50 border-none text-slate-900'}`} rows={5} value={isEditingProfile ? editProfile.bio : profile?.bio} disabled={!isEditingProfile} onChange={e => setEditProfile({...editProfile, bio: e.target.value})} />
+                  <Textarea className={`rounded-2xl border-2 font-medium leading-relaxed ${isEditingProfile ? 'border-indigo-200' : 'bg-slate-50 border-none text-slate-900'}`} rows={5} value={isEditingProfile ? editProfile.bio : profile?.bio} disabled={!isEditingProfile} onChange={e => setEditProfile({ ...editProfile, bio: e.target.value })} />
                 </div>
 
                 {/* SUBJECTS IN PROFILE */}
-             <div className="pt-6 border-t">
-  <Label className="font-black text-[10px] text-slate-400 uppercase mb-4 block flex items-center gap-2">
-    Manage Specializations
-    {/* Optional: Add a subtle loading indicator if you have a saving state */}
-  </Label>
-  
-  <div className="mb-6">
-    <Select 
-      value={selectValue} 
-      onValueChange={addSubject}
-    >
-      <SelectTrigger className="w-full h-12 rounded-xl bg-slate-50 border-none font-bold">
-        <SelectValue placeholder="Add a new subject..." />
-      </SelectTrigger>
-      <SelectContent>
-        <div className="max-h-[300px] overflow-y-auto">
-          {British_Curriculum_SUBJECTS.map((sub) => (
-            <SelectItem key={sub} value={sub}>{sub}</SelectItem>
-          ))}
-        </div>
-      </SelectContent>
-    </Select>
-  </div>
+                <div className="pt-6 border-t">
+                  <Label className="font-black text-[10px] text-slate-400 uppercase mb-4 block flex items-center gap-2">
+                    Manage Specializations
+                    {/* Optional: Add a subtle loading indicator if you have a saving state */}
+                  </Label>
 
-  <div className="flex flex-wrap gap-3 items-start">
-    {profile?.subjects && profile.subjects.length > 0 ? (
-      profile.subjects.map((sub: any, i: number) => (
-        <Badge 
-          key={`${sub.name}-${i}`} 
-          className="py-2 pl-6 pr-3 rounded-full bg-slate-900 text-white font-bold flex items-center gap-2 animate-in fade-in zoom-in duration-200"
-        >
-          {sub.name}
-          <button 
-            onClick={() => removeSubject(sub.name)}
-            className="ml-1 p-1 hover:bg-rose-500 rounded-full transition-colors"
-            type="button"
-          >
-            <X size={14} className="text-slate-400 group-hover:text-white" />
-          </button>
-        </Badge>
-      ))
-    ) : (
-      <p className="text-xs text-slate-400 italic">No specializations added yet.</p>
-    )}
-  </div>
-</div>
+                  <div className="mb-6">
+                    <Select
+                      value={selectValue}
+                      onValueChange={addSubject}
+                    >
+                      <SelectTrigger className="w-full h-12 rounded-xl bg-slate-50 border-none font-bold">
+                        <SelectValue placeholder="Add a new subject..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <div className="max-h-[300px] overflow-y-auto">
+                          {British_Curriculum_SUBJECTS.map((sub) => (
+                            <SelectItem key={sub} value={sub}>{sub}</SelectItem>
+                          ))}
+                        </div>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3 items-start">
+                    {profile?.subjects && profile.subjects.length > 0 ? (
+                      profile.subjects.map((sub: any, i: number) => (
+                        <Badge
+                          key={`${sub.name}-${i}`}
+                          className="py-2 pl-6 pr-3 rounded-full bg-slate-900 text-white font-bold flex items-center gap-2 animate-in fade-in zoom-in duration-200"
+                        >
+                          {sub.name}
+                          <button
+                            onClick={() => removeSubject(sub.name)}
+                            className="ml-1 p-1 hover:bg-rose-500 rounded-full transition-colors"
+                            type="button"
+                          >
+                            <X size={14} className="text-slate-400 group-hover:text-white" />
+                          </button>
+                        </Badge>
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-400 italic">No specializations added yet.</p>
+                    )}
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1181,7 +1183,7 @@ const sortedResources = [...filteredResources].sort((a, b) => {
               </div>
               <button className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition" onClick={() => { setChatOpen(false); setActiveConvId(null); }}><X size={20} /></button>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto bg-slate-50 p-6 space-y-4">
               {activeConvId ? (
                 messages.map(m => (
@@ -1216,61 +1218,61 @@ const sortedResources = [...filteredResources].sort((a, b) => {
         </button>
       </div>
 
-{/* Audit Trail Modal */}
-{selectedResource && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-    <div className="bg-white rounded-3xl p-8 w-[700px] max-h-[80vh] overflow-y-auto shadow-2xl">
-      
-      <h2 className="text-xl font-black mb-6 uppercase">
-        Attendance Trail – {selectedResource.title}
-      </h2>
+      {/* Audit Trail Modal */}
+      {selectedResource && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-3xl p-8 w-[700px] max-h-[80vh] overflow-y-auto shadow-2xl">
 
-      {auditLogs.length > 0 ? (
-        <table className="w-full text-sm">
-          <thead className="text-left border-b">
-            <tr>
-              <th className="py-2">Student</th>
-              <th>Grade</th>
-              <th>Subject</th>
-              <th>Clicked At</th>
-            </tr>
-          </thead>
-          <tbody>
-            {auditLogs.map(log => (
-              <tr key={log.id} className="border-b hover:bg-slate-50">
-                <td className="py-2 font-semibold">
-                  {log.studentName}
-                </td>
-                <td>{log.grade}</td>
-                <td>{log.subject}</td>
-                <td>
-                  {log.clickedAt
-                    ? formatTimestamp(log.clickedAt)
-                    : "Loading..."}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <p className="text-slate-400 text-sm">
-          No attendance records yet.
-        </p>
+            <h2 className="text-xl font-black mb-6 uppercase">
+              Attendance Trail – {selectedResource.title}
+            </h2>
+
+            {auditLogs.length > 0 ? (
+              <table className="w-full text-sm">
+                <thead className="text-left border-b">
+                  <tr>
+                    <th className="py-2">Student</th>
+                    <th>Grade</th>
+                    <th>Subject</th>
+                    <th>Clicked At</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditLogs.map(log => (
+                    <tr key={log.id} className="border-b hover:bg-slate-50">
+                      <td className="py-2 font-semibold">
+                        {log.studentName}
+                      </td>
+                      <td>{log.grade}</td>
+                      <td>{log.subject}</td>
+                      <td>
+                        {log.clickedAt
+                          ? formatTimestamp(log.clickedAt)
+                          : "Loading..."}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-slate-400 text-sm">
+                No attendance records yet.
+              </p>
+            )}
+
+            <div className="text-right mt-6">
+              <button
+                onClick={() => setSelectedResource(null)}
+                className="bg-slate-900 text-white px-6 py-2 rounded-xl"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
-      <div className="text-right mt-6">
-        <button
-          onClick={() => setSelectedResource(null)}
-          className="bg-slate-900 text-white px-6 py-2 rounded-xl"
-        >
-          Close
-        </button>
-      </div>
-    </div>
-  </div>
-)}
 
- 
     </div>
   );
 };

@@ -55,6 +55,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Settings } from "lucide-react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import PendingInvoiceModal from "./PendingInvoiceModal";
+import logo from "@/img/care.png";
 
 /* ======================================================
    CONSTANTS & TYPES
@@ -136,22 +137,20 @@ function HybridSwitch({ student }: { student: Student }) {
         <button
           onClick={() => toggleMode("Campus")}
           disabled={loading}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${
-            currentMode === "Campus"
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${currentMode === "Campus"
               ? "bg-emerald-600 text-white shadow-md"
               : "text-gray-500 hover:text-gray-700"
-          }`}
+            }`}
         >
           <MapPin size={16} /> Campus
         </button>
         <button
           onClick={() => toggleMode("Virtual")}
           disabled={loading}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${
-            currentMode === "Virtual"
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${currentMode === "Virtual"
               ? "bg-indigo-600 text-white shadow-md"
               : "text-gray-500 hover:text-gray-700"
-          }`}
+            }`}
         >
           <Laptop size={16} /> Virtual
         </button>
@@ -193,17 +192,17 @@ export default function ParentDashboard() {
 
   const sections = ["Overview", "Registration", "Payments", "Communications", "Status", "Settings"];
 
-const [newStudentFirstName, setNewStudentFirstName] = useState("");
-const [newStudentLastName, setNewStudentLastName] = useState("");
-const [newStudentGrade, setNewStudentGrade] = useState("");
-const [newStudentUsername, setNewStudentUsername] = useState("");
-const [newStudentPassword, setNewStudentPassword] = useState("");
-const [creatingStudent, setCreatingStudent] = useState(false);
-const [selectedStudentForLogin, setSelectedStudentForLogin] = useState<string>("");
-const [showPassword, setShowPassword] = useState(false);
-const [isPasswordCardOpen, setIsPasswordCardOpen] = useState(false);
-const [showInvoiceModal, setShowInvoiceModal] = useState(false);
-const [pendingInvoiceCount, setPendingInvoiceCount] = useState(0);
+  const [newStudentFirstName, setNewStudentFirstName] = useState("");
+  const [newStudentLastName, setNewStudentLastName] = useState("");
+  const [newStudentGrade, setNewStudentGrade] = useState("");
+  const [newStudentUsername, setNewStudentUsername] = useState("");
+  const [newStudentPassword, setNewStudentPassword] = useState("");
+  const [creatingStudent, setCreatingStudent] = useState(false);
+  const [selectedStudentForLogin, setSelectedStudentForLogin] = useState<string>("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isPasswordCardOpen, setIsPasswordCardOpen] = useState(false);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [pendingInvoiceCount, setPendingInvoiceCount] = useState(0);
 
 
   // Load parent profile + real-time data
@@ -278,58 +277,58 @@ const [pendingInvoiceCount, setPendingInvoiceCount] = useState(0);
     };
   }, [user?.uid, selectedChildId]);
 
- 
-// MODAL POPUP INVOICE
-useEffect(() => {
-  if (!user?.uid) return;
 
-  const q = query(
-    collection(db, "invoices"),
-    where("parentId", "==", user.uid),
-    where("status", "==", "pending")
-  );
+  // MODAL POPUP INVOICE
+  useEffect(() => {
+    if (!user?.uid) return;
 
-  const unsub = onSnapshot(q, (snap) => {
-    if (!snap.empty) {
-      setPendingInvoiceCount(snap.size);
-      setShowInvoiceModal(true);
-    } else {
-      setShowInvoiceModal(false);
+    const q = query(
+      collection(db, "invoices"),
+      where("parentId", "==", user.uid),
+      where("status", "==", "pending")
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      if (!snap.empty) {
+        setPendingInvoiceCount(snap.size);
+        setShowInvoiceModal(true);
+      } else {
+        setShowInvoiceModal(false);
+      }
+    });
+
+    return () => unsub();
+  }, [user?.uid]);
+
+
+  const handlePayNow = () => {
+    setShowInvoiceModal(false);
+    navigate("/parent-dashboard?sections=payments&tab=history");
+  };
+
+
+  const handleLater = () => {
+    setShowInvoiceModal(false);
+  };
+
+
+  const handleLogout = async () => {
+    try {
+      if (user?.role === "parent") {
+        // 1. If a student is logging out
+        logoutParent()
+        // Note: logoutStudent handles the redirect to /student-login internally
+      } else {
+        // 2. If a Parent, Teacher, or Admin is logging out
+
+        await logoutStudent();
+        // This will clear Firebase Auth but leave studentSession alone
+        navigate("/");
+      }
+    } catch (err) {
+      console.error("Logout failed", err);
     }
-  });
-
-  return () => unsub();
-}, [user?.uid]);
-
-
-const handlePayNow = () => {
-  setShowInvoiceModal(false);
-  navigate("/parent-dashboard?sections=payments&tab=history"); 
-};
-
-
-const handleLater = () => {
-  setShowInvoiceModal(false);
-};
-
-
-const handleLogout = async () => {
-  try {
-    if (user?.role === "parent") {
-      // 1. If a student is logging out
-      logoutParent()
-      // Note: logoutStudent handles the redirect to /student-login internally
-    } else {
-      // 2. If a Parent, Teacher, or Admin is logging out
-      
-      await logoutStudent(); 
-      // This will clear Firebase Auth but leave studentSession alone
-      navigate("/"); 
-    }
-  } catch (err) {
-    console.error("Logout failed", err);
-  }
-};
+  };
 
   const renderSection = () => {
     switch (activeTab) {
@@ -373,136 +372,136 @@ const handleLogout = async () => {
 
   // Popoup wizard
   useEffect(() => {
-  if (!user?.uid) return;
+    if (!user?.uid) return;
 
-  const parentRef = doc(db, "parents", user.uid);
+    const parentRef = doc(db, "parents", user.uid);
 
-  // Listen for profile completion status
-  const unsub = onSnapshot(parentRef, (snap) => {
-    if (snap.exists()) {
-      const data = snap.data();
-      // If profileCompleted is false or undefined, show the wizard
-      if (!data.profileCompleted) {
+    // Listen for profile completion status
+    const unsub = onSnapshot(parentRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        // If profileCompleted is false or undefined, show the wizard
+        if (!data.profileCompleted) {
+          setShowWizard(true);
+          setProfileCompleted(false);
+        } else {
+          setShowWizard(false);
+          setProfileCompleted(true);
+        }
+
+        // Pre-fill fields if some data already exists
+        setFullName(data.fullName || user.displayName || "");
+        setContact(data.contact || "");
+        setAddress(data.address || "");
+        setTitle(data.title || "");
+      } else {
+        // New user with no document yet
         setShowWizard(true);
         setProfileCompleted(false);
-      } else {
-        setShowWizard(false);
-        setProfileCompleted(true);
       }
-      
-      // Pre-fill fields if some data already exists
-      setFullName(data.fullName || user.displayName || "");
-      setContact(data.contact || "");
-      setAddress(data.address || "");
-      setTitle(data.title || "");
-    } else {
-      // New user with no document yet
-      setShowWizard(true);
-      setProfileCompleted(false);
-    }
-  });
-
-  return () => unsub();
-}, [user?.uid]);
-
-// 2. Helper to generate default username and random password
-const autoFillCredentials = (studentId: string) => {
-  const student = students.find(s => s.id === studentId);
-  if (!student) return;
-
-  // If credentials already exist in Firestore, use them
-  if (student.username && student.rawPassword) {
-    setNewStudentUsername(student.username);
-    setNewStudentPassword(student.rawPassword);
-  } else {
-    // Otherwise, generate defaults for a new setup
-    const defaultUser = `${student.firstName.toLowerCase()}.${student.lastName.toLowerCase()}`;
-    const randomPass = Math.random().toString(36).slice(-8).toUpperCase();
-    setNewStudentUsername(defaultUser);
-    setNewStudentPassword(randomPass);
-  }
-  setSelectedStudentForLogin(studentId);
-};
-// 3. Updated Logic to Update Existing Student
-const createStudentLogin = async () => {
-  if (!selectedStudentForLogin || !newStudentUsername || !newStudentPassword) {
-    alert("Please select a student and ensure credentials are set.");
-    return;
-  }
-
-  setCreatingStudent(true);
-
-  try {
-    // Basic hash for demo (btoa)
-    const passwordHash = btoa(newStudentPassword); 
-
-    const studentRef = doc(db, "students", selectedStudentForLogin);
-    
-    // Use updateDoc to add credentials to the existing student record
-    await updateDoc(studentRef, {
-      username: newStudentUsername,
-      passwordHash: passwordHash,
-      rawPassword: newStudentPassword, // Stored so parent can see it later if needed
-      loginEnabled: true,
-      updatedAt: new Date(),
     });
 
-    alert("Credentials successfully linked to " + newStudentUsername);
-    
-    // Clear form
-    setNewStudentUsername("");
-    setNewStudentPassword("");
-    setSelectedStudentForLogin("");
-  } catch (err) {
-    console.error("Link error:", err);
-    alert("Failed to create login.");
-  } finally {
-    setCreatingStudent(false);
-  }
-};
+    return () => unsub();
+  }, [user?.uid]);
 
-// Manual save password
-// Standalone function for the Refresh Button in your JSX
-const handleManualPasswordReset = (e: React.MouseEvent) => {
-  e.stopPropagation(); // Prevents triggering any parent click events
-  const pass = Math.random().toString(36).slice(-8).toUpperCase();
-  setNewStudentPassword(pass);
-};
+  // 2. Helper to generate default username and random password
+  const autoFillCredentials = (studentId: string) => {
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
 
-const saveProfileAndContinue = async () => {
-  if (!fullName || !contact || !address) {
-    alert("Please complete required fields marked with *");
-    return;
-  }
+    // If credentials already exist in Firestore, use them
+    if (student.username && student.rawPassword) {
+      setNewStudentUsername(student.username);
+      setNewStudentPassword(student.rawPassword);
+    } else {
+      // Otherwise, generate defaults for a new setup
+      const defaultUser = `${student.firstName.toLowerCase()}.${student.lastName.toLowerCase()}`;
+      const randomPass = Math.random().toString(36).slice(-8).toUpperCase();
+      setNewStudentUsername(defaultUser);
+      setNewStudentPassword(randomPass);
+    }
+    setSelectedStudentForLogin(studentId);
+  };
+  // 3. Updated Logic to Update Existing Student
+  const createStudentLogin = async () => {
+    if (!selectedStudentForLogin || !newStudentUsername || !newStudentPassword) {
+      alert("Please select a student and ensure credentials are set.");
+      return;
+    }
 
-  try {
-    const parentRef = doc(db, "parents", user!.uid);
-    
-    await setDoc(parentRef, {
-      title,
-      fullName,
-      contact,
-      address,
-      email: user?.email, // Keep email synced
-      profileCompleted: true,
-      updatedAt: new Date(), // Use serverTimestamp for accuracy
-    }, { merge: true });
+    setCreatingStudent(true);
 
-    // Close wizard and switch tabs
-    setShowWizard(false);
-    setProfileCompleted(true);
-    
-    // Move to the next logic (Registering Student)
-    setActiveTab("Registration"); 
-    
-    // Optional: Toast notification
-    console.log("Profile verified. Moving to student registration.");
-    
-  } catch (err) {
-    console.error("Profile save failed:", err);
-    alert("System error: Could not save profile.");
-  }
-};
+    try {
+      // Basic hash for demo (btoa)
+      const passwordHash = btoa(newStudentPassword);
+
+      const studentRef = doc(db, "students", selectedStudentForLogin);
+
+      // Use updateDoc to add credentials to the existing student record
+      await updateDoc(studentRef, {
+        username: newStudentUsername,
+        passwordHash: passwordHash,
+        rawPassword: newStudentPassword, // Stored so parent can see it later if needed
+        loginEnabled: true,
+        updatedAt: new Date(),
+      });
+
+      alert("Credentials successfully linked to " + newStudentUsername);
+
+      // Clear form
+      setNewStudentUsername("");
+      setNewStudentPassword("");
+      setSelectedStudentForLogin("");
+    } catch (err) {
+      console.error("Link error:", err);
+      alert("Failed to create login.");
+    } finally {
+      setCreatingStudent(false);
+    }
+  };
+
+  // Manual save password
+  // Standalone function for the Refresh Button in your JSX
+  const handleManualPasswordReset = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevents triggering any parent click events
+    const pass = Math.random().toString(36).slice(-8).toUpperCase();
+    setNewStudentPassword(pass);
+  };
+
+  const saveProfileAndContinue = async () => {
+    if (!fullName || !contact || !address) {
+      alert("Please complete required fields marked with *");
+      return;
+    }
+
+    try {
+      const parentRef = doc(db, "parents", user!.uid);
+
+      await setDoc(parentRef, {
+        title,
+        fullName,
+        contact,
+        address,
+        email: user?.email, // Keep email synced
+        profileCompleted: true,
+        updatedAt: new Date(), // Use serverTimestamp for accuracy
+      }, { merge: true });
+
+      // Close wizard and switch tabs
+      setShowWizard(false);
+      setProfileCompleted(true);
+
+      // Move to the next logic (Registering Student)
+      setActiveTab("Registration");
+
+      // Optional: Toast notification
+      console.log("Profile verified. Moving to student registration.");
+
+    } catch (err) {
+      console.error("Profile save failed:", err);
+      alert("System error: Could not save profile.");
+    }
+  };
 
   if (loading) {
     return (
@@ -519,7 +518,7 @@ const saveProfileAndContinue = async () => {
         <div className="bg-white rounded-3xl shadow-2xl p-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div>
             <h1 className="text-5xl font-extrabold text-indigo-900 flex items-center gap-4">
-              <Sparkles className="w-12 h-12 text-yellow-500" />
+              <img src={logo} alt="Logo" className="w-12 h-12" /> <Sparkles className="w-12 h-12 text-yellow-500" />
               Welcome, {profileCompleted ? `${title} ${fullName}` : "Parent"}!
             </h1>
             <p className="text-2xl text-indigo-700 mt-3">{SCHOOL_NAME} Parent Portal</p>
@@ -536,11 +535,10 @@ const saveProfileAndContinue = async () => {
               <button
                 key={s}
                 onClick={() => setActiveTab(s)}
-                className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all ${
-                  activeTab === s
+                className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all ${activeTab === s
                     ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md"
                     : "bg-gray-100 hover:bg-gray-200 text-gray-700"
-                }`}
+                  }`}
               >
                 {s}
               </button>
@@ -548,158 +546,158 @@ const saveProfileAndContinue = async () => {
           </div>
         </div>
 
-     {/* STUDENT PASSWORDS */}
-<div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm mt-8 transition-all duration-300 overflow-hidden">
-  
-  {/* CLICKABLE HEADER */}
-  <button 
-    onClick={() => setIsPasswordCardOpen(!isPasswordCardOpen)}
-    className="w-full p-10 flex items-center justify-between hover:bg-slate-50/50 transition-colors text-left"
-  >
-    <div className="flex items-center gap-4">
-      <div className={`p-3 rounded-2xl transition-colors ${isPasswordCardOpen ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600'}`}>
-        <UserCheck size={24} />
-      </div>
-      <div>
-        <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">
-          Student Portal Access
-        </h2>
-        {!isPasswordCardOpen && (
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-            Click to manage usernames and passwords
-          </p>
-        )}
-      </div>
-    </div>
-    
-    <div className={`transition-transform duration-300 ${isPasswordCardOpen ? 'rotate-180' : 'rotate-0'}`}>
-      <ChevronDown size={28} className="text-slate-300" />
-    </div>
-  </button>
+        {/* STUDENT PASSWORDS */}
+        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm mt-8 transition-all duration-300 overflow-hidden">
 
-  {/* EXPANDABLE CONTENT */}
-  <div className={`transition-all duration-300 ease-in-out ${isPasswordCardOpen ? 'max-h-[1000px] opacity-100 p-10 pt-0' : 'max-h-0 opacity-0 pointer-events-none'}`}>
-    <div className="space-y-8 border-t border-slate-50 pt-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Step 1: Select Existing Student */}
-        <div className="space-y-2">
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
-            1. Select Registered Student
-          </label>
-          <Select 
-            value={selectedStudentForLogin} 
-            onValueChange={(val) => autoFillCredentials(val)}
+          {/* CLICKABLE HEADER */}
+          <button
+            onClick={() => setIsPasswordCardOpen(!isPasswordCardOpen)}
+            className="w-full p-10 flex items-center justify-between hover:bg-slate-50/50 transition-colors text-left"
           >
-            <SelectTrigger className="h-14 rounded-2xl border-2 border-slate-100 font-bold">
-              <SelectValue placeholder="Choose a student..." />
-            </SelectTrigger>
-            <SelectContent>
-              {students.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.firstName} {s.lastName} (Grade {s.grade})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <div className="flex items-center gap-4">
+              <div className={`p-3 rounded-2xl transition-colors ${isPasswordCardOpen ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600'}`}>
+                <UserCheck size={24} />
+              </div>
+              <div>
+                <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">
+                  Student Portal Access
+                </h2>
+                {!isPasswordCardOpen && (
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                    Click to manage usernames and passwords
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className={`transition-transform duration-300 ${isPasswordCardOpen ? 'rotate-180' : 'rotate-0'}`}>
+              <ChevronDown size={28} className="text-slate-300" />
+            </div>
+          </button>
+
+          {/* EXPANDABLE CONTENT */}
+          <div className={`transition-all duration-300 ease-in-out ${isPasswordCardOpen ? 'max-h-[1000px] opacity-100 p-10 pt-0' : 'max-h-0 opacity-0 pointer-events-none'}`}>
+            <div className="space-y-8 border-t border-slate-50 pt-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Step 1: Select Existing Student */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                    1. Select Registered Student
+                  </label>
+                  <Select
+                    value={selectedStudentForLogin}
+                    onValueChange={(val) => autoFillCredentials(val)}
+                  >
+                    <SelectTrigger className="h-14 rounded-2xl border-2 border-slate-100 font-bold">
+                      <SelectValue placeholder="Choose a student..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {students.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.firstName} {s.lastName} (Grade {s.grade})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Step 2: Username */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                    2. Assigned Username
+                  </label>
+                  <Input
+                    placeholder="Username"
+                    value={newStudentUsername}
+                    onChange={(e) => setNewStudentUsername(e.target.value)}
+                    className="h-14 rounded-2xl border-2 border-slate-100 font-bold"
+                  />
+                </div>
+
+                {/* Step 3: Password with Toggle and Randomizer */}
+                {/* Step 3: Password with Toggle and Randomizer */}
+                {/* Step 3: Password with Toggle and Randomizer */}
+                <div className="space-y-2 md:col-span-2">
+                  <div className="flex justify-between items-center px-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      3. Access Password
+                    </label>
+                    {newStudentPassword && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const text = `Username: ${newStudentUsername}\nPassword: ${newStudentPassword}`;
+                          navigator.clipboard.writeText(text);
+                          alert("Credentials copied to clipboard!");
+                        }}
+                        className="text-[9px] font-black text-indigo-600 uppercase hover:underline"
+                      >
+                        Copy Credentials
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="relative group">
+                    <Input
+                      placeholder="Password"
+                      type={showPassword ? "text" : "password"}
+                      value={newStudentPassword}
+                      onChange={(e) => setNewStudentPassword(e.target.value)}
+                      className="h-14 rounded-2xl border-2 border-slate-100 font-bold pr-32 focus:border-indigo-500 transition-all bg-white"
+                    />
+
+                    <div className="absolute right-2 top-2 flex gap-1 bg-white pl-2">
+                      {/* VISIBILITY TOGGLE */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="h-10 w-10 p-0 rounded-xl hover:bg-slate-50"
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </Button>
+
+                      {/* MANUAL REFRESH BUTTON */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        onClick={handleManualPasswordReset}
+                        title="Generate New Password"
+                        className="h-10 w-10 p-0 rounded-xl text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 transition-colors border border-transparent hover:border-indigo-100"
+                      >
+                        <RefreshCw size={16} />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <p className="text-[9px] text-slate-400 ml-2 font-medium italic">
+                    * This password is encrypted. Use the refresh icon only if you wish to overwrite the current password.
+                  </p>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <Button
+            onClick={createStudentLogin}
+            disabled={creatingStudent || !selectedStudentForLogin}
+            className="w-full h-16 bg-indigo-600 hover:bg-indigo-700 text-white rounded-[1.5rem] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 transition-all active:scale-95"
+          >
+            {creatingStudent ? "Syncing..." : "Enable Student Access"}
+          </Button>
         </div>
 
-        {/* Step 2: Username */}
-        <div className="space-y-2">
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
-            2. Assigned Username
-          </label>
-          <Input
-            placeholder="Username"
-            value={newStudentUsername}
-            onChange={(e) => setNewStudentUsername(e.target.value)}
-            className="h-14 rounded-2xl border-2 border-slate-100 font-bold"
-          />
-        </div>
 
-        {/* Step 3: Password with Toggle and Randomizer */}
-        {/* Step 3: Password with Toggle and Randomizer */}
-{/* Step 3: Password with Toggle and Randomizer */}
-<div className="space-y-2 md:col-span-2">
-  <div className="flex justify-between items-center px-2">
-    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-      3. Access Password
-    </label>
-    {newStudentPassword && (
-      <button 
-        type="button"
-        onClick={() => {
-          const text = `Username: ${newStudentUsername}\nPassword: ${newStudentPassword}`;
-          navigator.clipboard.writeText(text);
-          alert("Credentials copied to clipboard!");
-        }}
-        className="text-[9px] font-black text-indigo-600 uppercase hover:underline"
-      >
-        Copy Credentials
-      </button>
-    )}
-  </div>
-
-  <div className="relative group">
-    <Input
-      placeholder="Password"
-      type={showPassword ? "text" : "password"}
-      value={newStudentPassword}
-      onChange={(e) => setNewStudentPassword(e.target.value)}
-      className="h-14 rounded-2xl border-2 border-slate-100 font-bold pr-32 focus:border-indigo-500 transition-all bg-white"
-    />
-    
-    <div className="absolute right-2 top-2 flex gap-1 bg-white pl-2">
-      {/* VISIBILITY TOGGLE */}
-      <Button
-        variant="ghost"
-        size="sm"
-        type="button"
-        onClick={() => setShowPassword(!showPassword)}
-        className="h-10 w-10 p-0 rounded-xl hover:bg-slate-50"
-      >
-        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-      </Button>
-
-      {/* MANUAL REFRESH BUTTON */}
-      <Button
-        variant="ghost"
-        size="sm"
-        type="button"
-        onClick={handleManualPasswordReset}
-        title="Generate New Password"
-        className="h-10 w-10 p-0 rounded-xl text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 transition-colors border border-transparent hover:border-indigo-100"
-      >
-        <RefreshCw size={16} />
-      </Button>
-    </div>
-  </div>
-  
-  <p className="text-[9px] text-slate-400 ml-2 font-medium italic">
-    * This password is encrypted. Use the refresh icon only if you wish to overwrite the current password.
-  </p>
-</div>
-
-      </div>
-    </div>
-  </div>
-
-  <Button
-    onClick={createStudentLogin}
-    disabled={creatingStudent || !selectedStudentForLogin}
-    className="w-full h-16 bg-indigo-600 hover:bg-indigo-700 text-white rounded-[1.5rem] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 transition-all active:scale-95"
-  >
-    {creatingStudent ? "Syncing..." : "Enable Student Access"}
-  </Button>
-</div>
-
-
-{/* INVOICE POPUP MODAL */}
-<PendingInvoiceModal
-  open={showInvoiceModal}
-  invoiceCount={pendingInvoiceCount}
-  onPayNow={handlePayNow}
-  onLater={handleLater}
-/>
+        {/* INVOICE POPUP MODAL */}
+        <PendingInvoiceModal
+          open={showInvoiceModal}
+          invoiceCount={pendingInvoiceCount}
+          onPayNow={handlePayNow}
+          onLater={handleLater}
+        />
 
 
         {/* Main Content */}
@@ -707,67 +705,67 @@ const saveProfileAndContinue = async () => {
       </div>
 
       {/* Profile Completion Wizard */}
-     {showWizard && !profileCompleted && (
-  <div className="fixed inset-0 bg-slate-900/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-    <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-2xl w-full p-10 animate-in zoom-in-95 duration-300">
-      <div className="text-center mb-8">
-        <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Settings className="animate-spin-slow" size={32} />
-        </div>
-        <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Setup Your Profile</h2>
-        <p className="text-slate-500 font-medium">Complete these details to begin student registration</p>
-      </div>
+      {showWizard && !profileCompleted && (
+        <div className="fixed inset-0 bg-slate-900/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-2xl w-full p-10 animate-in zoom-in-95 duration-300">
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Settings className="animate-spin-slow" size={32} />
+              </div>
+              <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Setup Your Profile</h2>
+              <p className="text-slate-500 font-medium">Complete these details to begin student registration</p>
+            </div>
 
-      <div className="space-y-4">
-        <div className="grid grid-cols-4 gap-4">
-           <Input
-            className="col-span-1 h-14 rounded-2xl border-2 border-slate-100 focus:border-indigo-500 font-bold"
-            placeholder="Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-          <Input
-            className="col-span-3 h-14 rounded-2xl border-2 border-slate-100 focus:border-indigo-500 font-bold"
-            placeholder="Full Name *"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-          />
-        </div>
-        
-        <Input
-          className="h-14 rounded-2xl border-2 border-slate-100 focus:border-indigo-500 font-bold"
-          placeholder="Primary Contact Number *"
-          value={contact}
-          onChange={(e) => setContact(e.target.value)}
-        />
-        
-        <Textarea
-          className="rounded-2xl border-2 border-slate-100 focus:border-indigo-500 font-medium p-4"
-          placeholder="Full Residential Address *"
-          rows={3}
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-        />
-      </div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-4 gap-4">
+                <Input
+                  className="col-span-1 h-14 rounded-2xl border-2 border-slate-100 focus:border-indigo-500 font-bold"
+                  placeholder="Title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+                <Input
+                  className="col-span-3 h-14 rounded-2xl border-2 border-slate-100 focus:border-indigo-500 font-bold"
+                  placeholder="Full Name *"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                />
+              </div>
 
-      <div className="flex flex-col gap-3 mt-10">
-        <Button 
-          onClick={saveProfileAndContinue} 
-          className="h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-lg shadow-lg shadow-indigo-200 transition-all active:scale-95"
-        >
-          SAVE & START REGISTRATION
-        </Button>
-        <Button 
-          variant="ghost" 
-          onClick={() => setShowWizard(false)}
-          className="text-slate-400 font-bold hover:text-slate-600"
-        >
-          I'll do this later
-        </Button>
-      </div>
-    </div>
-  </div>
-)}
+              <Input
+                className="h-14 rounded-2xl border-2 border-slate-100 focus:border-indigo-500 font-bold"
+                placeholder="Primary Contact Number *"
+                value={contact}
+                onChange={(e) => setContact(e.target.value)}
+              />
+
+              <Textarea
+                className="rounded-2xl border-2 border-slate-100 focus:border-indigo-500 font-medium p-4"
+                placeholder="Full Residential Address *"
+                rows={3}
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+              />
+            </div>
+
+            <div className="flex flex-col gap-3 mt-10">
+              <Button
+                onClick={saveProfileAndContinue}
+                className="h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-lg shadow-lg shadow-indigo-200 transition-all active:scale-95"
+              >
+                SAVE & START REGISTRATION
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setShowWizard(false)}
+                className="text-slate-400 font-bold hover:text-slate-600"
+              >
+                I'll do this later
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
