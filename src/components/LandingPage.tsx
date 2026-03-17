@@ -3,6 +3,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import student from "../img/student.jpg";
+import { Link } from "react-router-dom";
 
 const LandingPage: React.FC = () => {
     const navigate = useNavigate();
@@ -128,9 +129,9 @@ const LandingPage: React.FC = () => {
             </section>
 
             {/* FOOTER */}
-            <footer className="bg-slate-900 text-white py-10 text-center">
+            <footer className="bg-gray-950 text-white py-10 text-center">
                 <p className="text-lg mb-2">Contact Tanya</p>
-                <p className="text-xl font-semibold mb-6 pb-6">+27 84 666 0006</p>
+                <p className="text-xl font-semibold mb-2">+27 84 666 0006</p>
             </footer>
 
             {/* FLOATING WHATSAPP */}
@@ -141,6 +142,37 @@ const LandingPage: React.FC = () => {
             >
                 WhatsApp
             </a>
+
+            <footer className="bg-gray-950 text-white/40 py-10 border-t border-white/5">
+                <div className="max-w-7xl mx-auto px-6">
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+
+                        {/* Copyright & Branding */}
+                        <div className="text-[10px] tracking-widest uppercase">
+                            © {new Date().getFullYear()} British Curriculum Hybrid Christian Academy
+                            <span className="mx-2 text-white/10">|</span>
+                            Excellence Reformed
+                        </div>
+
+                        {/* Compliance Links */}
+                        <nav className="flex gap-8">
+                            <Link
+                                to="/privacy-policy"
+                                className="text-[10px] tracking-widest uppercase hover:text-white transition-colors border-b border-transparent hover:border-white/20 pb-1"
+                            >
+                                Privacy Policy
+                            </Link>
+
+                            <Link
+                                to="/delete-account-request"
+                                className="text-[10px] tracking-widest uppercase hover:text-rose-400 transition-colors border-b border-transparent hover:border-rose-400/20 pb-1"
+                            >
+                                Delete Account
+                            </Link>
+                        </nav>
+                    </div>
+                </div>
+            </footer>
         </div>
     );
 };
