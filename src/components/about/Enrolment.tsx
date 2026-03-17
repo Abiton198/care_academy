@@ -2,22 +2,22 @@
 
 import React from "react";
 import { Link } from "react-router-dom";
-import { 
-  School, 
-  Globe, 
-  CheckCircle, 
-  Zap, 
-  Calendar, 
-  CreditCard, 
-  MapPin, 
-  Monitor 
+import {
+  School,
+  Globe,
+  CheckCircle,
+  Zap,
+  Calendar,
+  CreditCard,
+  MapPin,
+  Monitor
 } from "lucide-react";
 
 const Enrolment: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 px-6 py-12">
       <div className="max-w-6xl mx-auto space-y-12">
-        
+
         {/* Urgent Opening Banner */}
         <div className="relative overflow-hidden bg-indigo-900 rounded-3xl p-8 text-white shadow-2xl border-4 border-indigo-200">
           <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -28,10 +28,10 @@ const Enrolment: React.FC = () => {
               Academic Year 2026
             </span>
             <h2 className="mt-4 text-4xl md:text-5xl font-black">
-              School Opens: <span className="text-yellow-300">26 January 2026</span>
+              School Opened: <span className="text-yellow-300">26 January 2026</span>
             </h2>
             <p className="mt-4 text-xl text-indigo-100 max-w-2xl mx-auto">
-              Lower to Senior Level • British Curriculum • 
+              Lower to Senior Level • British Curriculum •
               <span className="block font-bold text-white">Virtual or Physical Campus — You Decide!</span>
             </p>
           </div>
@@ -43,7 +43,7 @@ const Enrolment: React.FC = () => {
             Your Education, Your Choice
           </h1>
           <p className="text-lg text-gray-600 max-w-3xl mx-auto">
-            Experience the freedom of <strong>Hybrid Learning</strong>. Register online anytime 
+            Experience the freedom of <strong>Hybrid Learning</strong>. Register online anytime
             throughout the year and join our community of excellence.
           </p>
         </div>
@@ -87,7 +87,7 @@ const Enrolment: React.FC = () => {
             <div className="text-indigo-500 mb-4"><Globe size={32} /></div>
             <h2 className="text-xl font-bold text-gray-800 mb-2">1. Register Online</h2>
             <p className="text-gray-600 text-sm">
-              Complete our secure digital form. We accept applications <strong>365 days a year</strong>. 
+              Complete our secure digital form. We accept applications <strong>365 days a year</strong>.
               Join the next available intake.
             </p>
           </div>
@@ -96,7 +96,7 @@ const Enrolment: React.FC = () => {
             <div className="text-purple-500 mb-4"><CreditCard size={32} /></div>
             <h2 className="text-xl font-bold text-gray-800 mb-2">2. Pay Securely</h2>
             <p className="text-gray-600 text-sm">
-              Pay your <strong>Registration Fee</strong> via PayFast to secure your spot. 
+              Pay your <strong>Registration Fee</strong> via PayFast to secure your spot.
               Places are limited per grade to ensure quality.
             </p>
           </div>
@@ -105,8 +105,8 @@ const Enrolment: React.FC = () => {
             <div className="text-green-500 mb-4"><CheckCircle size={32} /></div>
             <h2 className="text-xl font-bold text-gray-800 mb-2">3. Start Learning</h2>
             <p className="text-gray-600 text-sm">
-              Receive your orientation pack and login details. Get ready for 
-              <strong> 26 Jan 2026</strong>!
+              Receive your orientation pack and login details. Get ready for
+              <strong> classes</strong>!
             </p>
           </div>
         </div>
@@ -132,9 +132,9 @@ const Enrolment: React.FC = () => {
           </div>
           <div className="relative">
             <div className="absolute inset-0 bg-indigo-200 rounded-2xl rotate-3"></div>
-            <img 
-              src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80" 
-              alt="Happy Students" 
+            <img
+              src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80"
+              alt="Happy Students"
               className="relative rounded-2xl shadow-lg border-4 border-white"
             />
           </div>
@@ -147,7 +147,7 @@ const Enrolment: React.FC = () => {
               to="/login"
               className="block bg-white text-gray-900 font-black text-2xl px-12 py-6 rounded-full hover:bg-transparent hover:text-white transition-all duration-300"
             >
-              Secure Your 2026 Spot Now!
+              Secure Your Learning Spot Now!
             </Link>
           </div>
           <p className="mt-6 text-gray-500 flex items-center justify-center gap-2">
