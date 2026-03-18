@@ -61,6 +61,7 @@ import MoodleCard from "./MoodleCard";
 import { useParams } from "react-router-dom";
 import { Timestamp } from "firebase/firestore";
 import logo from "@/img/care.png";
+import AudioPDFReader from "@/lib/AudioPDFReader";
 
 
 // =============================================================================
@@ -113,8 +114,8 @@ function ControlBtn({ icon: Icon, label, active, onClick, danger, success }: any
       <Button
         onClick={onClick}
         className={`w-12 h-12 rounded-2xl transition-all shadow-lg ${active
-            ? (danger ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-500')
-            : (success ? 'bg-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-white border border-white/10')
+          ? (danger ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-500')
+          : (success ? 'bg-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-white border border-white/10')
           }`}
       >
         <Icon size={20} />
@@ -1139,8 +1140,8 @@ const StudentDashboard: React.FC = () => {
                 key={t.id}
                 onClick={() => setActiveTab(t.id as any)}
                 className={`py-4 text-xs font-black uppercase transition ${activeTab === t.id
-                    ? "border-b-2 border-indigo-600 text-indigo-600"
-                    : "text-slate-400 hover:text-slate-600"
+                  ? "border-b-2 border-indigo-600 text-indigo-600"
+                  : "text-slate-400 hover:text-slate-600"
                   }`}
               >
                 <t.icon size={14} className="inline mr-2" />
@@ -1386,8 +1387,8 @@ const StudentDashboard: React.FC = () => {
                         <div className="flex items-center gap-5 mb-6">
                           <div
                             className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-sm ${link.type === "classroom"
-                                ? "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white"
-                                : "bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white"
+                              ? "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white"
+                              : "bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white"
                               }`}
                           >
                             {link.type === "classroom" ? (
@@ -1429,8 +1430,8 @@ const StudentDashboard: React.FC = () => {
                         <div className="flex items-center justify-between pt-6 border-t border-slate-100">
                           <Badge
                             className={`border-none font-black text-[9px] uppercase tracking-widest px-4 py-1.5 rounded-xl ${link.type === "classroom"
-                                ? "bg-emerald-100 text-emerald-600"
-                                : "bg-slate-100 text-slate-500"
+                              ? "bg-emerald-100 text-emerald-600"
+                              : "bg-slate-100 text-slate-500"
                               }`}
                           >
                             {link.type === "classroom"
@@ -1613,6 +1614,8 @@ const StudentDashboard: React.FC = () => {
           )}
         </div>
       )}
+
+      <AudioPDFReader />
 
     </div>
   );
