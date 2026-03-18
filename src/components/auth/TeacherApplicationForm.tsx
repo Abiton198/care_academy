@@ -57,8 +57,14 @@ interface Documents {
 
 interface TeacherApplicationFormProps {
   applicationId?: string | null; // Used if editing an existing draft
-  onClose: () => void;           // Closes modal (triggers Sign Out in your Modal logic)
-  onSubmitted?: () => void;      // Triggers the transition to the Dashboard
+  userId?: string | null;
+  showCloseButton?: boolean;
+  showSubmitButton?: boolean;
+  showBackButton?: boolean;
+  showCancelButton?: boolean;
+  showEditButton?: boolean;
+  showDeleteButton?: boolean;
+
 }
 
 const British_Curriculum_SUBJECTS = [
@@ -121,11 +127,10 @@ const British_Curriculum_SUBJECTS = [
 ====================================================== */
 export default function TeacherApplicationForm({
   applicationId,
-  userId, // Destructure here
-  onClose,
-  onSubmitted,
+  userId,
+
 }: TeacherApplicationFormProps) {
-  
+
   const { user, loading: authLoading } = useAuth();
   const [form, setForm] = useState<FormData>({
     firstName: "",
@@ -173,109 +178,109 @@ export default function TeacherApplicationForm({
   /* ======================================================
      SUBMISSION LOGIC (CORE FIX FOR FLICKERING)
   ====================================================== */
- const handleSubmit = async (e?: React.FormEvent) => {
-  if (e) e.preventDefault();
-  
-  // 1. Determine the UID using the fallback prop
-  const activeUid = user?.uid || userId;
-  const activeEmail = user?.email || form.email; // Use form email as fallback
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
 
-  if (!activeUid) {
-    setError("Session not detected. Please wait a moment and try again.");
-    return;
-  }
+    // 1. Determine the UID using the fallback prop
+    const activeUid = user?.uid || userId;
+    const activeEmail = user?.email || form.email; // Use form email as fallback
 
-  if (form.subjects.length === 0) {
-    setError("Please select at least one British Curriculum subject.");
-    return;
-  }
-
-  setError("");
-  setLoading(true);
-
-  try {
-    const applicationPayload = {
-      uid: activeUid,
-      email: activeEmail,
-      personalInfo: { ...form, email: activeEmail, curriculum: "British Curriculum" },
-      subjects: form.subjects,
-      status: "pending",
-      updatedAt: serverTimestamp(),
-    };
-
-    // 2. Save/Update Application
-    let applicationIdToUse: string;
-    if (applicationId && applicationId !== activeUid) { 
-      // check if applicationId is a separate doc ID or the UID
-      const appRef = doc(db, "teacherApplications", applicationId);
-      await updateDoc(appRef, applicationPayload);
-      applicationIdToUse = applicationId;
-    } else {
-      const appRef = await addDoc(collection(db, "teacherApplications"), {
-        ...applicationPayload,
-        createdAt: serverTimestamp(),
-      });
-      applicationIdToUse = appRef.id;
+    if (!activeUid) {
+      setError("Session not detected. Please wait a moment and try again.");
+      return;
     }
 
-    // 3. Update User Status using activeUid
-    const userRef = doc(db, "users", activeUid);
-    await updateDoc(userRef, {
-      applicationStatus: "submitted", 
-      profileCompleted: true,
-      lastSubmissionId: applicationIdToUse,
-      updatedAt: serverTimestamp(),
-    });
-
-    // 4. File Uploads using activeUid
-    const uploadedDocs: Record<string, string[]> = {};
-    const docKeys = Object.keys(documents) as Array<keyof Documents>;
-
-    for (const key of docKeys) {
-      const fileList = documents[key];
-      if (!fileList || fileList.length === 0) continue;
-
-      uploadedDocs[key] = [];
-      for (const file of Array.from(fileList)) {
-        const fileRef = ref(storage, `teacherDocs/${activeUid}/${key}_${Date.now()}_${file.name}`);
-        
-        await new Promise<void>((resolve, reject) => {
-          const uploadTask = uploadBytesResumable(fileRef, file);
-          uploadTask.on("state_changed", null, reject, async () => {
-            const url = await getDownloadURL(uploadTask.snapshot.ref);
-            uploadedDocs[key].push(url);
-            resolve();
-          });
-        });
-      }
+    if (form.subjects.length === 0) {
+      setError("Please select at least one British Curriculum subject.");
+      return;
     }
 
-    // 5. Update Application with File URLs
-    if (Object.keys(uploadedDocs).length > 0) {
-      const appDocRef = doc(db, "teacherApplications", applicationIdToUse);
-      await updateDoc(appDocRef, { documents: uploadedDocs });
-    }
+    setError("");
+    setLoading(true);
 
-    setSuccess(true);
-    console.log("Submission successful!");
+    try {
+      const applicationPayload = {
+        uid: activeUid,
+        email: activeEmail,
+        personalInfo: { ...form, email: activeEmail, curriculum: "British Curriculum" },
+        subjects: form.subjects,
+        status: "pending",
+        updatedAt: serverTimestamp(),
+      };
 
-    // 6. Trigger Navigation
-    setTimeout(() => {
-      if (onSubmitted) {
-        onSubmitted();
+      // 2. Save/Update Application
+      let applicationIdToUse: string;
+      if (applicationId && applicationId !== activeUid) {
+        // check if applicationId is a separate doc ID or the UID
+        const appRef = doc(db, "teacherApplications", applicationId);
+        await updateDoc(appRef, applicationPayload);
+        applicationIdToUse = applicationId;
       } else {
-        console.warn("onSubmitted prop is missing!");
-        onClose(); // Fallback
+        const appRef = await addDoc(collection(db, "teacherApplications"), {
+          ...applicationPayload,
+          createdAt: serverTimestamp(),
+        });
+        applicationIdToUse = appRef.id;
       }
-    }, 2000);
 
-  } catch (err: any) {
-    console.error("Full Submission Error:", err);
-    setError(err.message || "Failed to submit application.");
-  } finally {
-    setLoading(false);
-  }
-};
+      // 3. Update User Status using activeUid
+      const userRef = doc(db, "users", activeUid);
+      await updateDoc(userRef, {
+        applicationStatus: "submitted",
+        profileCompleted: true,
+        lastSubmissionId: applicationIdToUse,
+        updatedAt: serverTimestamp(),
+      });
+
+      // 4. File Uploads using activeUid
+      const uploadedDocs: Record<string, string[]> = {};
+      const docKeys = Object.keys(documents) as Array<keyof Documents>;
+
+      for (const key of docKeys) {
+        const fileList = documents[key];
+        if (!fileList || fileList.length === 0) continue;
+
+        uploadedDocs[key] = [];
+        for (const file of Array.from(fileList)) {
+          const fileRef = ref(storage, `teacherDocs/${activeUid}/${key}_${Date.now()}_${file.name}`);
+
+          await new Promise<void>((resolve, reject) => {
+            const uploadTask = uploadBytesResumable(fileRef, file);
+            uploadTask.on("state_changed", null, reject, async () => {
+              const url = await getDownloadURL(uploadTask.snapshot.ref);
+              uploadedDocs[key].push(url);
+              resolve();
+            });
+          });
+        }
+      }
+
+      // 5. Update Application with File URLs
+      if (Object.keys(uploadedDocs).length > 0) {
+        const appDocRef = doc(db, "teacherApplications", applicationIdToUse);
+        await updateDoc(appDocRef, { documents: uploadedDocs });
+      }
+
+      setSuccess(true);
+      console.log("Submission successful!");
+
+      // 6. Trigger Navigation
+      setTimeout(() => {
+        if (onSubmitted) {
+          onSubmitted();
+        } else {
+          console.warn("onSubmitted prop is missing!");
+          onClose(); // Fallback
+        }
+      }, 2000);
+
+    } catch (err: any) {
+      console.error("Full Submission Error:", err);
+      setError(err.message || "Failed to submit application.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <Card className="w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col bg-white shadow-2xl rounded-3xl border-0">
@@ -306,7 +311,7 @@ export default function TeacherApplicationForm({
             </div>
             <h3 className="text-3xl font-black text-slate-900">Application Filed</h3>
             <p className="mt-4 text-slate-500 max-w-md mx-auto leading-relaxed">
-              Your British Curriculum teaching credentials have been securely transmitted. 
+              Your British Curriculum teaching credentials have been securely transmitted.
               The Principal will review your status and subjects within 48 hours.
             </p>
             <Loader2 className="mt-8 animate-spin text-indigo-600" />
@@ -415,10 +420,10 @@ function DocInput({ label, onChange }: { label: string; onChange: (f: FileList |
     <div className="space-y-1.5">
       <Label className="text-[10px] font-bold text-slate-400 uppercase ml-1 tracking-tight">{label}</Label>
       <div className="relative group">
-        <Input 
-          type="file" 
-          className="rounded-xl border-slate-200 text-[10px] h-12 pt-3.5 group-hover:border-indigo-300 transition-colors" 
-          onChange={(e) => onChange(e.target.files)} 
+        <Input
+          type="file"
+          className="rounded-xl border-slate-200 text-[10px] h-12 pt-3.5 group-hover:border-indigo-300 transition-colors"
+          onChange={(e) => onChange(e.target.files)}
         />
         <FileText size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300" />
       </div>
