@@ -226,8 +226,8 @@ const AudioPDFReader: React.FC = () => {
                         <span
                             key={i}
                             className={`${i === currentIndex
-                                    ? "bg-yellow-300 text-black font-semibold"
-                                    : ""
+                                ? "bg-yellow-300 text-black font-semibold"
+                                : ""
                                 }`}
                         >
                             {chunk + " "}
