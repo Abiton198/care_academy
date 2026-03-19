@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import { GlobalWorkerOptions } from "pdfjs-dist";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min?url";
+import dictionary from "@/data/dictionary";
+import { createPortal } from "react-dom";
 
 GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -18,9 +20,16 @@ const AudioPDFReader: React.FC = () => {
     const [fileName, setFileName] = useState("");
     const [isSpeaking, setIsSpeaking] = useState(false);
 
+    // 📖 Dictionary state
+    const [selectedWord, setSelectedWord] = useState<string | null>(null);
+    const [definition, setDefinition] = useState("");
+    const [modalPos, setModalPos] = useState({ x: 0, y: 0 });
+    const [showModal, setShowModal] = useState(false);
+
     const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-    // 🔊 Load voices
+
+    // Load voices
     useEffect(() => {
         const loadVoices = () => {
             const voicesList = speechSynthesis.getVoices();
@@ -35,12 +44,12 @@ const AudioPDFReader: React.FC = () => {
         speechSynthesis.onvoiceschanged = loadVoices;
     }, []);
 
-    // ✂️ Split text into readable chunks
+    // ✂️ Split text
     const splitTextIntoChunks = (text: string) => {
         return text.match(/[^.!?]+[.!?]+/g) || [text];
     };
 
-    // 📄 Upload + Extract
+    // 📄 Upload PDF
     const handleFileUpload = async (
         e: React.ChangeEvent<HTMLInputElement>
     ) => {
@@ -55,10 +64,7 @@ const AudioPDFReader: React.FC = () => {
 
         try {
             const arrayBuffer = await file.arrayBuffer();
-
-            const pdf = await pdfjsLib.getDocument({
-                data: arrayBuffer,
-            }).promise;
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
             let extractedText = "";
 
@@ -73,29 +79,26 @@ const AudioPDFReader: React.FC = () => {
                 extractedText += pageText + " ";
             }
 
-            if (!extractedText.trim()) {
-                extractedText =
-                    "⚠️ No readable text found. This may be a scanned PDF.";
-            }
-
             const splitChunks = splitTextIntoChunks(extractedText);
 
             setText(extractedText);
             setChunks(splitChunks);
-        } catch (error) {
-            console.error(error);
+        } catch {
             setText("❌ Failed to read PDF.");
         } finally {
             setLoading(false);
         }
     };
 
-    // ▶️ Speak chunk by chunk
+    // ▶️ Speech
     const speakChunk = (index: number) => {
         if (index >= chunks.length) {
             setIsSpeaking(false);
             return;
         }
+
+        // ✅ update highlight FIRST (sync)
+        setCurrentIndex(index);
 
         const utterance = new SpeechSynthesisUtterance(chunks[index]);
 
@@ -105,11 +108,7 @@ const AudioPDFReader: React.FC = () => {
         utterance.rate = rate;
 
         utterance.onend = () => {
-            setCurrentIndex((prev) => {
-                const next = prev + 1;
-                speakChunk(next);
-                return next;
-            });
+            speakChunk(index + 1); // ✅ no state dependency
         };
 
         utteranceRef.current = utterance;
@@ -130,14 +129,66 @@ const AudioPDFReader: React.FC = () => {
         setIsSpeaking(false);
     };
 
-    // 🧠 AI placeholders (future integration)
-    const handleSummarize = () => {
-        alert("AI Summary coming soon 🚀");
+    // 📖 Dictionary logic
+    const fetchDefinition = async (word: string) => {
+        try {
+            setDefinition("Loading...");
+
+            const res = await fetch(
+                `https://api.dictionaryapi.dev/api/v2/entries/en/${word}`
+            );
+            const data = await res.json();
+
+            const meanings = data?.[0]?.meanings || [];
+
+            const formatted = meanings
+                .slice(0, 2) // limit to 2 for clean UI
+                .map((m: any) => {
+                    return `(${m.partOfSpeech}) ${m.definitions[0].definition}`;
+                })
+                .join("\n");
+
+            setDefinition(formatted || "No definition found.");
+        } catch {
+            setDefinition("Definition not available.");
+        }
     };
 
-    const handleExplain = () => {
-        alert("AI Explanation mode coming soon 🤖");
+    const handleWordClick = async (
+        word: string,
+        e: React.MouseEvent<HTMLSpanElement>
+    ) => {
+        const cleanWord = word.replace(/[^a-zA-Z]/g, "");
+        if (!cleanWord) return;
+
+        setSelectedWord(cleanWord);
+
+        const rect = e.currentTarget.getBoundingClientRect();
+
+        const modalWidth = 260;
+        const modalHeight = 120;
+
+        let x = rect.left + rect.width / 2 - modalWidth / 2;
+        let y = rect.bottom + 8;
+
+        // 🧠 Keep inside screen horizontally
+        if (x < 10) x = 10;
+        if (x + modalWidth > window.innerWidth) {
+            x = window.innerWidth - modalWidth - 10;
+        }
+
+        // 🧠 If too low → show above word
+        if (y + modalHeight > window.innerHeight) {
+            y = rect.top - modalHeight - 8;
+        }
+
+        setModalPos({ x, y });
+
+        setShowModal(true);
+        await fetchDefinition(cleanWord);
     };
+
+    const closeModal = () => setShowModal(false);
 
     return (
         <div className="p-6 bg-white rounded-2xl shadow-xl max-w-4xl mx-auto">
@@ -145,7 +196,6 @@ const AudioPDFReader: React.FC = () => {
                 📄 AI Audio PDF Reader
             </h2>
 
-            {/* Upload */}
             <input
                 type="file"
                 accept="application/pdf"
@@ -157,37 +207,9 @@ const AudioPDFReader: React.FC = () => {
                 {fileName ? `Loaded: ${fileName}` : "No file selected"}
             </p>
 
-            {loading && (
-                <p className="text-blue-500 mb-3">⏳ Extracting PDF...</p>
-            )}
+            {loading && <p className="text-blue-500">⏳ Extracting PDF...</p>}
 
-            {/* Controls */}
-            <div className="flex flex-wrap gap-3 mb-4">
-                <button onClick={handlePlay} className="bg-green-600 text-white px-4 py-2 rounded-xl">
-                    ▶ Play
-                </button>
-                <button onClick={handlePause} className="bg-yellow-500 text-white px-4 py-2 rounded-xl">
-                    ⏸ Pause
-                </button>
-                <button onClick={handleResume} className="bg-blue-500 text-white px-4 py-2 rounded-xl">
-                    🔄 Resume
-                </button>
-                <button onClick={handleStop} className="bg-red-600 text-white px-4 py-2 rounded-xl">
-                    ⛔ Stop
-                </button>
-            </div>
-
-            {/* AI Buttons */}
-            <div className="flex gap-3 mb-4">
-                <button onClick={handleSummarize} className="bg-purple-600 text-white px-4 py-2 rounded-xl">
-                    🧠 Summarize
-                </button>
-                <button onClick={handleExplain} className="bg-indigo-600 text-white px-4 py-2 rounded-xl">
-                    🤖 Explain
-                </button>
-            </div>
-
-            {/* Voice */}
+            {/* Voice Selection */}
             <div className="mb-4">
                 <label className="block font-semibold mb-1">Voice</label>
                 <select
@@ -203,7 +225,7 @@ const AudioPDFReader: React.FC = () => {
                 </select>
             </div>
 
-            {/* Speed */}
+            {/* Speed Control */}
             <div className="mb-4">
                 <label className="block font-semibold mb-1">
                     Speed: {rate.toFixed(1)}
@@ -219,24 +241,70 @@ const AudioPDFReader: React.FC = () => {
                 />
             </div>
 
-            {/* Highlighted Reading */}
-            <div className="bg-gray-100 p-4 rounded-xl h-64 overflow-y-auto text-sm leading-6">
+            {/* Controls */}
+            <div className="flex flex-wrap gap-3 mb-4">
+                <button onClick={handlePlay} className="bg-green-600 text-white px-4 py-2 rounded-xl">▶ Play</button>
+                <button onClick={handlePause} className="bg-yellow-500 text-white px-4 py-2 rounded-xl">⏸ Pause</button>
+                <button onClick={handleResume} className="bg-blue-500 text-white px-4 py-2 rounded-xl">🔄 Resume</button>
+                <button onClick={handleStop} className="bg-red-600 text-white px-4 py-2 rounded-xl">⛔ Stop</button>
+            </div>
+
+            {/* Text Display */}
+            <div className="bg-gray-100 p-4 rounded-xl h-64 overflow-y-auto text-sm leading-6 relative">
                 {chunks.length > 0 ? (
                     chunks.map((chunk, i) => (
-                        <span
-                            key={i}
-                            className={`${i === currentIndex
-                                ? "bg-yellow-300 text-black font-semibold"
-                                : ""
-                                }`}
-                        >
-                            {chunk + " "}
+                        <span key={i}>
+                            {chunk.split(" ").map((word, j) => (
+                                <span
+                                    key={j}
+                                    onClick={(e) => handleWordClick(word, e)}
+                                    className={`cursor-pointer hover:bg-blue-200 ${i === currentIndex
+                                        ? "bg-yellow-300 font-semibold"
+                                        : ""
+                                        }`}
+                                >
+                                    {word + " "}
+                                </span>
+                            ))}
                         </span>
                     ))
                 ) : (
                     "Upload a PDF to start reading"
                 )}
             </div>
+
+            {/* Modal */}
+            {showModal &&
+                createPortal(
+                    <>
+                        {/* overlay */}
+                        <div
+                            className="fixed inset-0 z-[9998]"
+                            onClick={closeModal}
+                        />
+
+                        {/* modal */}
+                        <div
+                            className="fixed z-[9999] bg-white border shadow-2xl rounded-xl p-3 w-[260px] text-sm"
+                            style={{
+                                top: modalPos.y,
+                                left: modalPos.x,
+                            }}
+                        >
+                            <p className="font-bold text-blue-600 mb-1">
+                                {selectedWord}
+                            </p>
+
+                            <p className="whitespace-pre-line">
+                                {definition}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-2">
+                                (tap anywhere to close)
+                            </p>
+                        </div>
+                    </>,
+                    document.body
+                )}
         </div>
     );
 };

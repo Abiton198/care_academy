@@ -104,7 +104,7 @@ const LandingPage: React.FC = () => {
 
                     <div className="bg-white p-8 rounded-2xl shadow text-center">
                         <h3 className="text-2xl font-bold mb-4">Affordable Pricing</h3>
-                        <p className="text-4xl font-bold text-indigo-700 mb-2">From R2400</p>
+                        <p className="text-4xl font-bold text-indigo-700 mb-2">From R1300</p>
                         <p className="mb-4">per month (Core Subjects + 2 Electives)</p>
 
                         <button
