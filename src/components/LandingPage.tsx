@@ -17,13 +17,13 @@ const LandingPage: React.FC = () => {
 
                     <div>
                         <h1 className="text-4xl md:text-5xl font-bold mb-4">
-                            Is Your Child Struggling in Maths or Science or Literacy?
+                            Is Your Child Finding Maths, Science, or Literacy Challenging?
                         </h1>
 
                         <p className="text-lg mb-6">
-                            Get expert support with a <strong> British Curriculum Homeschool Programme </strong>
-                            from <strong> Primary School to High School</strong>, shaping your child’s
-                            <strong> international career path</strong>.
+                            We are here to support and guide your child with a <strong>British Curriculum Homeschool Programme</strong>,
+                            from <strong>Primary School to High School</strong>, helping them grow in confidence and develop
+                            their God-given potential for a bright <strong>international future</strong>.
                         </p>
 
                         <div className="space-y-2 mb-6">
