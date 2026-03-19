@@ -775,6 +775,21 @@ const TeacherDashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* New Feature Alert */}
+      <div className="bg-gradient-to-r from-yellow-50 to-amber-100 border-2 border-yellow-200 rounded-2xl p-6 shadow-lg">
+        <div className="flex items-center gap-4">
+          <div className="bg-yellow-100 p-3 rounded-xl">
+            <Sparkles className="w-8 h-8 text-yellow-600" />
+          </div>
+          <div>
+            <h3 className="text-2xl font-bold text-yellow-900">New Feature Alert!</h3>
+            <p className="text-lg text-yellow-800 mt-2">
+              We've added a PDF Audio Reader and Dictionary in the Student's Dashboard for easier learning. Encourage your students to use these tools to enhance their learning experience.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="max-w-7xl mx-auto p-8">
         <Tabs defaultValue="overview" className="space-y-8">
           <TabsList className="bg-white p-1 rounded-2xl shadow-md border inline-flex overflow-hidden">

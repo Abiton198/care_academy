@@ -138,8 +138,8 @@ function HybridSwitch({ student }: { student: Student }) {
           onClick={() => toggleMode("Campus")}
           disabled={loading}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${currentMode === "Campus"
-              ? "bg-emerald-600 text-white shadow-md"
-              : "text-gray-500 hover:text-gray-700"
+            ? "bg-emerald-600 text-white shadow-md"
+            : "text-gray-500 hover:text-gray-700"
             }`}
         >
           <MapPin size={16} /> Campus
@@ -148,8 +148,8 @@ function HybridSwitch({ student }: { student: Student }) {
           onClick={() => toggleMode("Virtual")}
           disabled={loading}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${currentMode === "Virtual"
-              ? "bg-indigo-600 text-white shadow-md"
-              : "text-gray-500 hover:text-gray-700"
+            ? "bg-indigo-600 text-white shadow-md"
+            : "text-gray-500 hover:text-gray-700"
             }`}
         >
           <Laptop size={16} /> Virtual
@@ -528,6 +528,21 @@ export default function ParentDashboard() {
           </Button>
         </div>
 
+        {/* New Featu re Alert */}
+        <div className="bg-gradient-to-r from-yellow-50 to-amber-100 border-2 border-yellow-200 rounded-2xl p-6 shadow-lg">
+          <div className="flex items-center gap-4">
+            <div className="bg-yellow-100 p-3 rounded-xl">
+              <Sparkles className="w-8 h-8 text-yellow-600" />
+            </div>
+            <div>
+              <h3 className="text-2xl font-bold text-yellow-900">New Feature Alert!</h3>
+              <p className="text-lg text-yellow-800 mt-2">
+                We've added a PDF Audio Reader and Dictionary in your Student's Dashboard for easier learning. Encourage your child to use these tools to enhance their learning experience.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Tabs */}
         <div className="bg-white rounded-2xl shadow-lg p-3">
           <div className="flex flex-wrap gap-3">
@@ -536,8 +551,8 @@ export default function ParentDashboard() {
                 key={s}
                 onClick={() => setActiveTab(s)}
                 className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all ${activeTab === s
-                    ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md"
-                    : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+                  ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md"
+                  : "bg-gray-100 hover:bg-gray-200 text-gray-700"
                   }`}
               >
                 {s}

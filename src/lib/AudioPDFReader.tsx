@@ -97,7 +97,10 @@ const AudioPDFReader: React.FC = () => {
             return;
         }
 
-        // ✅ update highlight FIRST (sync)
+        // Prevent duplicate speech
+        if (speechSynthesis.speaking) return;
+
+        // ✅ highlight first
         setCurrentIndex(index);
 
         const utterance = new SpeechSynthesisUtterance(chunks[index]);
@@ -108,7 +111,8 @@ const AudioPDFReader: React.FC = () => {
         utterance.rate = rate;
 
         utterance.onend = () => {
-            speakChunk(index + 1); // ✅ no state dependency
+            setIsSpeaking(true); // ensure speaking state
+            speakChunk(index + 1); // next chunk
         };
 
         utteranceRef.current = utterance;
@@ -117,16 +121,26 @@ const AudioPDFReader: React.FC = () => {
 
     const handlePlay = () => {
         if (!chunks.length) return;
-        setIsSpeaking(true);
-        speakChunk(currentIndex);
+
+        // ✅ only start if not already speaking
+        if (!speechSynthesis.speaking) {
+            setIsSpeaking(true);
+            speakChunk(currentIndex);
+        }
     };
 
-    const handlePause = () => speechSynthesis.pause();
-    const handleResume = () => speechSynthesis.resume();
+    const handlePause = () => {
+        if (speechSynthesis.speaking) speechSynthesis.pause();
+    };
+
+    const handleResume = () => {
+        if (speechSynthesis.paused) speechSynthesis.resume();
+    };
 
     const handleStop = () => {
-        speechSynthesis.cancel();
+        speechSynthesis.cancel(); // stop immediately
         setIsSpeaking(false);
+        setCurrentIndex(0); // reset highlight
     };
 
     // 📖 Dictionary logic
