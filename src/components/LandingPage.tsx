@@ -17,7 +17,7 @@ const LandingPage: React.FC = () => {
 
                     <div>
                         <h1 className="text-4xl md:text-5xl font-bold mb-4">
-                            Is Your Child Finding Maths, Science, or Literacy Challenging?
+                            Is Your Child Finding Maths, Science or Literacy Challenging?
                         </h1>
 
                         <p className="text-lg mb-6">
@@ -31,6 +31,7 @@ const LandingPage: React.FC = () => {
                             <p>✔ Small Classes & Individual Attention</p>
                             <p>✔ Live Interactive Lessons</p>
                             <p>✔ Moodle & CARE App Learning System</p>
+                            <p>✔ Sound Bible Teaching</p>
                         </div>
 
                         <div className="flex gap-4 flex-wrap">
