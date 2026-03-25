@@ -30,6 +30,7 @@ import FlashCardComponent from "@/components/FlashCard";
 import { flashCards } from "@/lib/flashcards";
 import { Card, CardContent } from "@/components/ui/card";
 
+
 const now = new Date();
 
 const parseLessonDate = (timeStr: string) => {
@@ -157,6 +158,7 @@ const StudentDashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [now, setNow] = useState(new Date());
   const [isClassLive, setIsClassLive] = useState(false);
+  const auth = useStudentAuth();
 
   /* ---------------- HELPERS ---------------- */
   const parseLessonDate = (timeStr: string) => {
@@ -181,17 +183,21 @@ const StudentDashboard: React.FC = () => {
   };
 
   const logLinkAccess = async (link: any) => {
+    // Use user.uid (from Firebase Auth) to ensure it matches request.auth.uid in rules
     if (!user?.uid || !profile) return;
+
     try {
       await addDoc(collection(db, "class_links", link.id, "auditTrail"), {
-        studentId: user.uid,
+        studentId: user.uid, // This MUST match request.auth.uid
         studentName: profile.firstName,
         grade: profile.grade,
         subject: link.subject || "general",
         action: "opened_link",
         clickedAt: serverTimestamp(),
       });
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error("Audit Log Failed:", e);
+    }
   };
 
   /* ---------------- EFFECTS ---------------- */
@@ -210,65 +216,66 @@ const StudentDashboard: React.FC = () => {
     loadProfile();
   }, [studentId]);
 
+
+  // Fetch timetable based on student grade
   useEffect(() => {
     if (!profile?.grade) return;
 
-    const normalizedSubs = (profile.subjects || []).map((s: any) =>
-      (typeof s === "string" ? s : s.name || "").trim().toLowerCase()
+    const q = query(
+      collection(db, "timetable"),
+      where("grade", "==", profile.grade)
     );
 
-    const qTime = query(collection(db, "timetable"), where("grade", "==", profile.grade));
-    const unsubTime = onSnapshot(qTime, (snap) => {
-      const filtered = snap.docs
-        .map(d => ({ id: d.id, ...d.data() } as TimetableEntry))
-        .filter(l => normalizedSubs.includes(l.subject.trim().toLowerCase()))
-        .sort((a, b) => a.time.localeCompare(b.time));
-      setTimetable(filtered);
+    const unsub = onSnapshot(q, (snap) => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })) as TimetableEntry[];
+      setTimetable(docs);
+    }, (err) => {
+      console.error("Timetable fetch failed:", err);
     });
 
-    const qLinks = query(collection(db, "class_links"), where("targetGrade", "in", [profile.grade, "all"]));
+    return () => unsub();
+  }, [profile?.grade]);
+
+  // ---------------- FIRESTORE LINKS FETCH & FILTER ----------------
+  useEffect(() => {
+    if (!profile?.grade) return;
+
+    // 🔥
+    const qLinks = query(
+      collection(db, "class_links"),
+      where("targetGrade", "==", profile.grade)
+    );
+
     const unsubLinks = onSnapshot(qLinks, (snap) => {
-      const links = snap.docs.map(d => ({ id: d.id, ...d.data() } as ClassLink));
-      setClassLinks(links.filter(l => {
-        const sub = (l.subject || "").trim().toLowerCase();
-        return l.targetGrade === "all" || sub === "all" || sub === "general" || normalizedSubs.includes(sub);
-      }));
+      const links = snap.docs.map(d => ({ id: d.id, ...d.data() })) as ClassLink[];
+
+      // Now perform the sub-filtering for subjects in JS
+      const studentSubjects = (profile.subjects || []).map(s =>
+        (typeof s === "string" ? s : s?.name || "").trim().toLowerCase()
+      );
+
+      const filtered = links.filter(link => {
+        const linkSub = (link.subject || "").toLowerCase();
+        return !linkSub || linkSub === "all" || linkSub === "general" || studentSubjects.includes(linkSub);
+      });
+
+      setClassLinks(filtered);
+    }, (error) => {
+      console.error("Snapshot failed:", error); // Helps catch permission issues early
     });
 
-    return () => { unsubTime(); unsubLinks(); };
+    return () => unsubLinks();
   }, [profile]);
-
-  const filteredLinks = useMemo(() => {
-    return classLinks.filter(l =>
-      l.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      l.subject?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [classLinks, searchTerm]);
-
-  const handleLogout = () => {
-    user?.role === "student" ? logoutStudent() : logoutParent().then(() => navigate("/"));
-  };
-
-  const today = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date());
-  const todayClasses = timetable.filter(t => t.day === today);
-
-
-  /* =====================================================
-     TIME PARSER (reusable everywhere)
-  ===================================================== */
-
-
-  /* =====================================================
-     GET LESSON STATUS
-     done     → lesson finished
-     ongoing  → lesson happening now
-     next     → next lesson today
-     upcoming → later today
-  ===================================================== */
 
   /* =====================================================
      TODAY LESSONS SORT & DATA
   ===================================================== */
+  const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
+
+  const todayClasses = useMemo(() => {
+    return timetable.filter(t => t.day === today);
+  }, [timetable, today]);
+
   const orderedTodayClasses = useMemo(() => {
     return [...todayClasses]
       .map(item => ({
@@ -338,6 +345,25 @@ const StudentDashboard: React.FC = () => {
     next: "Next",
 
     upcoming: "Upcoming"
+  };
+
+  // ---------------- FILTER LINKS FOR SEARCH ----------------
+  const filteredLinks = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    return classLinks.filter(link => {
+      const titleMatch = (link.title || link.name || "").toLowerCase().includes(term);
+      const subjectMatch = (link.subject || "").toLowerCase().includes(term);
+      return term === "" || titleMatch || subjectMatch;
+    });
+  }, [classLinks, searchTerm]);
+
+  // logout
+  const handleLogout = () => {
+    if (logoutStudent) {
+      logoutStudent();
+    } else {
+      navigate("/");
+    }
   };
 
   const getStatusBadge = (lesson: any, todayLessons: any[]) => {
@@ -550,6 +576,7 @@ const StudentDashboard: React.FC = () => {
         {/* 3. LINKS TAB */}
         {activeTab === "links" && (
           <div className="space-y-8 animate-in fade-in">
+            {/* Search & count */}
             <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
               <div className="relative w-full max-w-md">
                 <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -560,28 +587,59 @@ const StudentDashboard: React.FC = () => {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              <p className="text-[10px] font-black text-slate-400 uppercase">{filteredLinks.length} items found</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase">
+                {classLinks.filter(link =>
+                  (link.title || link.name).toLowerCase().includes(searchTerm.toLowerCase())
+                ).length} items found
+              </p>
             </div>
 
+            {/* Resource cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredLinks.map((link) => (
-                <div key={link.id} className="group bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all">
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                      {link.type === 'classroom' ? <Video size={20} /> : <ExternalLink size={20} />}
+              {classLinks
+                .filter(link => {
+                  const grade = (profile?.grade || "").toLowerCase();
+                  const targetGrade = (link.targetGrade || "").toLowerCase();
+                  const subject = (link.subject || "").trim().toLowerCase();
+
+                  // Grade match: 'all' OR matches student's grade
+                  const gradeMatch = targetGrade === "all" || targetGrade.includes(grade);
+
+                  // Subject match: 'all', 'general', or student's subjects
+                  const normalizedSubs = (profile?.subjects || []).map((s: any) =>
+                    (typeof s === "string" ? s : s?.name || "").trim().toLowerCase()
+                  );
+                  const subjectMatch = !subject || subject === "all" || subject === "general" || normalizedSubs.includes(subject);
+
+                  return gradeMatch && subjectMatch;
+                })
+                .filter(link =>
+                  (link.title || link.name).toLowerCase().includes(searchTerm.toLowerCase())
+                )
+                .map(link => (
+                  <div key={link.id} className="group bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all">
+                    <div className="flex justify-between items-start mb-6">
+                      <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                        {link.type === 'classroom' ? <Video size={20} /> : <ExternalLink size={20} />}
+                      </div>
+                      <Badge variant="outline" className="text-[9px] uppercase">{link.subject || "General"}</Badge>
                     </div>
-                    <Badge variant="outline" className="text-[9px] uppercase">{link.subject}</Badge>
+                    <h3 className="font-black text-slate-800 mb-1">{link.title || link.name}</h3>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-6">{link.teacherName || "Unknown"}</p>
+                    <Button
+                      onClick={() => {
+                        // 1. Call the helper function (this fixes the "never read" error)
+                        logLinkAccess(link);
+
+                        // 2. Open the URL
+                        window.open(link.url, "_blank");
+                      }}
+                      className="w-full bg-slate-50 hover:bg-indigo-600 text-slate-600 hover:text-white font-black rounded-xl h-12"
+                    >
+                      Open <ArrowRight size={14} className="ml-2" />
+                    </Button>
                   </div>
-                  <h3 className="font-black text-slate-800 mb-1">{link.title || link.name}</h3>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-6">{link.teacherName}</p>
-                  <Button
-                    onClick={() => { logLinkAccess(link); window.open(link.url, "_blank"); }}
-                    className="w-full bg-slate-50 hover:bg-indigo-600 text-slate-600 hover:text-white font-black rounded-xl h-12"
-                  >
-                    Open <ArrowRight size={14} className="ml-2" />
-                  </Button>
-                </div>
-              ))}
+                ))}
             </div>
           </div>
         )}
@@ -595,8 +653,9 @@ const StudentDashboard: React.FC = () => {
 
       </main>
     </div>
-  );
+  )
 };
+
 
 // ... (Sub-components like LoadingScreen/ClockIcon omitted for space)
 const LoadingScreen = () => (
