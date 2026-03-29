@@ -11,6 +11,7 @@ import {
   query,
   where,
   doc,
+  orderBy,
   getDoc,
   addDoc,
   serverTimestamp,
@@ -237,31 +238,44 @@ const StudentDashboard: React.FC = () => {
   }, [profile?.grade]);
 
   // ---------------- FIRESTORE LINKS FETCH & FILTER ----------------
+  // Inside StudentDashboard.tsx -> useEffect for class_links
   useEffect(() => {
     if (!profile?.grade) return;
 
-    // 🔥
+    // 1. Create the query with Ordering
+    // Note: "desc" puts the newest (largest timestamp) at the top
     const qLinks = query(
       collection(db, "class_links"),
-      where("targetGrade", "==", profile.grade)
+      where("status", "==", "active"),
+      orderBy("createdAt", "desc")
     );
 
     const unsubLinks = onSnapshot(qLinks, (snap) => {
       const links = snap.docs.map(d => ({ id: d.id, ...d.data() })) as ClassLink[];
 
-      // Now perform the sub-filtering for subjects in JS
+      // 2. Keep your existing subject filtering logic here
+      const studentGrade = (profile.grade || "").trim().toLowerCase();
       const studentSubjects = (profile.subjects || []).map(s =>
         (typeof s === "string" ? s : s?.name || "").trim().toLowerCase()
       );
 
       const filtered = links.filter(link => {
-        const linkSub = (link.subject || "").toLowerCase();
-        return !linkSub || linkSub === "all" || linkSub === "general" || studentSubjects.includes(linkSub);
+        const targetGrade = (link.targetGrade || "").trim().toLowerCase();
+        const linkSubject = (link.subject || "").trim().toLowerCase();
+
+        const gradeMatch = targetGrade === "all" || targetGrade === studentGrade;
+        const subjectMatch =
+          !linkSubject ||
+          linkSubject === "all" ||
+          linkSubject === "general" ||
+          studentSubjects.includes(linkSubject);
+
+        return gradeMatch && subjectMatch;
       });
 
       setClassLinks(filtered);
     }, (error) => {
-      console.error("Snapshot failed:", error); // Helps catch permission issues early
+      console.error("Snapshot failed:", error);
     });
 
     return () => unsubLinks();
@@ -354,8 +368,10 @@ const StudentDashboard: React.FC = () => {
       const titleMatch = (link.title || link.name || "").toLowerCase().includes(term);
       const subjectMatch = (link.subject || "").toLowerCase().includes(term);
       return term === "" || titleMatch || subjectMatch;
+
     });
   }, [classLinks, searchTerm]);
+
 
   // logout
   const handleLogout = () => {
@@ -463,7 +479,7 @@ const StudentDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* 1. OVERVIEW TAB */}
+
         {/* 1. OVERVIEW TAB */}
         {activeTab === "overview" && (
           <div className="space-y-10 animate-in fade-in duration-500">
@@ -599,6 +615,7 @@ const StudentDashboard: React.FC = () => {
               {classLinks
                 .filter(link => {
                   const grade = (profile?.grade || "").toLowerCase();
+                  // const isNew = link.createdAt ? (Date.now() - link.createdAt.toMillis()) < (24 * 60 * 60 * 1000) : false;
                   const targetGrade = (link.targetGrade || "").toLowerCase();
                   const subject = (link.subject || "").trim().toLowerCase();
 
@@ -616,8 +633,20 @@ const StudentDashboard: React.FC = () => {
                 .filter(link =>
                   (link.title || link.name).toLowerCase().includes(searchTerm.toLowerCase())
                 )
-                .map(link => (
+                .map(link =>
+                (
                   <div key={link.id} className="group bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all">
+
+                    {/* 🔥 THE NEW BADGE */}
+                    {/* {isNew && (
+                      <div className="absolute top-0 right-0">
+                        <div className="bg-emerald-500 text-white text-[8px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest shadow-sm animate-pulse">
+                          New Resource
+                        </div>
+                      </div>
+                    )} */}
+
+
                     <div className="flex justify-between items-start mb-6">
                       <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                         {link.type === 'classroom' ? <Video size={20} /> : <ExternalLink size={20} />}
