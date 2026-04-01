@@ -1,102 +1,102 @@
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebaseConfig";
+// import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+// import { db } from "@/lib/firebaseConfig";
 
-export async function createProfile() {
-  const targetUid = "JPHgUj5q7yd5WEdGBHinfT42ZfR2";
-  const targetEmail = "jason.oosthuizen2505@gmail.com"; 
+// export async function createProfile() {
+//   const targetUid = "JPHgUj5q7yd5WEdGBHinfT42ZfR2";
+//   const targetEmail = "jason.oosthuizen2505@gmail.com"; 
 
-  try {
-    const subjects = [
-      { name: "History (IGCSE)", curriculum: "British Curriculum" },
-      { name: "Science (Co-ordinated or Combined)", curriculum: "British Curriculum" },
-       { name: "Global Perspectives", curriculum: "British Curriculum" },
-      { name: "Economics (IGCSE)", curriculum: "British Curriculum" },
-       { name: "Geography (IGCSE)", curriculum: "British Curriculum" },
-            { name: "Geography", curriculum: "British Curriculum" },
-        { name: "Afrikaans", curriculum: "British Curriculum" },
-        { name: "Design & Technology", curriculum: "British Curriculum" },
-         { name: "Biology (IGCSE)", curriculum: "British Curriculum" },
-         { name: "Physical Education", curriculum: "British Curriculum" },
-           { name: "Business Studies (IGCSE)", curriculum: "British Curriculum" },
-           { name: "Computer Science (IGCSE)", curriculum: "British Curriculum" },
-            { name: "British Curriculum Primary Art & Design", curriculum: "British Curriculum" },
-            { name: "English Language (IGCSE)", curriculum: "British Curriculum" },
-            { name: "Art & Design", curriculum: "British Curriculum" },
-            { name: "Digital Literacy", curriculum: "British Curriculum" },
-             { name: "English (Checkpoint)", curriculum: "British Curriculum" },
-              { name: "English Literature (AS-Level)", curriculum: "British Curriculum" },
-               { name: "Environmental Management (IGCSE)", curriculum: "British Curriculum" },
-        
-    ];
+//   try {
+//     const subjects = [
+//       { name: "History (IGCSE)", curriculum: "British Curriculum" },
+//       { name: "Science (Co-ordinated or Combined)", curriculum: "British Curriculum" },
+//        { name: "Global Perspectives", curriculum: "British Curriculum" },
+//       { name: "Economics (IGCSE)", curriculum: "British Curriculum" },
+//        { name: "Geography (IGCSE)", curriculum: "British Curriculum" },
+//             { name: "Geography", curriculum: "British Curriculum" },
+//         { name: "Afrikaans", curriculum: "British Curriculum" },
+//         { name: "Design & Technology", curriculum: "British Curriculum" },
+//          { name: "Biology (IGCSE)", curriculum: "British Curriculum" },
+//          { name: "Physical Education", curriculum: "British Curriculum" },
+//            { name: "Business Studies (IGCSE)", curriculum: "British Curriculum" },
+//            { name: "Computer Science (IGCSE)", curriculum: "British Curriculum" },
+//             { name: "British Curriculum Primary Art & Design", curriculum: "British Curriculum" },
+//             { name: "English Language (IGCSE)", curriculum: "British Curriculum" },
+//             { name: "Art & Design", curriculum: "British Curriculum" },
+//             { name: "Digital Literacy", curriculum: "British Curriculum" },
+//              { name: "English (Checkpoint)", curriculum: "British Curriculum" },
+//               { name: "English Literature (AS-Level)", curriculum: "British Curriculum" },
+//                { name: "Environmental Management (IGCSE)", curriculum: "British Curriculum" },
 
-    console.log("🛠️ Initializing/Overriding Profile for:", targetUid);
+//     ];
 
-    // 1️⃣ USERS Collection (The Auth/Role anchor)
-    // setDoc + merge: true = Create if missing, update if exists.
-    await setDoc(doc(db, "users", targetUid), {
-      uid: targetUid,
-      email: targetEmail,
-      role: "teacher",
-      applicationStatus: "approved", 
-      profileCompleted: true,
-      lastRoleSync: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+//     console.log("🛠️ Initializing/Overriding Profile for:", targetUid);
 
-    // 2️⃣ TEACHERS Collection (The Dashboard data)
-    await setDoc(doc(db, "teachers", targetUid), {
-      uid: targetUid,
-      email: targetEmail,
-      firstName: "Jason",
-      lastName: "Oosthuizen",
-      status: "approved",
-      approved: true,
-      classActivated: true,
-      personalInfo: {
-        firstName: "Jason",
-        lastName: "Oosthuizen",
-        email: targetEmail,
-        gradePhase: "Secondary",
-        curriculum: "British Curriculum",
-        yearsOfExperience: 5,
-      },
-      subjects: subjects,
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+//     // 1️⃣ USERS Collection (The Auth/Role anchor)
+//     // setDoc + merge: true = Create if missing, update if exists.
+//     await setDoc(doc(db, "users", targetUid), {
+//       uid: targetUid,
+//       email: targetEmail,
+//       role: "teacher",
+//       applicationStatus: "approved", 
+//       profileCompleted: true,
+//       lastRoleSync: serverTimestamp(),
+//       updatedAt: serverTimestamp(),
+//     }, { merge: true });
 
-    // 3️⃣ TEACHER APPLICATIONS (The history log)
-    await setDoc(doc(db, "teacherApplications", targetUid), {
-     uid: targetUid,
-      email: targetEmail,
-      firstName: "Jason",
-      lastName: "Oosthuizen",
-      status: "approved",
-      approved: true,
-      classActivated: true,
-      personalInfo: {
-        firstName: "Jason",
-        lastName: "Oosthuizen",
-        email: targetEmail,
-        gradePhase: "Secondary",
-        curriculum: "British Curriculum",
-        yearsOfExperience: 5,
-      },
-      subjects: subjects,
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+//     // 2️⃣ TEACHERS Collection (The Dashboard data)
+//     await setDoc(doc(db, "teachers", targetUid), {
+//       uid: targetUid,
+//       email: targetEmail,
+//       firstName: "Jason",
+//       lastName: "Oosthuizen",
+//       status: "approved",
+//       approved: true,
+//       classActivated: true,
+//       personalInfo: {
+//         firstName: "Jason",
+//         lastName: "Oosthuizen",
+//         email: targetEmail,
+//         gradePhase: "Secondary",
+//         curriculum: "British Curriculum",
+//         yearsOfExperience: 5,
+//       },
+//       subjects: subjects,
+//       updatedAt: serverTimestamp(),
+//     }, { merge: true });
 
-    console.log("✅ Documents created/synced successfully.");
-    alert("✅ Success! Jason's profile is ready. Redirecting...");
-    
-    window.location.href = "/teacher-dashboard";
+//     // 3️⃣ TEACHER APPLICATIONS (The history log)
+//     await setDoc(doc(db, "teacherApplications", targetUid), {
+//      uid: targetUid,
+//       email: targetEmail,
+//       firstName: "Jason",
+//       lastName: "Oosthuizen",
+//       status: "approved",
+//       approved: true,
+//       classActivated: true,
+//       personalInfo: {
+//         firstName: "Jason",
+//         lastName: "Oosthuizen",
+//         email: targetEmail,
+//         gradePhase: "Secondary",
+//         curriculum: "British Curriculum",
+//         yearsOfExperience: 5,
+//       },
+//       subjects: subjects,
+//       updatedAt: serverTimestamp(),
+//     }, { merge: true });
 
-  } catch (error: any) {
-    console.error("🔥 Firestore Error:", error);
-    // If you get "Missing or insufficient permissions", 
-    // it's your Security Rules blocking the 'set' operation.
-    alert("Update failed: " + (error.message || "Permission Denied"));
-  }
-}
+//     console.log("✅ Documents created/synced successfully.");
+//     alert("✅ Success! Jason's profile is ready. Redirecting...");
+
+//     window.location.href = "/teacher-dashboard";
+
+//   } catch (error: any) {
+//     console.error("🔥 Firestore Error:", error);
+//     // If you get "Missing or insufficient permissions", 
+//     // it's your Security Rules blocking the 'set' operation.
+//     alert("Update failed: " + (error.message || "Permission Denied"));
+//   }
+// }
 
 
 
@@ -200,7 +200,7 @@ export async function createProfile() {
 //     const subjects = [
 //       { name: "Morning Devotion", curriculum: "British Curriculum" },
 //         { name: "Bible Studies", curriculum: "British Curriculum" },
-      
+
 //     ];
 
 //     console.log("🛠️ Syncing Profile for:", targetUid);
@@ -281,7 +281,7 @@ export async function createProfile() {
 //         { name: "English(Primary)", curriculum: "British Curriculum" },
 //         { name: "Mathematics(Primary)", curriculum: "British Curriculum" },
 //         { name: "Science(Primary)", curriculum: "British Curriculum" },
-      
+
 //     ];
 
 //     console.log("🛠️ Syncing Profile for:", targetUid);
@@ -346,3 +346,84 @@ export async function createProfile() {
 //     alert("Update failed: " + (error.message || "Permission Denied"));
 //   }
 // }
+
+
+// ===========================================ABITON=======================================================
+
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebaseConfig";
+
+export async function createProfile() {
+  const targetUid = "LbKKY3pKsaMJoJnkfT3HrMu4B1l1";
+  const targetEmail = "abitonp@gmail.com";
+
+  try {
+    const subjects = [
+      { name: "Coding", curriculum: "British Curriculum" },
+      { name: "AI", curriculum: "British Curriculum" },
+      { name: "Robotics", curriculum: "British Curriculum" },
+
+    ];
+
+    console.log("🛠️ Syncing Profile for:", targetUid);
+
+    // 1️⃣ USERS Collection
+    await setDoc(doc(db, "users", targetUid), {
+      uid: targetUid,
+      email: targetEmail,
+      role: "teacher",
+      applicationStatus: "approved",
+      profileCompleted: true,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+
+    // 2️⃣ TEACHERS Collection
+    await setDoc(doc(db, "teachers", targetUid), {
+      uid: targetUid,
+      email: targetEmail,
+      firstName: "Abiton",
+      lastName: "Padera",
+      status: "approved",
+      yearsOfExperience: 15,
+      personalInfo: {
+        firstName: "Abiton",
+        lastName: "Padera",
+        email: targetEmail,
+        phone: "0656564983",
+        bio: "",
+        gradePhase: "secondary",
+        curriculum: "British Curriculum",
+      },
+      subjects: subjects,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+
+    // 3️⃣ TEACHER APPLICATIONS Collection
+    await setDoc(doc(db, "teacherApplications", targetUid), {
+      uid: targetUid,
+      email: targetEmail,
+      firstName: "Abiton",
+      lastName: "Padera",
+      status: "approved",
+      yearsOfExperience: 5,
+      personalInfo: {
+        firstName: "Abiton",
+        lastName: "Padera",
+        email: targetEmail,
+        phone: "0656564983",
+        bio: "",
+        gradePhase: "secondary",
+        curriculum: "British Curriculum",
+      },
+      subjects: subjects,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+
+    console.log("✅ Abiton Padera profile synced successfully.");
+    alert("✅ Abiton's profile updated successfully.");
+
+  } catch (error: any) {
+    console.error("🔥 Firestore Error:", error);
+    alert("Update failed: " + (error.message || "Permission Denied"));
+  }
+}

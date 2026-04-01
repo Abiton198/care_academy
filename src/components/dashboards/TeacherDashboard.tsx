@@ -294,7 +294,7 @@ const TeacherDashboard: React.FC = () => {
   useEffect(() => {
     if (!user?.uid) return;
 
-    console.log("🔍 Resolving teacher application by UID:", user.uid);
+    // console.log("🔍 Resolving teacher application by UID:", user.uid);
     setLoading(true);
 
     const q = query(
@@ -407,37 +407,40 @@ const TeacherDashboard: React.FC = () => {
   ===================================================== */
 
   // UPDATE: Refined handleUpdateResource
+
   const handleAddResource = async () => {
     if (!newResource.title || !newResource.url) return alert("Title and URL are required");
 
-    // 1. Identify exactly where the name is stored. 
-    // We check 'personalInfo' first, then the top-level 'displayName'
+    // Use the direct Auth UID to ensure it matches 'uid()' in rules
+    const currentUid = auth.currentUser?.uid;
+    if (!currentUid) return alert("You must be logged in.");
+
     const firstName = user?.personalInfo?.firstName || user?.firstName || "";
     const lastName = user?.personalInfo?.lastName || user?.lastName || "";
-
-    // 2. Combine and verify
-    const fullName = `${firstName} ${lastName}`.trim();
-
-    // 3. Final Fallback: If name is still empty, use email or "Teacher" 
-    // instead of just "Educator" to make it look more professional
-    const finalName = fullName || user?.email?.split('@')[0] || "Teacher";
+    const finalName = `${firstName} ${lastName}`.trim() || "Teacher";
 
     try {
+      // This write matches 'match /class_links/{linkId}' + 'allow create: if isSignedIn()'
       await addDoc(collection(db, "class_links"), {
-        title: newResource.title,
-        url: newResource.url,
+        title: newResource.title.trim(),
+        url: newResource.url.trim(),
         type: newResource.type,
         targetGrade: newResource.targetGrade,
-        teacherId: user?.uid,
-        teacherName: finalName, // Use the verified name here
+        teacherId: currentUid, // Matches resource.data.teacherId == uid() for updates
+        teacherName: finalName,
         createdAt: serverTimestamp(),
         status: "active"
       });
 
+      // Reset form on success
       setNewResource({ ...newResource, title: "", url: "" });
-    } catch (err) {
-      console.error("Error adding resource:", err);
+      alert("Resource added successfully!");
+
+    } catch (err: any) {
+      console.error("Firebase Permission Error:", err);
+      alert(`Permission Denied: Ensure you have published the latest rules in the Firebase Console and that your Project ID matches.`);
     }
+    console.log("🔥 ATTEMPTING WRITE TO PROJECT:", db.app.options.projectId);
   };
 
   // DELETE: Permanent removal
@@ -465,6 +468,7 @@ const TeacherDashboard: React.FC = () => {
       where("teacherId", "==", user.uid), // This matches the ID you saved in handleAddResource
       orderBy("createdAt", "desc")
     );
+
 
     const unsub = onSnapshot(q, (snap) => {
       const fetchedLinks = snap.docs.map(d => ({
