@@ -629,8 +629,7 @@ export default function ParentDashboard() {
                   />
                 </div>
 
-                {/* Step 3: Password with Toggle and Randomizer */}
-                {/* Step 3: Password with Toggle and Randomizer */}
+
                 {/* Step 3: Password with Toggle and Randomizer */}
                 <div className="space-y-2 md:col-span-2">
                   <div className="flex justify-between items-center px-2">
