@@ -17,7 +17,9 @@ import { BarChart3, CalendarDays, Users } from "lucide-react";
  * - One timetable document = one weekly recurring lesson
  * - Weekly count = number of timetable slots
  * - Monthly count = weekday occurrences in current month × slots
- * - Student count does NOT affect lesson totals
+ * - Subjects with ZERO enrolled students are excluded from all lesson totals
+ * - Stage 4 and Stage 5 sharing the same teacher + day + time + subject
+ *   are counted as ONE combined lesson (not two)
  */
 
 export default function TeacherLessonStatsCard() {
@@ -85,11 +87,41 @@ export default function TeacherLessonStatsCard() {
     return map;
   }, [students]);
 
+  /** ---------------- STAGE 4+5 DEDUPLICATION ---------------- */
+  /**
+   * If two timetable slots share the same:
+   *   teacherUid + day + time + subject
+   * and their grades are "Stage 4" and "Stage 5",
+   * they represent ONE combined class period — deduplicate to a single slot.
+   */
+  const deduplicatedTimetable = useMemo(() => {
+    const combinedStages = new Set(["Stage 4", "Stage 5"]);
+    const seenCombinedKeys = new Set<string>();
+    const result: any[] = [];
+
+    timetable.forEach(slot => {
+      if (combinedStages.has(slot.grade)) {
+        // Build a key that is stage-agnostic — same period regardless of Stage 4 or 5
+        const key = `${slot.teacherUid}|${slot.day}|${slot.time}|${slot.subject}`;
+
+        if (seenCombinedKeys.has(key)) {
+          // Second stage for this period — skip it, already counted
+          return;
+        }
+        seenCombinedKeys.add(key);
+      }
+
+      result.push(slot);
+    });
+
+    return result;
+  }, [timetable]);
+
   /** ---------------- AGGREGATION ---------------- */
   const stats = useMemo(() => {
     const teachers: Record<string, any> = {};
 
-    timetable.forEach(slot => {
+    deduplicatedTimetable.forEach(slot => {
       const dayIndex = weekdayIndex[slot.day];
       if (dayIndex === undefined) return;
 
@@ -105,7 +137,11 @@ export default function TeacherLessonStatsCard() {
 
       const teacher = teachers[slot.teacherUid];
 
-      // WEEKLY: every timetable slot counts once
+      // SKIP subjects with no enrolled students — excluded from all lesson totals
+      const enrolledCount = studentsPerSubject[slot.subject] || 0;
+      if (enrolledCount === 0) return;
+
+      // WEEKLY: every deduplicated slot counts once
       teacher.weekly += 1;
 
       // MONTHLY: weekday occurrences × slots
@@ -121,7 +157,7 @@ export default function TeacherLessonStatsCard() {
         teacher.subjects[slot.subject] = {
           weekly: 0,
           monthly: 0,
-          students: studentsPerSubject[slot.subject] || 0,
+          students: enrolledCount,
         };
       }
 
@@ -130,7 +166,7 @@ export default function TeacherLessonStatsCard() {
     });
 
     return Object.values(teachers);
-  }, [timetable, studentsPerSubject]);
+  }, [deduplicatedTimetable, studentsPerSubject]);
 
   /** ---------------- SUMMARY ---------------- */
   const summary = useMemo(() => {

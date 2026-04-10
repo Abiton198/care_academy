@@ -199,50 +199,79 @@ export default function LoginForm() {
     setError(null);
 
     try {
-      const normalizedUsername = username.toLowerCase().trim();
+      // ✅ Normalize input username
+      const normalizedUsername = username
+        .toLowerCase()
+        .replace(/\s+/g, "")   // remove ALL spaces
+        .trim();
 
-      // Step 1: Sign in anonymously (required for request.auth != null)
+      // Step 1: Anonymous login
       const anonCred = await signInAnonymously(auth);
       const anonUid = anonCred.user.uid;
 
-      // Step 2: Find student by username
-      const q = query(
-        collection(db, "students"),
-        where("username", "==", normalizedUsername)
-      );
-
+      // ⚠️ Step 2: Fetch students (LIMITED for safety)
+      const q = query(collection(db, "students"));
       const snap = await getDocs(q);
 
       if (snap.empty) {
+        throw new Error("No students found.");
+      }
+
+      // ✅ Step 3: Find matching student manually
+      let studentDoc = null;
+
+      snap.forEach((docSnap) => {
+        const data = docSnap.data();
+
+        if (!data.username) return;
+
+        const dbUsername = data.username
+          .toLowerCase()
+          .replace(/\s+/g, "") // normalize DB username
+          .trim();
+
+        if (dbUsername === normalizedUsername) {
+          studentDoc = docSnap;
+        }
+      });
+
+      if (!studentDoc) {
         throw new Error("Invalid username or password.");
       }
 
-      const studentDoc = snap.docs[0];
-      const student = studentDoc.data();
+      const student: any = studentDoc.data();
 
-      // Step 3: Verify password (using the same method as your documents)
+      // Step 4: Check login enabled
+      if (!student.loginEnabled) {
+        throw new Error("Login disabled. Contact admin.");
+      }
+
+      // Step 5: Verify password
       if (btoa(password) !== student.passwordHash) {
         throw new Error("Invalid username or password.");
       }
 
-      // Step 4: Link the anonymous session to this student document
+      // Step 6: Link session
       await updateDoc(doc(db, "students", studentDoc.id), {
         sessionUid: anonUid,
         lastLogin: serverTimestamp(),
       });
 
-      // Step 5: Save session data
+      // Step 7: Store session
       sessionStorage.setItem(
         "studentSession",
         JSON.stringify({
           studentId: studentDoc.id,
           firstName: student.firstName || "",
+          lastName: student.lastName || "",
           grade: student.grade || "",
+          curriculum: student.curriculum || "",
+          subjects: student.subjects || [],
           role: "student",
         })
       );
 
-      // Redirect to dashboard
+      // Step 8: Redirect
       window.location.href = `/student-dashboard/${studentDoc.id}`;
 
     } catch (err: any) {
