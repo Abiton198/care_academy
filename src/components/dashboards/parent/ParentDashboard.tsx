@@ -56,6 +56,7 @@ import { Settings } from "lucide-react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import PendingInvoiceModal from "./PendingInvoiceModal";
 import logo from "@/img/care.png";
+import { ReviewModal } from "@/lib/ReviewModal";
 
 /* ======================================================
    CONSTANTS & TYPES
@@ -203,6 +204,8 @@ export default function ParentDashboard() {
   const [isPasswordCardOpen, setIsPasswordCardOpen] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [pendingInvoiceCount, setPendingInvoiceCount] = useState(0);
+  const [showReview, setShowReview] = useState(true);
+
 
 
   // Load parent profile + real-time data
@@ -277,6 +280,34 @@ export default function ParentDashboard() {
     };
   }, [user?.uid, selectedChildId]);
 
+  // REVIEW MODAL 
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const checkReviewStatus = async () => {
+      const parentSnap = await getDoc(doc(db, "parents", user.uid));
+
+      if (parentSnap.exists()) {
+        const data = parentSnap.data();
+
+        // Only show the modal if they haven't reviewed AND they have completed their profile
+        if (!data.hasReviewed && data.profileCompleted) {
+          // You can add a delay so it doesn't pop up immediately on login
+          setTimeout(() => setShowReview(true), 5000);
+        }
+      }
+    };
+
+    checkReviewStatus();
+  }, [user?.uid]);
+
+  const handleLater = () => {
+    sessionStorage.setItem("reviewPostponed", "true");
+    setShowReview(false);
+    setShowInvoiceModal(false);
+  };
+
+
 
   // MODAL POPUP INVOICE
   useEffect(() => {
@@ -307,9 +338,7 @@ export default function ParentDashboard() {
   };
 
 
-  const handleLater = () => {
-    setShowInvoiceModal(false);
-  };
+
 
 
   const handleLogout = async () => {
@@ -528,7 +557,7 @@ export default function ParentDashboard() {
           </Button>
         </div>
 
-        {/* New Featu re Alert */}
+        {/* New Feature Alert */}
         <div className="bg-gradient-to-r from-yellow-50 to-amber-100 border-2 border-yellow-200 rounded-2xl p-6 shadow-lg">
           <div className="flex items-center gap-4">
             <div className="bg-yellow-100 p-3 rounded-xl">
@@ -542,6 +571,9 @@ export default function ParentDashboard() {
             </div>
           </div>
         </div>
+
+        {/* Review Modal  */}
+        {showReview && <ReviewModal user={user} onClose={() => setShowReview(false)} />}
 
         {/* Tabs */}
         <div className="bg-white rounded-2xl shadow-lg p-3">

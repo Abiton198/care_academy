@@ -4,6 +4,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import student from "../img/student.jpg";
 import { Link } from "react-router-dom";
+import { TestimonialCarousel } from "@/lib/TestimonialCarousel";
 
 const LandingPage: React.FC = () => {
     const navigate = useNavigate();
@@ -117,6 +118,9 @@ const LandingPage: React.FC = () => {
                     </div>
                 </div>
             </section>
+
+            {/* Testimonials */}
+            <TestimonialCarousel />
 
             {/* CTA */}
             <section className="bg-indigo-700 text-white py-16 px-6 text-center">

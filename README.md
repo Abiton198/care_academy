@@ -1,4 +1,4 @@
-## NextGen Online Support School – 
+## Care Academy Online Support – 
 
 ### Overview
 A role-based online school dashboard system built with React, TypeScript, Firebase (Auth, Firestore, Storage), Tailwind CSS, and shadcn/ui. Supports parents, students, teachers, and principals with real-time features like timetables, chat, attendance, and payments.
@@ -9,6 +9,7 @@ A role-based online school dashboard system built with React, TypeScript, Fireba
 - **UI**: Tailwind CSS, shadcn/ui, Lucide Icons
 - **State**: React Hooks, Context (AuthProvider)
 - **Deployment**: Netlify Hosting
+
 
 ### Project Structure
 ```
@@ -27,6 +28,7 @@ src/
 ├── App.tsx (Routing)
 ├── main.tsx (Entry)
 └── index.css (Tailwind)
+
 ```
 
 ### Key Features
@@ -34,12 +36,24 @@ src/
 - **Parent Dashboard**: Register child, pay fees, view timetable, chat
 - **Student Dashboard**: Timetable, class links (Zoom/Classroom), attendance stats
 - **Teacher Dashboard**: Manage links, view students, mark attendance, chat
-- **Principal Dashboard**: Approve/reject, stats (CAPS/Cambridge), timetable manager
-- **Timetable**: Weekly, collapsible, real-time, CAPS/Cambridge filter
+- **Principal Dashboard**: Approve/reject, stats British Curriculum, timetable manager
+- **Timetable**: Weekly, collapsible, real-time, British Curriculum filter
 - **Chat**: Real-time parent-teacher, typing indicators, history
 - **Attendance**: Live stats, progress bars
 - **Payments**: Per-student tracking
 - **Dark Mode**: Toggle in student dashboard
+- **Review Modal**: Popup after payment
+- **Hybrid Learning**: Switch between Campus and Virtual learning 
+- **Password Reset**: Manual password reset for students
+- **Profile Completion**: Wizard for new users  
+- **Announcements**: Announcements for parents  
+- **Settings**: Settings for parents  
+- **Notifications**: Notifications for parents  
+- **Registration**: Registration for new students  
+- **Profile**: Profile for parents, students, teachers, principals  
+- **Review Modal**: Review Modal for parents  
+- **Parent-Teacher Chat (Full)**: Communication between teachers and parents in dashboards
+
 
 ### Firestore Schema
 - `users/{uid}`: { role: "parent/teacher/principal" }
@@ -115,7 +129,6 @@ service cloud.firestore {
 ### Future Enhancements
 - **Grades & Reports**
 - **Homework Upload**
-- **Parent-Teacher Chat (Full)**
 - **Mobile App**
 - **Email Notifications**
 
