@@ -58,6 +58,7 @@ interface StudentProfile {
   dashboardLocked?: boolean;
   lockReason?: string;
   subjects?: Array<{ name: string } | string>;
+  sessionUid?: string;
 }
 
 interface TimetableEntry {
@@ -75,6 +76,7 @@ interface ClassLink {
   title?: string;
   url: string;
   targetGrade?: string;
+  grade?: string;
   type: "classroom" | "external";
   subject?: string;
   teacherName?: string;
@@ -152,7 +154,8 @@ const StatCard = ({
 // =============================================================================
 
 const StudentDashboard: React.FC = () => {
-  // const { logoutStudent, user, loading: authLoading } = useAuth();
+  // ✅ FIX 1: Destructure `user` from useAuth so logLinkAccess doesn't crash
+  const { logoutStudent, user } = useAuth();
   const { studentId } = useParams<{ studentId: string }>();
   const navigate = useNavigate();
 
@@ -165,35 +168,53 @@ const StudentDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"overview" | "timetable" | "links" | "audio-pdf">("overview");
   const [searchTerm, setSearchTerm] = useState("");
   const [now, setNow] = useState(new Date());
-  const { logoutStudent } = useAuth();
+
+  // ✅ FIX 2: authLoading starts true and is properly guarded
   const [authLoading, setAuthLoading] = useState(true);
   const [session, setSession] = useState<any>(null);
 
+  // ✅ FIX 3: Session check supports BOTH student sessions AND parent portal views
   useEffect(() => {
     const stored = sessionStorage.getItem("studentSession");
 
-    if (!stored) {
-      console.warn("No session found → redirecting");
-      navigate("/");
+    // Case A: Student logged in via student login page
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (!parsed.studentId) throw new Error("Invalid session");
+        setSession(parsed);
+      } catch (e) {
+        console.error("Session parse failed");
+        sessionStorage.removeItem("studentSession");
+        navigate("/");
+        return;
+      } finally {
+        setAuthLoading(false);
+      }
       return;
     }
 
-    try {
-      const parsed = JSON.parse(stored);
-
-      if (!parsed.studentId) {
-        throw new Error("Invalid session");
-      }
-
-      setSession(parsed);
-    } catch (e) {
-      console.error("Session parse failed");
-      sessionStorage.removeItem("studentSession");
-      navigate("/");
-    } finally {
-      setAuthLoading(false); // ✅ IMPORTANT
+    // Case B: Parent opening child portal via Firebase Auth (window.open from parent dashboard)
+    // user comes from Firebase Auth — if present, it's a parent viewing their child
+    if (user?.uid) {
+      // Construct a mock session so the rest of the dashboard works
+      setSession({ studentId, isParentView: true, parentUid: user.uid });
+      setAuthLoading(false);
+      return;
     }
-  }, [navigate]);
+
+    // Case C: Neither — redirect to home
+    // Wait briefly to allow Firebase Auth to rehydrate before giving up
+    const timeout = setTimeout(() => {
+      if (!sessionStorage.getItem("studentSession")) {
+        console.warn("No session and no auth user → redirecting to home");
+        navigate("/");
+      }
+      setAuthLoading(false);
+    }, 1500);
+
+    return () => clearTimeout(timeout);
+  }, [navigate, user, studentId]);
 
   // Live clock
   useEffect(() => {
@@ -211,21 +232,31 @@ const StudentDashboard: React.FC = () => {
         const snap = await getDoc(docRef);
 
         if (!snap.exists()) {
-          setProfileError(`Student ${studentId} does not exist.`);
+          setProfileError(`Student record not found.`);
+          setProfileLoaded(true);
           return;
         }
 
-        const data = snap.data();
+        const data = snap.data() as StudentProfile;
 
-        // Check session
-        if (data.sessionUid !== session.studentId) {
-          console.warn("Session mismatch. Logging out.");
-          sessionStorage.removeItem("studentSession");
-          navigate("/");
-          return;
+        // ✅ FIX 4: Skip sessionUid check for parent portal views
+        if (!session.isParentView) {
+          if (data.sessionUid !== session.studentId) {
+            console.warn("Session mismatch — logging out student.");
+            sessionStorage.removeItem("studentSession");
+            navigate("/");
+            return;
+          }
+        } else {
+          // For parent view: verify the student belongs to this parent
+          if (user?.uid && data.parentId && data.parentId !== user.uid) {
+            console.warn("Parent does not own this student record.");
+            navigate("/parent-dashboard");
+            return;
+          }
         }
 
-        setProfile({ id: snap.id, ...data } as StudentProfile);
+        setProfile({ id: snap.id, ...data });
         setProfileError(null);
       } catch (err) {
         console.error("Firestore Error:", err);
@@ -236,7 +267,7 @@ const StudentDashboard: React.FC = () => {
     };
 
     loadProfile();
-  }, [studentId, session]);
+  }, [studentId, session, navigate, user]);
 
   // Fetch timetable
   useEffect(() => {
@@ -279,7 +310,10 @@ const StudentDashboard: React.FC = () => {
 
           const gradeMatch = targetGrade === "all" || targetGrade === studentGrade;
           const subjectMatch =
-            !linkSubject || linkSubject === "all" || linkSubject === "general" || studentSubjects.includes(linkSubject);
+            !linkSubject ||
+            linkSubject === "all" ||
+            linkSubject === "general" ||
+            studentSubjects.includes(linkSubject);
 
           return gradeMatch && subjectMatch;
         });
@@ -292,10 +326,36 @@ const StudentDashboard: React.FC = () => {
     return () => unsub();
   }, [profile]);
 
+  // ✅ FIX 5: Filter timetable by student's enrolled subjects
+  const studentSubjectNames = useMemo(() => {
+    if (!profile?.subjects) return null; // null = no filter (show all)
+    return (profile.subjects || []).map((s) =>
+      (typeof s === "string" ? s : s?.name || "").trim().toLowerCase()
+    );
+  }, [profile?.subjects]);
+
   // Computed values
   const today = now.toLocaleDateString("en-US", { weekday: "long" });
 
-  const todayClasses = useMemo(() => timetable.filter((t) => t.day === today), [timetable, today]);
+  const todayClasses = useMemo(() => {
+    return timetable.filter((t) => {
+      const dayMatch = t.day === today;
+      if (!studentSubjectNames) return dayMatch;
+      const subjectMatch = studentSubjectNames.some((sub) =>
+        t.subject.toLowerCase().includes(sub.replace(" (igcse)", ""))
+      );
+      return dayMatch && subjectMatch;
+    });
+  }, [timetable, today, studentSubjectNames]);
+
+  const filteredTimetable = useMemo(() => {
+    if (!studentSubjectNames) return timetable;
+    return timetable.filter((t) =>
+      studentSubjectNames.some((sub) =>
+        t.subject.toLowerCase().includes(sub.replace(" (igcse)", ""))
+      )
+    );
+  }, [timetable, studentSubjectNames]);
 
   const orderedTodayClasses = useMemo(() => {
     return [...todayClasses]
@@ -313,15 +373,18 @@ const StudentDashboard: React.FC = () => {
     });
   }, [classLinks, searchTerm]);
 
+  // ✅ FIX 1 APPLIED: user is now properly available here
   const logLinkAccess = async (link: ClassLink) => {
-    if (!user?.uid || !profile) return;
+    if (!profile) return;
     try {
+      const actorId = session?.isParentView ? user?.uid : session?.studentId;
       await addDoc(collection(db, "class_links", link.id, "auditTrail"), {
-        studentId: user.uid,
+        studentId: actorId || "unknown",
         studentName: profile.firstName,
         grade: profile.grade,
         subject: link.subject || "general",
         action: "opened_link",
+        isParentView: session?.isParentView ?? false,
         clickedAt: serverTimestamp(),
       });
     } catch (e) {
@@ -330,8 +393,13 @@ const StudentDashboard: React.FC = () => {
   };
 
   const handleLogout = () => {
-    logoutStudent?.();
-    navigate("/");
+    if (session?.isParentView) {
+      // Parent viewing child portal — go back to parent dashboard
+      navigate("/parent-dashboard");
+    } else {
+      logoutStudent?.();
+      navigate("/");
+    }
   };
 
   const statusStyles: Record<string, string> = {
@@ -348,11 +416,34 @@ const StudentDashboard: React.FC = () => {
     upcoming: "Upcoming",
   };
 
-  if (!profileLoaded || !session) {
+  // ✅ FIX 3 APPLIED: Sort timetable by day and time
+  const sortedTimetable = useMemo(() => {
+    const dayOrder: Record<string, number> = {
+      'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 7
+    };
+
+    return [...filteredTimetable].sort((a, b) => {
+      // 1. Sort by Day
+      const dayA = dayOrder[a.day] || 99;
+      const dayB = dayOrder[b.day] || 99;
+      if (dayA !== dayB) return dayA - dayB;
+
+      // 2. Sort by Time (if days are the same)
+      const timeA = parseLessonDate(a.time, new Date()).getTime();
+      const timeB = parseLessonDate(b.time, new Date()).getTime();
+      return timeA - timeB;
+    });
+  }, [filteredTimetable]);
+
+
+  // ✅ FIX 2 APPLIED: Show loader while auth is resolving
+  if (authLoading || (!profileLoaded && !profileError)) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
         <Loader2 className="animate-spin text-indigo-600 mb-4" size={40} />
-        <p className="font-black text-slate-400 uppercase tracking-widest text-xs">Synchronizing Portal...</p>
+        <p className="font-black text-slate-400 uppercase tracking-widest text-xs">
+          Synchronizing Portal...
+        </p>
       </div>
     );
   }
@@ -363,8 +454,10 @@ const StudentDashboard: React.FC = () => {
         <div className="max-w-md bg-white p-10 rounded-3xl shadow-xl text-center">
           <AlertCircle className="mx-auto text-rose-500 mb-4" size={48} />
           <h2 className="text-xl font-black mb-2">Access Error</h2>
-          <p className="text-sm text-slate-500 mb-6">{profileError || "Unable to load your profile"}</p>
-          <Button onClick={handleLogout} variant="outline">Return to Login</Button>
+          <p className="text-sm text-slate-500 mb-6">{profileError || "Unable to load your profile."}</p>
+          <Button onClick={handleLogout} variant="outline">
+            Return to Login
+          </Button>
         </div>
       </div>
     );
@@ -376,8 +469,12 @@ const StudentDashboard: React.FC = () => {
         <div className="max-w-md bg-white p-10 rounded-3xl shadow-xl text-center">
           <AlertCircle className="mx-auto text-rose-500 mb-4" size={48} />
           <h2 className="text-xl font-black mb-2">Access Restricted</h2>
-          <p className="text-sm text-slate-500 mb-6">{profile.lockReason || "Please settle pending invoices."}</p>
-          <Button onClick={handleLogout} variant="outline">Logout</Button>
+          <p className="text-sm text-slate-500 mb-6">
+            {profile.lockReason || "Please settle pending invoices."}
+          </p>
+          <Button onClick={handleLogout} variant="outline">
+            {session?.isParentView ? "Back to Dashboard" : "Logout"}
+          </Button>
         </div>
       </div>
     );
@@ -393,14 +490,28 @@ const StudentDashboard: React.FC = () => {
               <h1 className="text-lg font-black leading-tight">
                 {profile.firstName} {profile.lastName}
               </h1>
-              <Badge className="w-fit bg-indigo-50 text-indigo-600 text-[10px] border-none">
-                Grade {profile.grade}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge className="w-fit bg-indigo-50 text-indigo-600 text-[10px] border-none">
+                  Grade {profile.grade}
+                </Badge>
+                {/* ✅ Show parent view indicator */}
+                {session?.isParentView && (
+                  <Badge className="bg-amber-50 text-amber-600 text-[10px] border-none">
+                    Parent View
+                  </Badge>
+                )}
+              </div>
             </div>
           </div>
 
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-slate-400 hover:text-rose-500">
-            <LogOut size={16} className="mr-2" /> Logout
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="text-slate-400 hover:text-rose-500"
+          >
+            <LogOut size={16} className="mr-2" />
+            {session?.isParentView ? "Back to Dashboard" : "Logout"}
           </Button>
         </div>
 
@@ -437,13 +548,32 @@ const StudentDashboard: React.FC = () => {
             </div>
 
             {profile && (
-              <NextClassCountdownCard userUid={profile.id} role="student" grade={profile.grade} />
+              <NextClassCountdownCard
+                userUid={profile.id}
+                role={session?.isParentView ? "parent" : "student"}
+                grade={profile.grade}
+              />
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <StatCard icon={CalendarIcon} title="Today's Lessons" value={todayClasses.length} color="indigo" />
-              <StatCard icon={BookOpen} title="Weekly Lessons" value={timetable.length} color="amber" />
-              <StatCard icon={Video} title="Resources" value={classLinks.length} color="emerald" />
+              <StatCard
+                icon={CalendarIcon}
+                title="Today's Lessons"
+                value={todayClasses.length}
+                color="indigo"
+              />
+              <StatCard
+                icon={BookOpen}
+                title="Weekly Lessons"
+                value={filteredTimetable.length}
+                color="amber"
+              />
+              <StatCard
+                icon={Video}
+                title="Resources"
+                value={classLinks.length}
+                color="emerald"
+              />
             </div>
 
             <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
@@ -469,7 +599,9 @@ const StudentDashboard: React.FC = () => {
                             </span>
                           </div>
                           <div>
-                            <h4 className="font-black text-slate-800 text-sm uppercase">{item.subject}</h4>
+                            <h4 className="font-black text-slate-800 text-sm uppercase">
+                              {item.subject}
+                            </h4>
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                               {item.teacherName}
                             </p>
@@ -484,7 +616,9 @@ const StudentDashboard: React.FC = () => {
                     );
                   })
                 ) : (
-                  <div className="text-center py-12 text-slate-400">No lessons scheduled for today.</div>
+                  <div className="text-center py-12 text-slate-400">
+                    No lessons scheduled for today.
+                  </div>
                 )}
               </div>
             </div>
@@ -504,7 +638,8 @@ const StudentDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {timetable.map((entry) => (
+                {/* ✅ Now using the sorted list */}
+                {sortedTimetable.map((entry) => (
                   <tr key={entry.id} className="hover:bg-slate-50/70">
                     <td className="p-6 font-black text-slate-800 text-xs uppercase">{entry.day}</td>
                     <td className="p-6 font-bold text-slate-500 text-xs">{entry.time}</td>
@@ -516,6 +651,13 @@ const StudentDashboard: React.FC = () => {
                     <td className="p-6 text-xs font-bold text-slate-400">{entry.teacherName}</td>
                   </tr>
                 ))}
+                {sortedTimetable.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="p-10 text-center text-slate-400 text-sm">
+                      No timetable entries found.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -567,6 +709,12 @@ const StudentDashboard: React.FC = () => {
                   </Button>
                 </div>
               ))}
+
+              {filteredLinks.length === 0 && (
+                <div className="col-span-3 text-center py-16 text-slate-400">
+                  No resources found.
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -578,9 +726,3 @@ const StudentDashboard: React.FC = () => {
 };
 
 export default StudentDashboard;
-
-
-
-
-
-
