@@ -88,6 +88,7 @@ interface Student {
   createdBy: string;        // parent uid
   createdAt: any;           // Firestore Timestamp
   updatedAt?: any;
+  user: string;
 }
 
 
@@ -99,6 +100,7 @@ interface TimetableEntry {
   time: string;
   teacherName: string;
   curriculum: "CAPS" | "British Curriculum";
+  user: string;
 }
 
 interface Announcement {
@@ -107,6 +109,7 @@ interface Announcement {
   body: string;
   createdAt?: any;
   author: string;
+  user: string;
 }
 
 /* ======================================================
@@ -205,6 +208,7 @@ export default function ParentDashboard() {
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [pendingInvoiceCount, setPendingInvoiceCount] = useState(0);
   const [showReview, setShowReview] = useState(true);
+
 
 
 
@@ -369,6 +373,7 @@ export default function ParentDashboard() {
             setSelectedChildId={setSelectedChildId}
             timetable={timetable}
             announcements={announcements}
+            user={user}
           />
         );
       case "Registration":
@@ -438,64 +443,52 @@ export default function ParentDashboard() {
     const student = students.find(s => s.id === studentId);
     if (!student) return;
 
-    // If credentials already exist in Firestore, use them
-    if (student.username && student.rawPassword) {
+    // Pre-fill with existing username if already set, otherwise generate default
+    if (student.username) {
       setNewStudentUsername(student.username);
-      setNewStudentPassword(student.rawPassword);
     } else {
-      // Otherwise, generate defaults for a new setup
       const defaultUser = `${student.firstName.toLowerCase()}.${student.lastName.toLowerCase()}`;
-      const randomPass = Math.random().toString(36).slice(-8).toUpperCase();
       setNewStudentUsername(defaultUser);
-      setNewStudentPassword(randomPass);
     }
+
     setSelectedStudentForLogin(studentId);
   };
-  // 3. Updated Logic to Update Existing Student
+
+  // ============================================================
+  // REPLACE createStudentLogin — saves username only, no password
+  // ============================================================
   const createStudentLogin = async () => {
-    if (!selectedStudentForLogin || !newStudentUsername || !newStudentPassword) {
-      alert("Please select a student and ensure credentials are set.");
+    if (!selectedStudentForLogin || !newStudentUsername.trim()) {
+      alert("Please select a student and enter a username.");
       return;
     }
 
     setCreatingStudent(true);
 
     try {
-      // Basic hash for demo (btoa)
-      const passwordHash = btoa(newStudentPassword);
-
       const studentRef = doc(db, "students", selectedStudentForLogin);
 
-      // Use updateDoc to add credentials to the existing student record
       await updateDoc(studentRef, {
-        username: newStudentUsername,
-        passwordHash: passwordHash,
-        rawPassword: newStudentPassword, // Stored so parent can see it later if needed
+        username: newStudentUsername.trim().toLowerCase().replace(/\s+/g, ""),
         loginEnabled: true,
+        // Clear any old password fields so login can't accidentally use them
+        passwordHash: null,
+        rawPassword: null,
         updatedAt: new Date(),
       });
 
-      alert("Credentials successfully linked to " + newStudentUsername);
+      alert(`Login username set to: ${newStudentUsername.trim().toLowerCase().replace(/\s+/g, "")}`);
 
-      // Clear form
       setNewStudentUsername("");
-      setNewStudentPassword("");
       setSelectedStudentForLogin("");
     } catch (err) {
-      console.error("Link error:", err);
-      alert("Failed to create login.");
+      console.error("Username update error:", err);
+      alert("Failed to set username. Please try again.");
     } finally {
       setCreatingStudent(false);
     }
   };
 
-  // Manual save password
-  // Standalone function for the Refresh Button in your JSX
-  const handleManualPasswordReset = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevents triggering any parent click events
-    const pass = Math.random().toString(36).slice(-8).toUpperCase();
-    setNewStudentPassword(pass);
-  };
 
   const saveProfileAndContinue = async () => {
     if (!fullName || !contact || !address) {
@@ -531,6 +524,7 @@ export default function ParentDashboard() {
       alert("System error: Could not save profile.");
     }
   };
+
 
   if (loading) {
     return (
@@ -611,22 +605,34 @@ export default function ParentDashboard() {
                 </h2>
                 {!isPasswordCardOpen && (
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                    Click to manage usernames and passwords
+                    Click to set or update student username
                   </p>
                 )}
               </div>
             </div>
-
             <div className={`transition-transform duration-300 ${isPasswordCardOpen ? 'rotate-180' : 'rotate-0'}`}>
               <ChevronDown size={28} className="text-slate-300" />
             </div>
           </button>
 
           {/* EXPANDABLE CONTENT */}
-          <div className={`transition-all duration-300 ease-in-out ${isPasswordCardOpen ? 'max-h-[1000px] opacity-100 p-10 pt-0' : 'max-h-0 opacity-0 pointer-events-none'}`}>
-            <div className="space-y-8 border-t border-slate-50 pt-8">
+          <div className={`transition-all duration-300 ease-in-out ${isPasswordCardOpen ? 'max-h-[600px] opacity-100 p-10 pt-0' : 'max-h-0 opacity-0 pointer-events-none'}`}>
+            <div className="space-y-6 border-t border-slate-50 pt-8">
+
+              {/* Info banner */}
+              <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 flex items-start gap-3">
+                <div className="mt-0.5 text-indigo-500">
+                  <AlertCircle size={16} />
+                </div>
+                <p className="text-xs text-indigo-700 font-medium leading-relaxed">
+                  Students log in using their <strong>username only</strong> — no password required.
+                  Set a simple, memorable username for your child below.
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Step 1: Select Existing Student */}
+
+                {/* Step 1: Select Student */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
                     1. Select Registered Student
@@ -651,89 +657,52 @@ export default function ParentDashboard() {
                 {/* Step 2: Username */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
-                    2. Assigned Username
+                    2. Set Login Username
                   </label>
                   <Input
-                    placeholder="Username"
+                    placeholder="e.g. jane.smith or janey"
                     value={newStudentUsername}
                     onChange={(e) => setNewStudentUsername(e.target.value)}
                     className="h-14 rounded-2xl border-2 border-slate-100 font-bold"
                   />
-                </div>
-
-
-                {/* Step 3: Password with Toggle and Randomizer */}
-                <div className="space-y-2 md:col-span-2">
-                  <div className="flex justify-between items-center px-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                      3. Access Password
-                    </label>
-                    {newStudentPassword && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const text = `Username: ${newStudentUsername}\nPassword: ${newStudentPassword}`;
-                          navigator.clipboard.writeText(text);
-                          alert("Credentials copied to clipboard!");
-                        }}
-                        className="text-[9px] font-black text-indigo-600 uppercase hover:underline"
-                      >
-                        Copy Credentials
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="relative group">
-                    <Input
-                      placeholder="Password"
-                      type={showPassword ? "text" : "password"}
-                      value={newStudentPassword}
-                      onChange={(e) => setNewStudentPassword(e.target.value)}
-                      className="h-14 rounded-2xl border-2 border-slate-100 font-bold pr-32 focus:border-indigo-500 transition-all bg-white"
-                    />
-
-                    <div className="absolute right-2 top-2 flex gap-1 bg-white pl-2">
-                      {/* VISIBILITY TOGGLE */}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="h-10 w-10 p-0 rounded-xl hover:bg-slate-50"
-                      >
-                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                      </Button>
-
-                      {/* MANUAL REFRESH BUTTON */}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        type="button"
-                        onClick={handleManualPasswordReset}
-                        title="Generate New Password"
-                        className="h-10 w-10 p-0 rounded-xl text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 transition-colors border border-transparent hover:border-indigo-100"
-                      >
-                        <RefreshCw size={16} />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <p className="text-[9px] text-slate-400 ml-2 font-medium italic">
-                    * This password is encrypted. Use the refresh icon only if you wish to overwrite the current password.
-                  </p>
+                  {/* Show normalised preview so parent knows exactly what gets saved */}
+                  {newStudentUsername && (
+                    <p className="text-[10px] text-indigo-500 ml-2 font-bold">
+                      Will be saved as:{" "}
+                      <span className="font-black">
+                        {newStudentUsername.trim().toLowerCase().replace(/\s+/g, "")}
+                      </span>
+                    </p>
+                  )}
                 </div>
 
               </div>
+
+              {/* Current username display if already set */}
+              {selectedStudentForLogin && (() => {
+                const s = students.find(st => st.id === selectedStudentForLogin);
+                return s?.username ? (
+                  <div className="bg-slate-50 rounded-2xl px-5 py-3 flex items-center justify-between">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      Current Username
+                    </span>
+                    <span className="font-black text-slate-700 text-sm">{s.username}</span>
+                  </div>
+                ) : null;
+              })()}
+
             </div>
           </div>
 
+          {/* SAVE BUTTON — always visible at bottom */}
           <Button
             onClick={createStudentLogin}
-            disabled={creatingStudent || !selectedStudentForLogin}
-            className="w-full h-16 bg-indigo-600 hover:bg-indigo-700 text-white rounded-[1.5rem] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 transition-all active:scale-95"
+            disabled={creatingStudent || !selectedStudentForLogin || !newStudentUsername.trim()}
+            className="w-full h-16 bg-indigo-600 hover:bg-indigo-700 text-white rounded-[1.5rem] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 transition-all active:scale-95 disabled:opacity-50"
           >
-            {creatingStudent ? "Syncing..." : "Enable Student Access"}
+            {creatingStudent ? "Saving..." : "Save Username & Enable Access"}
           </Button>
+
         </div>
 
 
@@ -825,12 +794,14 @@ function OverviewSection({
   setSelectedChildId,
   timetable,
   announcements,
+  user
 }: {
   students: Student[];
   selectedChildId: string | null;
   setSelectedChildId: (id: string) => void;
   timetable: TimetableEntry[];
   announcements: Announcement[];
+  user: string;
 }) {
   const selectedChild = useMemo(
     () => students.find((s) => s.id === selectedChildId) || null,
@@ -893,7 +864,24 @@ function OverviewSection({
             <HybridSwitch student={selectedChild} />
             <Button
               size="lg"
-              onClick={() => window.open(`/student-dashboard/${selectedChild.id}`, "_blank")}
+              onClick={() => {
+                if (!selectedChild?.id) return;
+                localStorage.setItem(
+                  `parentViewSession_${selectedChild.id}`,
+                  JSON.stringify({
+                    studentId: selectedChild.id,
+                    firstName: selectedChild.firstName,
+                    lastName: selectedChild.lastName,
+                    grade: selectedChild.grade,
+                    role: "student",
+                    isParentView: true,
+                    parentUid: user?.uid,
+                    loginMethod: "parent-view",
+                    loginTime: Date.now(),
+                  })
+                );
+                window.open(`/student-dashboard/${selectedChild.id}`, "_blank");
+              }}
               className="bg-emerald-600 hover:bg-emerald-700 h-12"
             >
               <ExternalLink className="w-5 h-5 mr-2" /> Child Portal

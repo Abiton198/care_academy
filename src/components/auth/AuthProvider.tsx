@@ -5,15 +5,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db } from "@/lib/firebaseConfig";
 import { doc, getDoc } from "firebase/firestore";
 
-/* ============================================================
-   TYPES
-============================================================ */
-export type UserRole =
-  | "parent"
-  | "teacher"
-  | "principal"
-  | "admin"
-  | "student";
+export type UserRole = "parent" | "teacher" | "principal" | "admin" | "student";
 
 export interface AppUser {
   uid: string;
@@ -26,9 +18,6 @@ export interface AppUser {
   parentId?: string;
 }
 
-/* ============================================================
-   CONTEXT
-============================================================ */
 interface AuthContextType {
   user: AppUser | null;
   loading: boolean;
@@ -40,14 +29,11 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  logoutStudent: () => {},
-  logoutParent: async () => {},
-  logoutAll: async () => {},
+  logoutStudent: () => { },
+  logoutParent: async () => { },
+  logoutAll: async () => { },
 });
 
-/* ============================================================
-   PROVIDER
-============================================================ */
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,71 +43,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setLoading(true);
 
       /* ===============================
-         1️⃣ STUDENT SESSION (NO FIREBASE)
+         1️⃣ ANONYMOUS USER = STUDENT SESSION
       =============================== */
-      const studentSessionRaw = sessionStorage.getItem("studentSession");
+      if (firebaseUser?.isAnonymous) {
+        const studentSessionRaw = sessionStorage.getItem("studentSession");
 
-      if (!firebaseUser && studentSessionRaw) {
-        try {
-          const studentData = JSON.parse(studentSessionRaw);
-
-          let parentName = studentData.parentName;
-
-          if (studentData.parentId && !parentName) {
-            const parentDoc = await getDoc(
-              doc(db, "users", studentData.parentId)
-            );
-            if (parentDoc.exists()) {
-              const p = parentDoc.data();
-              parentName =
-                `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Parent";
-              studentData.parentName = parentName;
-              sessionStorage.setItem(
-                "studentSession",
-                JSON.stringify(studentData)
-              );
-            }
-          }
-
-          setUser({
-            uid: studentData.uid,
-            role: "student",
-            firstName: studentData.firstName || "Student",
-            lastName: studentData.lastName || "",
-            parentName,
-            parentId: studentData.parentId,
-          });
-        } catch (e) {
-          console.error("Student session error:", e);
-          sessionStorage.removeItem("studentSession");
-        }
-
-        setLoading(false);
-        return;
-      }
-
-      /* ===============================
-         2️⃣ FIREBASE USERS (PARENT/STAFF)
-      =============================== */
-      if (firebaseUser) {
-        try {
-          const snap = await getDoc(doc(db, "users", firebaseUser.uid));
-          if (snap.exists()) {
-            const data = snap.data();
-
+        if (studentSessionRaw) {
+          try {
+            const studentData = JSON.parse(studentSessionRaw);
             setUser({
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              role: data.role,
-              firstName: data.firstName || "",
-              lastName: data.lastName || "",
+              uid: firebaseUser.uid, // ✅ real anon uid
+              role: "student",
+              firstName: studentData.firstName || "Student",
+              lastName: studentData.lastName || "",
+              parentName: studentData.parentName,
+              parentId: studentData.parentId,
             });
-          } else {
+          } catch {
+            sessionStorage.removeItem("studentSession");
             await signOut(auth);
             setUser(null);
           }
-        } catch (err) {
-          console.error("Auth sync failed:", err);
+        } else {
+          // Stale anon auth with no session — clean up
+          await signOut(auth);
           setUser(null);
         }
 
@@ -130,28 +75,92 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       /* ===============================
-         3️⃣ NO SESSION
+         2️⃣ NO FIREBASE USER — check storage fallback
       =============================== */
-      setUser(null);
+      if (!firebaseUser) {
+        const studentSessionRaw = sessionStorage.getItem("studentSession");
+
+        if (studentSessionRaw) {
+          try {
+            const studentData = JSON.parse(studentSessionRaw);
+
+            let parentName = studentData.parentName;
+            if (studentData.parentId && !parentName) {
+              const parentDoc = await getDoc(
+                doc(db, "users", studentData.parentId)
+              );
+              if (parentDoc.exists()) {
+                const p = parentDoc.data();
+                parentName =
+                  `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Parent";
+                studentData.parentName = parentName;
+                sessionStorage.setItem(
+                  "studentSession",
+                  JSON.stringify(studentData)
+                );
+              }
+            }
+
+            setUser({
+              uid: studentData.studentId, // doc ID as uid fallback
+              role: "student",
+              firstName: studentData.firstName || "Student",
+              lastName: studentData.lastName || "",
+              parentName,
+              parentId: studentData.parentId,
+            });
+          } catch {
+            sessionStorage.removeItem("studentSession");
+            setUser(null);
+          }
+        } else {
+          setUser(null);
+        }
+
+        setLoading(false);
+        return;
+      }
+
+      /* ===============================
+         3️⃣ NAMED FIREBASE USER = PARENT / STAFF
+      =============================== */
+      try {
+        const snap = await getDoc(doc(db, "users", firebaseUser.uid));
+        if (snap.exists()) {
+          const data = snap.data();
+          setUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            role: data.role,
+            firstName: data.firstName || "",
+            lastName: data.lastName || "",
+          });
+        } else {
+          // Named user but no /users doc — sign out
+          await signOut(auth);
+          setUser(null);
+        }
+      } catch (err) {
+        console.error("Auth sync failed:", err);
+        setUser(null);
+      }
+
       setLoading(false);
     });
 
     return () => unsub();
   }, []);
 
-  /* ============================================================
-     LOGOUTS
-  ============================================================ */
-
   const logoutStudent = () => {
     sessionStorage.removeItem("studentSession");
+    signOut(auth).catch(() => { });
     setUser(null);
     window.location.href = "/";
   };
 
   const logoutParent = async () => {
     sessionStorage.removeItem("studentSession");
-    await signOut(auth); // 🔑 REQUIRED
+    await signOut(auth);
     setUser(null);
     window.location.href = "/";
   };
@@ -164,21 +173,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        logoutStudent,
-        logoutParent,
-        logoutAll,
-      }}
-    >
+    <AuthContext.Provider value={{ user, loading, logoutStudent, logoutParent, logoutAll }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-/* ============================================================
-   HOOK
-============================================================ */
 export const useAuth = () => useContext(AuthContext);

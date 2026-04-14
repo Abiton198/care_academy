@@ -45,9 +45,13 @@ import {
 import { Loader2, AlertCircle, X, Eye, EyeOff } from "lucide-react";
 
 import TeacherApplicationModal from "../dashboards/TeacherApplicationModal";
+import { useNavigate } from "react-router-dom";
 
 export default function LoginForm() {
   const redirectedRef = useRef(false);
+
+  // ✅ FIX 1: Flag to block onAuthStateChanged from interfering during student login
+  const isStudentLoginRef = useRef(false);
 
   /* ================================
      UI STATE
@@ -67,6 +71,8 @@ export default function LoginForm() {
 
   const [error, setError] = useState<string | null>(null);
 
+  const navigate = useNavigate();
+
   /* ================================
      TEACHER MODAL STATE
   ================================== */
@@ -84,6 +90,12 @@ export default function LoginForm() {
   ================================== */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
+      // ✅ FIX 1 APPLIED: Skip listener entirely during student login flow
+      if (isStudentLoginRef.current) {
+        setLoading(false);
+        return;
+      }
+
       if (!user || redirectedRef.current || user.isAnonymous) {
         setLoading(false);
         return;
@@ -187,11 +199,11 @@ export default function LoginForm() {
   };
 
   /* ================================
-     STUDENT LOGIN (Fixed & Clean)
+     STUDENT LOGIN — FIXED
   ================================== */
   const handleStudentLogin = async () => {
-    if (!username || !password) {
-      setError("Please enter username and password.");
+    if (!username.trim()) {
+      setError("Please enter your username.");
       return;
     }
 
@@ -199,91 +211,61 @@ export default function LoginForm() {
     setError(null);
 
     try {
-      // ✅ Normalize input username
       const normalizedUsername = username
+        .trim()
         .toLowerCase()
-        .replace(/\s+/g, "")   // remove ALL spaces
-        .trim();
+        .replace(/\s+/g, "");
 
-      // Step 1: Anonymous login
-      const anonCred = await signInAnonymously(auth);
-      const anonUid = anonCred.user.uid;
+      const q = query(
+        collection(db, "students"),
+        where("username", "==", normalizedUsername)
+      );
 
-      // ⚠️ Step 2: Fetch students (LIMITED for safety)
-      const q = query(collection(db, "students"));
       const snap = await getDocs(q);
 
       if (snap.empty) {
-        throw new Error("No students found.");
+        setError("Student not found. Please check your username.");
+        return;
       }
 
-      // ✅ Step 3: Find matching student manually
-      let studentDoc = null;
-
-      snap.forEach((docSnap) => {
-        const data = docSnap.data();
-
-        if (!data.username) return;
-
-        const dbUsername = data.username
-          .toLowerCase()
-          .replace(/\s+/g, "") // normalize DB username
-          .trim();
-
-        if (dbUsername === normalizedUsername) {
-          studentDoc = docSnap;
-        }
-      });
-
-      if (!studentDoc) {
-        throw new Error("Invalid username or password.");
+      if (snap.size > 1) {
+        setError("Duplicate username detected. Contact admin.");
+        return;
       }
 
-      const student: any = studentDoc.data();
+      const studentDoc = snap.docs[0];
+      const student = studentDoc.data();
 
-      // Step 4: Check login enabled
-      if (!student.loginEnabled) {
-        throw new Error("Login disabled. Contact admin.");
+      if (student.loginEnabled === false) {
+        setError("Student login has been disabled.");
+        return;
       }
 
-      // Step 5: Verify password
-      if (btoa(password) !== student.passwordHash) {
-        throw new Error("Invalid username or password.");
-      }
+      const safeStudent = {
+        studentId: studentDoc.id,
+        firstName: student.firstName ?? "Student",
+        lastName: student.lastName ?? "",
+        grade: student.grade ?? "N/A",
+        role: "student",
+        loginMethod: "username-only",
+        loginTime: Date.now(),
+      };
 
-      // Step 6: Link session
-      await updateDoc(doc(db, "students", studentDoc.id), {
-        sessionUid: anonUid,
-        lastLogin: serverTimestamp(),
-      });
+      sessionStorage.setItem("studentSession", JSON.stringify(safeStudent));
 
-      // Step 7: Store session
-      sessionStorage.setItem(
-        "studentSession",
-        JSON.stringify({
-          studentId: studentDoc.id,
-          firstName: student.firstName || "",
-          lastName: student.lastName || "",
-          grade: student.grade || "",
-          curriculum: student.curriculum || "",
-          subjects: student.subjects || [],
-          role: "student",
-        })
-      );
+      // ✅ smoother navigation
+      navigate(`/student-dashboard/${studentDoc.id}`);
 
-      // Step 8: Redirect
-      window.location.href = `/student-dashboard/${studentDoc.id}`;
-
-    } catch (err: any) {
+    } catch (err) {
       console.error("Student login error:", err);
-      setError(err.message || "Login failed. Please check your credentials.");
+      setError("Something went wrong. Please try again.");
     } finally {
       setStudentLoading(false);
     }
   };
 
   /* ================================
-     TEACHER APPLICATION HANDLER - FIXED
+     TEACHER APPLICATION HANDLER
   ================================== */
   const handleTeacherSubmitted = async () => {
     if (!teacherUid) return;
@@ -339,7 +321,7 @@ export default function LoginForm() {
             </Alert>
           )}
 
-          <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
+          <Tabs value={tab} onValueChange={(v) => { setTab(v as any); setError(null); }}>
             <TabsList className="grid grid-cols-3 bg-slate-100 rounded-2xl p-1">
               <TabsTrigger value="signin">Sign In</TabsTrigger>
               <TabsTrigger value="student">Student</TabsTrigger>
@@ -353,6 +335,7 @@ export default function LoginForm() {
                 placeholder="Email Address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleEmailLogin()}
               />
               <div className="relative">
                 <Input
@@ -360,36 +343,52 @@ export default function LoginForm() {
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleEmailLogin()}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-3"
+                  className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
               <Button className="w-full" onClick={handleEmailLogin} disabled={authLoading}>
-                {authLoading ? <Loader2 className="animate-spin" /> : "Sign In"}
+                {authLoading ? <Loader2 className="animate-spin mr-2" size={16} /> : "Sign In"}
               </Button>
             </TabsContent>
 
-            {/* Student Login Tab */}
+            {/* Student Login Tab - Username Only (Simplified) */}
             <TabsContent value="student" className="space-y-4">
-              <Input
-                placeholder="Username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
-              <Input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              <Button className="w-full" onClick={handleStudentLogin} disabled={studentLoading}>
-                {studentLoading ? <Loader2 className="animate-spin" /> : "Access Dashboard"}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-600">Student Username</label>
+                <Input
+                  placeholder="Enter your username (e.g. donald (dj).van aswegen)"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleStudentLogin()}
+                  autoComplete="off"
+                  className="h-12"
+                />
+              </div>
+
+              <Button
+                className="w-full bg-indigo-600 hover:bg-indigo-700 h-12 text-base font-semibold"
+                onClick={handleStudentLogin}
+                disabled={studentLoading || !username.trim()}
+              >
+                {studentLoading ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="animate-spin" size={18} /> Accessing Dashboard...
+                  </span>
+                ) : (
+                  "Access My Dashboard"
+                )}
               </Button>
+
+              <p className="text-center text-xs text-slate-500 mt-4">
+                No password required • Just type your username
+              </p>
             </TabsContent>
 
             {/* Register Tab */}
@@ -409,18 +408,27 @@ export default function LoginForm() {
             </TabsContent>
           </Tabs>
 
-          <Button variant="secondary" className="w-full" onClick={handleGoogle} disabled={authLoading}>
-            {authLoading ? <Loader2 className="animate-spin" /> : "Continue with Google"}
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={handleGoogle}
+            disabled={authLoading}
+          >
+            {authLoading ? (
+              <Loader2 className="animate-spin mr-2" size={16} />
+            ) : (
+              "Continue with Google"
+            )}
           </Button>
         </CardContent>
       </Card>
 
-      {/* Teacher Modal - Now properly connected */}
+      {/* Teacher Modal */}
       <TeacherApplicationModal
         open={showTeacherModal}
         userId={teacherUid}
         applicationId={teacherUid}
-        onSubmitted={handleTeacherSubmitted}   // ← Now safely defined above
+        onSubmitted={handleTeacherSubmitted}
         onClose={() => setShowTeacherModal(false)}
       />
 
@@ -429,7 +437,7 @@ export default function LoginForm() {
         href="https://wa.me/27656564983"
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed bottom-6 right-6 bg-green-500 text-white px-5 py-3 rounded-full shadow-lg hover:bg-green-600"
+        className="fixed bottom-6 right-6 bg-green-500 text-white px-5 py-3 rounded-full shadow-lg hover:bg-green-600 transition-colors"
       >
         WhatsApp
       </a>
