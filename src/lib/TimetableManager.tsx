@@ -101,7 +101,7 @@ const TimetableManager: React.FC = () => {
     ["Stage 4", "Stage 5"],
     ["IGCSE 1 (Yr 10)", "IGCSE 2 (Yr 11)", "Checkpoint (Yr 7-9)"],
     ["AS Level", "A Level"],
-    ["Checkpoint", "IGCSE 1 (Yr 10)"] 
+    ["Checkpoint", "IGCSE 1 (Yr 10)"]
   ];
 
   useEffect(() => {
@@ -110,7 +110,7 @@ const TimetableManager: React.FC = () => {
       const fetched = snap.docs.map((d) => {
         const data = d.data();
         return {
-          id: data.uid || d.id, 
+          id: data.uid || d.id,
           name: `${data.personalInfo?.firstName || ""} ${data.personalInfo?.lastName || ""}`.trim(),
           subjects: data.subjects?.map((s: any) => s.name) || [],
         };
@@ -139,93 +139,93 @@ const TimetableManager: React.FC = () => {
   }, [subject, teachers]);
 
   // ✅ Main creation function with conflict checks and grade expansion
- const createSlot = async () => {
-  if (!day || !time || !grade || !subject || !selectedTeacherId) {
-    alert("Validation Failed: Please ensure all 5 fields are selected.");
-    return;
-  }
-
-  setIsSaving(true);
-
-  const teacherObj = teachers.find(t => t.id === selectedTeacherId);
-
-  try {
-
-    // ✅ If All Grades selected → expand to every real grade
-    const gradesToCreate =
-      grade === "All Grades"
-        ? CAMBRIDGE_GRADES.filter(g => g !== "All Grades")
-        : [grade];
-
-    // ✅ Loop and create each entry
-    for (const g of gradesToCreate) {
-
-      // Teacher conflict check
-      const teacherBusy = entries.some(e => {
-        const isSameTime =
-          e.day === day &&
-          e.time === time &&
-          e.teacherUid === selectedTeacherId;
-
-        if (!isSameTime) return false;
-
-        const isCoTeachingStage = allowedOverlaps.some(pair =>
-          pair.includes(g.trim()) && pair.includes(e.grade.trim())
-        );
-
-        return !isCoTeachingStage;
-      });
-
-      if (teacherBusy) {
-        alert(`Teacher Conflict detected. Cannot assign ${teacherObj?.name} to multiple grades at this time.`);
-        setIsSaving(false);
-        return;
-      }
-
-      // Class conflict check
-      const classExists = entries.some(
-        e =>
-          e.day === day &&
-          e.time === time &&
-          e.grade === g &&
-          e.subject === subject
-      );
-
-      if (classExists) {
-        console.warn(`Skipping existing slot for ${g}`);
-        continue;
-      }
-
-      // Create entry
-      await addDoc(collection(db, "timetable"), {
-        day,
-        time,
-        grade: g,
-        subject,
-        curriculum: "Cambridge",
-        teacherName: teacherObj?.name || "Unknown",
-        teacherUid: selectedTeacherId,
-        createdAt: serverTimestamp(),
-      });
-
+  const createSlot = async () => {
+    if (!day || !time || !grade || !subject || !selectedTeacherId) {
+      alert("Validation Failed: Please ensure all 5 fields are selected.");
+      return;
     }
 
-    alert(
-      grade === "All Grades"
-        ? "Slot published for ALL grades successfully!"
-        : "Slot published successfully!"
-    );
+    setIsSaving(true);
 
-    setSubject("");
-    setSelectedTeacherId("");
+    const teacherObj = teachers.find(t => t.id === selectedTeacherId);
 
-  } catch (err: any) {
-    console.error(err);
-    alert(err.message);
-  }
+    try {
 
-  setIsSaving(false);
-};
+      // ✅ If All Grades selected → expand to every real grade
+      const gradesToCreate =
+        grade === "All Grades"
+          ? CAMBRIDGE_GRADES.filter(g => g !== "All Grades")
+          : [grade];
+
+      // ✅ Loop and create each entry
+      for (const g of gradesToCreate) {
+
+        // Teacher conflict check
+        const teacherBusy = entries.some(e => {
+          const isSameTime =
+            e.day === day &&
+            e.time === time &&
+            e.teacherUid === selectedTeacherId;
+
+          if (!isSameTime) return false;
+
+          const isCoTeachingStage = allowedOverlaps.some(pair =>
+            pair.includes(g.trim()) && pair.includes(e.grade.trim())
+          );
+
+          return !isCoTeachingStage;
+        });
+
+        if (teacherBusy) {
+          alert(`Teacher Conflict detected. Cannot assign ${teacherObj?.name} to multiple grades at this time.`);
+          setIsSaving(false);
+          return;
+        }
+
+        // Class conflict check
+        const classExists = entries.some(
+          e =>
+            e.day === day &&
+            e.time === time &&
+            e.grade === g &&
+            e.subject === subject
+        );
+
+        if (classExists) {
+          console.warn(`Skipping existing slot for ${g}`);
+          continue;
+        }
+
+        // Create entry
+        await addDoc(collection(db, "timetable"), {
+          day,
+          time,
+          grade: g,
+          subject,
+          curriculum: "Cambridge",
+          teacherName: teacherObj?.name || "Unknown",
+          teacherUid: selectedTeacherId,
+          createdAt: serverTimestamp(),
+        });
+
+      }
+
+      alert(
+        grade === "All Grades"
+          ? "Slot published for ALL grades successfully!"
+          : "Slot published successfully!"
+      );
+
+      setSubject("");
+      setSelectedTeacherId("");
+
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message);
+    }
+
+    setIsSaving(false);
+  };
 
   const deleteSlot = async (id: string) => {
     if (confirm("Permanently delete this class entry?")) {
@@ -237,7 +237,7 @@ const TimetableManager: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      
+
       {/* SELECTION TRACKER */}
       <div className="bg-slate-900 p-4 rounded-3xl shadow-2xl flex flex-wrap gap-6 items-center justify-center border border-slate-800">
         <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mr-2">Scheduler Active:</p>
@@ -260,7 +260,7 @@ const TimetableManager: React.FC = () => {
             </div>
           </div>
         </div>
-        
+
         <CardContent className="p-8">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-end">
             <div className="space-y-3">
@@ -306,12 +306,12 @@ const TimetableManager: React.FC = () => {
               </Select>
             </div>
 
-            <Button 
+            <Button
               onClick={createSlot}
               disabled={isSaving}
               className="w-full bg-indigo-600 hover:bg-slate-900 text-white font-black rounded-2xl h-12 shadow-lg transition-all"
             >
-              {isSaving ? <Loader2 className="animate-spin" size={18} /> : <><Plus size={18} className="mr-2"/> PUBLISH SLOT</>}
+              {isSaving ? <Loader2 className="animate-spin" size={18} /> : <><Plus size={18} className="mr-2" /> PUBLISH SLOT</>}
             </Button>
           </div>
         </CardContent>
@@ -323,7 +323,7 @@ const TimetableManager: React.FC = () => {
           // Sort entries by time and then by grade to keep them organized
           const dayEntries = entries
             .filter(e => e.day === d)
-            .sort((a,b) => a.time.localeCompare(b.time) || a.grade.localeCompare(b.grade));
+            .sort((a, b) => a.time.localeCompare(b.time) || a.grade.localeCompare(b.grade));
 
           return (
             <Card key={d} className="border-none shadow-xl rounded-[2.5rem] bg-white min-h-[400px] flex flex-col">
@@ -337,21 +337,21 @@ const TimetableManager: React.FC = () => {
                       <div className="p-5 rounded-3xl bg-white border border-slate-100 hover:border-indigo-500 hover:shadow-xl transition-all cursor-pointer group relative">
                         <div className="flex justify-between items-center mb-3">
                           <div className="flex gap-2">
-                             <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-none text-[9px] font-black px-3 py-1 rounded-lg">{e.time}</Badge>
-                             <Badge variant="outline" className="text-[8px] font-black uppercase text-indigo-400 border-indigo-100">{e.grade}</Badge>
+                            <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-none text-[9px] font-black px-3 py-1 rounded-lg">{e.time}</Badge>
+                            <Badge variant="outline" className="text-[8px] font-black uppercase text-indigo-400 border-indigo-100">{e.grade}</Badge>
                           </div>
                         </div>
                         <p className="font-black text-slate-800 text-sm uppercase leading-tight">{e.subject}</p>
                         <div className="flex items-center gap-2 mt-2">
-                           <UserCheck size={12} className="text-emerald-500" />
-                           <p className="text-[10px] text-slate-400 font-bold">{e.teacherName}</p>
+                          <UserCheck size={12} className="text-emerald-500" />
+                          <p className="text-[10px] text-slate-400 font-bold">{e.teacherName}</p>
                         </div>
                       </div>
                     </PopoverTrigger>
                     <PopoverContent className="w-56 p-2 rounded-2xl border-none shadow-2xl bg-white">
-                       <Button variant="ghost" onClick={() => deleteSlot(e.id)} className="w-full justify-start text-rose-500 hover:bg-rose-50 font-black text-xs rounded-xl">
-                         <Trash2 size={16} className="mr-3" /> DELETE SESSION
-                       </Button>
+                      <Button variant="ghost" onClick={() => deleteSlot(e.id)} className="w-full justify-start text-rose-500 hover:bg-rose-50 font-black text-xs rounded-xl">
+                        <Trash2 size={16} className="mr-3" /> DELETE SESSION
+                      </Button>
                     </PopoverContent>
                   </Popover>
                 )) : (

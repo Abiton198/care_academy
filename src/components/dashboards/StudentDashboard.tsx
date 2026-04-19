@@ -93,18 +93,50 @@ interface ClassLink {
 // HELPERS
 // =============================================================================
 
+/**
+ * Parses both 24-hour ("08:00") and 12-hour ("08:00 AM") time strings
+ * into a full Date object for comparison.
+ */
 const parseLessonDate = (timeStr: string, baseDate: Date): Date => {
   const parts = timeStr.trim().split(" ");
   const clock = parts[0];
   const meridian = parts[1]?.toUpperCase();
   let [hours, minutes] = clock.split(":").map(Number);
 
+  if (!meridian) {
+    // 24-hour format — use directly
+    const lessonDate = new Date(baseDate);
+    lessonDate.setHours(hours, minutes || 0, 0, 0);
+    return lessonDate;
+  }
+
+  // 12-hour format
   if (meridian === "PM" && hours !== 12) hours += 12;
   if (meridian === "AM" && hours === 12) hours = 0;
 
   const lessonDate = new Date(baseDate);
   lessonDate.setHours(hours, minutes || 0, 0, 0);
   return lessonDate;
+};
+
+/**
+ * Parses both 24-hour and 12-hour time strings into minutes since midnight
+ * for simple numeric comparison/sorting.
+ */
+const parseTimeToMinutes = (timeStr: string): number => {
+  const parts = timeStr.trim().split(" ");
+  const clock = parts[0];
+  const modifier = parts[1]?.toUpperCase();
+  let [hours, minutes] = clock.split(":").map(Number);
+
+  if (!modifier) {
+    return hours * 60 + (minutes || 0);
+  }
+
+  if (modifier === "PM" && hours !== 12) hours += 12;
+  if (modifier === "AM" && hours === 12) hours = 0;
+
+  return hours * 60 + (minutes || 0);
 };
 
 const getLessonStatus = (
@@ -177,12 +209,6 @@ const StudentDashboard: React.FC = () => {
 
   // ===========================================================================
   // STEP 1: Resolve session
-  //
-  // Priority order:
-  //   1. sessionStorage["studentSession"]  → normal student login
-  //   2. localStorage["parentViewSession_<id>"] → parent opening child portal
-  //      (localStorage IS shared across same-origin tabs; sessionStorage is NOT)
-  //   3. Neither → redirect to login
   // ===========================================================================
   useEffect(() => {
     if (!studentId) {
@@ -190,22 +216,16 @@ const StudentDashboard: React.FC = () => {
       return;
     }
 
-    // --- Case 1: Normal student session (set by LoginForm) ---
     const storedSession = sessionStorage.getItem("studentSession");
     if (storedSession) {
       try {
         const parsed: StudentSession = JSON.parse(storedSession);
-
         if (!parsed.studentId) throw new Error("Missing studentId in session");
-
-        // Security: session must be for THIS student (unless parent view)
         if (!parsed.isParentView && parsed.studentId !== studentId) {
-          console.warn("Session studentId mismatch → clearing and redirecting");
           sessionStorage.removeItem("studentSession");
           navigate("/");
           return;
         }
-
         setSession(parsed);
         setSessionChecked(true);
         return;
@@ -215,26 +235,16 @@ const StudentDashboard: React.FC = () => {
       }
     }
 
-    // --- Case 2: Parent-view session (set by ParentDashboard before window.open) ---
-    // localStorage is shared across tabs of the same origin, so the parent tab
-    // can write it before opening the new tab, and we read it here.
     const parentKey = `parentViewSession_${studentId}`;
     const parentStored = localStorage.getItem(parentKey);
     if (parentStored) {
       try {
         const parsed: StudentSession = JSON.parse(parentStored);
-
         if (!parsed.studentId || parsed.studentId !== studentId) {
           throw new Error("Parent session studentId mismatch");
         }
-
-        // Move from localStorage → sessionStorage so it persists for this tab
-        // but doesn't pollute other tabs
         sessionStorage.setItem("studentSession", JSON.stringify(parsed));
-
-        // Clean up localStorage immediately — one-time handshake
         localStorage.removeItem(parentKey);
-
         setSession(parsed);
         setSessionChecked(true);
         return;
@@ -244,12 +254,10 @@ const StudentDashboard: React.FC = () => {
       }
     }
 
-    // --- Case 3: No valid session found ---
-    console.warn("No valid session found → redirecting to login");
     navigate("/");
   }, [studentId, navigate]);
 
-  // Live clock
+  // Live clock — updates every minute
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(interval);
@@ -257,7 +265,6 @@ const StudentDashboard: React.FC = () => {
 
   // ===========================================================================
   // STEP 2: Load Firestore student profile
-  // Only runs after session is confirmed valid
   // ===========================================================================
   useEffect(() => {
     if (!sessionChecked || !session || !studentId) return;
@@ -274,10 +281,8 @@ const StudentDashboard: React.FC = () => {
 
         const data = snap.data() as StudentProfile;
 
-        // For parent view: verify the student belongs to this parent
         if (session.isParentView && session.parentUid && data.parentId) {
           if (data.parentId !== session.parentUid) {
-            console.warn("Parent does not own this student record");
             navigate("/parent-dashboard");
             return;
           }
@@ -288,9 +293,7 @@ const StudentDashboard: React.FC = () => {
       } catch (err: any) {
         console.error("Profile load error:", err);
         if (err?.code === "permission-denied") {
-          setProfileError(
-            "Access denied. Ensure Firestore rules allow unauthenticated reads on the students collection."
-          );
+          setProfileError("Access denied. Ensure Firestore rules allow reads on the students collection.");
         } else {
           setProfileError("Failed to load profile. Check your internet connection.");
         }
@@ -304,6 +307,11 @@ const StudentDashboard: React.FC = () => {
 
   // ===========================================================================
   // STEP 3: Real-time timetable
+  //
+  // FIX: Query is by grade only — NO subject filtering at the Firestore level.
+  // This ensures ALL slots for the grade (e.g. "Morning Devotion", assemblies,
+  // new subjects added later) are always received by the listener.
+  // Subject filtering happens in the UI layer via filteredTimetable below.
   // ===========================================================================
   useEffect(() => {
     if (!profile?.grade) return;
@@ -315,16 +323,22 @@ const StudentDashboard: React.FC = () => {
 
     const unsub = onSnapshot(
       q,
-      (snap) =>
-        setTimetable(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as TimetableEntry[]),
-      (err) => console.error("Timetable listener error:", err)
+      (snap) => {
+        console.log("[Timetable] snapshot received, doc count:", snap.docs.length);
+        setTimetable(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() })) as TimetableEntry[]
+        );
+      },
+      (err) => {
+        console.error("[Timetable] listener error:", err);
+      }
     );
 
     return () => unsub();
-  }, [profile?.grade]);
+  }, [profile?.grade]); // ← Only re-subscribe if the grade changes
 
   // ===========================================================================
-  // STEP 4: Real-time class links (filtered by grade + subjects)
+  // STEP 4: Real-time class links
   // ===========================================================================
   useEffect(() => {
     if (!profile?.grade) return;
@@ -372,6 +386,7 @@ const StudentDashboard: React.FC = () => {
   // COMPUTED VALUES
   // ===========================================================================
 
+  // Keep studentSubjectNames only for class links filtering (not timetable)
   const studentSubjectNames = useMemo(() => {
     if (!profile?.subjects || profile.subjects.length === 0) return null;
     return profile.subjects.map((s) =>
@@ -379,14 +394,19 @@ const StudentDashboard: React.FC = () => {
     );
   }, [profile?.subjects]);
 
-  const filteredTimetable = useMemo(() => {
-    if (!studentSubjectNames) return timetable;
-    return timetable.filter((t) =>
-      studentSubjectNames.some((sub) =>
-        t.subject.toLowerCase().includes(sub.replace(" (igcse)", ""))
-      )
-    );
-  }, [timetable, studentSubjectNames]);
+  /**
+   * NO subject filtering on the timetable.
+   *
+   * The Firestore query already scopes entries by grade — every slot
+   * returned belongs to this student's grade. Filtering by subject on
+   * top of that causes selective updates (e.g. "Mathematics(Primary)"
+   * failing to match "mathematics" in the student profile) and hides
+   * school-wide slots like "Morning Devotion".
+   *
+   * Students should see their full grade timetable, exactly as the
+   * principal published it.
+   */
+  const filteredTimetable = useMemo(() => timetable, [timetable]);
 
   const today = now.toLocaleDateString("en-US", { weekday: "long" });
 
@@ -410,6 +430,21 @@ const StudentDashboard: React.FC = () => {
       return title.includes(term) || subject.includes(term);
     });
   }, [classLinks, searchTerm]);
+
+  // Chronologically sorted full timetable for the Schedule tab
+  const sortedTimetable = useMemo(() => {
+    const dayOrder: Record<string, number> = {
+      Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4,
+      Friday: 5, Saturday: 6, Sunday: 7,
+    };
+
+    return [...filteredTimetable].sort((a, b) => {
+      const dayA = dayOrder[a.day] || 99;
+      const dayB = dayOrder[b.day] || 99;
+      if (dayA !== dayB) return dayA - dayB;
+      return parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time);
+    });
+  }, [filteredTimetable]);
 
   // ===========================================================================
   // HANDLERS
@@ -437,35 +472,6 @@ const StudentDashboard: React.FC = () => {
     next: "Next",
     upcoming: "Upcoming",
   };
-
-  // ── NEW: Chronologically Sorted Timetable ──  
-  const sortedTimetable = React.useMemo(() => {
-    const dayOrder: Record<string, number> = {
-      'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4,
-      'Friday': 5, 'Saturday': 6, 'Sunday': 7
-    };
-
-    return [...filteredTimetable].sort((a, b) => {
-      // 1. Sort by Day
-      const dayA = dayOrder[a.day] || 99;
-      const dayB = dayOrder[b.day] || 99;
-
-      if (dayA !== dayB) return dayA - dayB;
-
-      // 2. Sort by Time (converts "08:30 AM" into a comparable number)
-      const parseTime = (timeStr: string) => {
-        const [time, modifier] = timeStr.split(' ');
-        let [hours, minutes] = time.split(':').map(Number);
-
-        if (modifier === 'PM' && hours !== 12) hours += 12;
-        if (modifier === 'AM' && hours === 12) hours = 0;
-
-        return hours * 60 + minutes;
-      };
-
-      return parseTime(a.time) - parseTime(b.time);
-    });
-  }, [filteredTimetable]);
 
   // ===========================================================================
   // LOADING / ERROR STATES
@@ -563,8 +569,8 @@ const StudentDashboard: React.FC = () => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={`py-4 text-xs font-black uppercase transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${activeTab === tab.id
-                ? "border-indigo-600 text-indigo-600"
-                : "border-transparent text-slate-400 hover:text-slate-600"
+                  ? "border-indigo-600 text-indigo-600"
+                  : "border-transparent text-slate-400 hover:text-slate-600"
                 }`}
             >
               <tab.icon size={14} />
@@ -616,10 +622,13 @@ const StudentDashboard: React.FC = () => {
                         className="flex items-center justify-between p-5 bg-slate-50 rounded-3xl border border-slate-100 hover:bg-white transition-colors"
                       >
                         <div className="flex items-center gap-5">
+                          {/* ── Time box: works for both "08:00" and "08:00 AM" ── */}
                           <div className="w-14 h-14 bg-white rounded-2xl flex flex-col items-center justify-center shadow-sm border border-slate-100">
-                            <span className="text-[10px] font-black text-indigo-600 leading-none">
-                              {item.time.split(" ")[1] || ""}
-                            </span>
+                            {item.time.includes(" ") && (
+                              <span className="text-[10px] font-black text-indigo-600 leading-none">
+                                {item.time.split(" ")[1]}
+                              </span>
+                            )}
                             <span className="text-[14px] font-black text-slate-800">
                               {item.time.split(" ")[0]}
                             </span>
@@ -663,7 +672,6 @@ const StudentDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {/* ✅ Now using the chronologically sorted list */}
                 {sortedTimetable.length > 0 ? (
                   sortedTimetable.map((entry) => (
                     <tr key={entry.id} className="hover:bg-slate-50/70">
