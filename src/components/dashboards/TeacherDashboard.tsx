@@ -20,6 +20,9 @@ import {
 import { getAuth, onAuthStateChanged, signOut, User } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import MoodleCard from "./MoodleCard";
+import { exportTeacherTimetablePDF } from "@/lib/exportTimetable";
+import { Download } from "lucide-react";
+
 
 /* UI Components */
 import { Button } from "@/components/ui/button";
@@ -88,6 +91,7 @@ interface TimetableSlot {
   subject: string;
   grade: string;
   curriculum: string;
+  teacherUid: string;
 }
 
 interface Student {
@@ -226,6 +230,7 @@ const TeacherDashboard: React.FC = () => {
   // Profile Edit State
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editProfile, setEditProfile] = useState<Partial<TeacherProfile>>({});
+
 
   // Chat State
   const [chatOpen, setChatOpen] = useState(false);
@@ -748,6 +753,14 @@ const TeacherDashboard: React.FC = () => {
     return bTime - aTime; // newest first
   });
 
+
+  // DOWNLOAD FUNCTION
+  const handleDownload = () => {
+    // Replace 'currentUser.uid' with your actual auth state variable (e.g., user.uid)
+    const mySlots = timetable.filter(slot => slot.teacherUid === user?.uid);
+    exportTeacherTimetablePDF(user?.displayName || "My Timetable", mySlots);
+  };
+
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
 
   return (
@@ -793,6 +806,9 @@ const TeacherDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+
+
 
       <div className="max-w-7xl mx-auto p-8">
         <Tabs defaultValue="overview" className="space-y-8">
@@ -874,6 +890,16 @@ const TeacherDashboard: React.FC = () => {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <div className="flex justify-between items-center mb-6">
+            <Button
+              onClick={handleDownload}
+              className="flex gap-2 bg-indigo-600 hover:bg-indigo-700"
+            >
+              <Download className="w-4 h-4" />
+              Download PDF Timetable
+            </Button>
+          </div>
 
           <MoodleCard />
 
@@ -1080,6 +1106,8 @@ const TeacherDashboard: React.FC = () => {
                     <th className="px-8 py-6">Student Grade</th>
                   </tr>
                 </thead>
+
+
                 <tbody className="divide-y divide-slate-100">
                   {sortedTimetable.map(t => (
                     <tr key={t.id} className="hover:bg-slate-50 transition-colors">

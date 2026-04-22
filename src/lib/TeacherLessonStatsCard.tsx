@@ -73,44 +73,38 @@ export default function TeacherLessonStatsCard() {
     return count;
   };
 
-  /** ---------------- STUDENT LOOKUP ---------------- */
-  const studentsPerSubject = useMemo(() => {
+  /** ---------------- STUDENT LOOKUP (UPDATED) ---------------- */
+  const studentsPerGrade = useMemo(() => {
     const map: Record<string, number> = {};
-
     students.forEach(s => {
-      if (!Array.isArray(s.subjects)) return;
-      s.subjects.forEach((sub: string) => {
-        map[sub] = (map[sub] || 0) + 1;
-      });
+      // Using 'grade' instead of 'subjects' array to match your Firestore schema
+      const grade = s.grade || s.currentGrade;
+      if (grade) {
+        map[grade] = (map[grade] || 0) + 1;
+      }
     });
-
     return map;
   }, [students]);
 
   /** ---------------- STAGE 4+5 DEDUPLICATION ---------------- */
-  /**
-   * If two timetable slots share the same:
-   *   teacherUid + day + time + subject
-   * and their grades are "Stage 4" and "Stage 5",
-   * they represent ONE combined class period — deduplicate to a single slot.
-   */
   const deduplicatedTimetable = useMemo(() => {
     const combinedStages = new Set(["Stage 4", "Stage 5"]);
-    const seenCombinedKeys = new Set<string>();
+    const seenCombinedSlots = new Set<string>(); // To track shared Stage 4/5 periods
     const result: any[] = [];
 
     timetable.forEach(slot => {
-      if (combinedStages.has(slot.grade)) {
-        // Build a key that is stage-agnostic — same period regardless of Stage 4 or 5
-        const key = `${slot.teacherUid}|${slot.day}|${slot.time}|${slot.subject}`;
+      // Unique key for the physical period: Teacher + Day + Time
+      const slotKey = `${slot.teacherUid}|${slot.day}|${slot.time}`;
 
-        if (seenCombinedKeys.has(key)) {
-          // Second stage for this period — skip it, already counted
+      if (combinedStages.has(slot.grade)) {
+        // If we've already seen this specific time/day for a Stage 4/5 teacher, skip it
+        if (seenCombinedSlots.has(slotKey)) {
           return;
         }
-        seenCombinedKeys.add(key);
+        seenCombinedSlots.add(slotKey);
       }
 
+      // Every other grade (9, 11, 12, etc.) or the FIRST instance of 4/5 gets added
       result.push(slot);
     });
 
@@ -136,37 +130,37 @@ export default function TeacherLessonStatsCard() {
       }
 
       const teacher = teachers[slot.teacherUid];
+      const occurrences = weekdayOccurrencesThisMonth(dayIndex);
 
-      // SKIP subjects with no enrolled students — excluded from all lesson totals
-      const enrolledCount = studentsPerSubject[slot.subject] || 0;
-      if (enrolledCount === 0) return;
-
-      // WEEKLY: every deduplicated slot counts once
+      // --- PHYSICAL SLOT COUNTING ---
       teacher.weekly += 1;
+      teacher.monthly += occurrences;
 
-      // MONTHLY: weekday occurrences × slots
-      teacher.monthly += weekdayOccurrencesThisMonth(dayIndex);
-
-      // DAILY: only if today matches slot day
       if (today.getDay() === dayIndex) {
         teacher.daily += 1;
       }
 
-      // SUBJECT BUCKET
-      if (!teacher.subjects[slot.subject]) {
-        teacher.subjects[slot.subject] = {
+      // --- SUBJECT BREAKDOWN (Unique per Teacher) ---
+      const subName = slot.subject;
+      if (!teacher.subjects[subName]) {
+        teacher.subjects[subName] = {
           weekly: 0,
           monthly: 0,
-          students: enrolledCount,
+          students: 0,
         };
       }
 
-      teacher.subjects[slot.subject].weekly += 1;
-      teacher.subjects[slot.subject].monthly += weekdayOccurrencesThisMonth(dayIndex);
+      // Accumulate the counts for this specific subject
+      teacher.subjects[subName].weekly += 1;
+      teacher.subjects[subName].monthly += occurrences;
+
+      // Calculate students for the specific grade linked to this slot
+      const studentCount = students.filter(s => s.grade === slot.grade).length;
+      teacher.subjects[subName].students += studentCount;
     });
 
     return Object.values(teachers);
-  }, [deduplicatedTimetable, studentsPerSubject]);
+  }, [deduplicatedTimetable, students]);
 
   /** ---------------- SUMMARY ---------------- */
   const summary = useMemo(() => {
@@ -227,6 +221,7 @@ export default function TeacherLessonStatsCard() {
                         <p className="text-xs">Weekly lessons: <b>{data.weekly}</b></p>
                         <p className="text-xs">Monthly lessons: <b>{data.monthly}</b></p>
                         <p className="text-[11px] text-muted-foreground">Students enrolled: <b>{data.students}</b></p>
+                        <p className="text-xs">Weekly slots: <b>{data.slots}</b></p>
                       </div>
                     ))}
                   </div>
