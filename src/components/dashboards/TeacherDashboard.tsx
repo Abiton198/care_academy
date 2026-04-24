@@ -20,7 +20,7 @@ import {
 import { getAuth, onAuthStateChanged, signOut, User } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import MoodleCard from "./MoodleCard";
-import { exportTeacherTimetablePDF } from "@/lib/exportTimetable";
+import { exportTeacherTimetablePDF, TimetableExportManager } from "@/lib/exportTimetable";
 import { Download } from "lucide-react";
 
 
@@ -82,6 +82,7 @@ interface TeacherUser {
   };
   firstName?: string;
   lastName?: string;
+  teacherName?: string;
 }
 
 interface TimetableSlot {
@@ -92,6 +93,7 @@ interface TimetableSlot {
   grade: string;
   curriculum: string;
   teacherUid: string;
+  teacherName: string;
 }
 
 interface Student {
@@ -210,9 +212,10 @@ const TeacherDashboard: React.FC = () => {
   // Core State
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<TeacherProfile | null>(null);
-  const [timetable, setTimetable] = useState<TimetableSlot[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
+  const [timetable, setTimetable] = useState<TimetableSlot[]>([]);       // teacher's own slots
+const [allTimetable, setAllTimetable] = useState<TimetableSlot[]>([]);  // full school (for master view)
 
   // Resources / Links State
   const [resources, setResources] = useState<ClassLink[]>([]);
@@ -385,27 +388,38 @@ const TeacherDashboard: React.FC = () => {
   /* ======================================================
      2. SYNC TIMETABLE, STUDENTS & GRADES
   ===================================================== */
-  useEffect(() => {
-    if (!teacherFullName || !profile?.subjects) return;
+ useEffect(() => {
+  if (!teacherFullName || !profile?.subjects) return;
 
-    const qTime = query(collection(db, "timetable"), where("teacherName", "==", teacherFullName));
-    const unsubTime = onSnapshot(qTime, (snap) => {
-      setTimetable(snap.docs.map(d => ({ id: d.id, ...d.data() } as TimetableSlot)));
-    });
+  // Teacher's own slots — used for personal schedule, student matching, etc.
+  const qTime = query(
+    collection(db, "timetable"),
+    where("teacherName", "==", teacherFullName)
+  );
+  const unsubTime = onSnapshot(qTime, (snap) => {
+    setTimetable(snap.docs.map(d => ({ id: d.id, ...d.data() } as TimetableSlot)));
+  });
 
-    const subjectNames = profile.subjects.map(s => s.name);
-    const qStud = query(collection(db, "students"), where("subjects", "array-contains-any", subjectNames));
-    const unsubStud = onSnapshot(qStud, (snap) => {
-      const studentList = snap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
-      setStudents(studentList);
+  // ALL school slots — used only for master timetable view in TimetableExportManager
+  const unsubAll = onSnapshot(collection(db, "timetable"), (snap) => {
+    setAllTimetable(snap.docs.map(d => ({ id: d.id, ...d.data() } as TimetableSlot)));
+  });
 
-      const grades = new Set<string>();
-      studentList.forEach(s => { if (s.grade) grades.add(s.grade); });
-      setAvailableGrades(Array.from(grades).sort());
-    });
+  const subjectNames = profile.subjects.map(s => s.name);
+  const qStud = query(
+    collection(db, "students"),
+    where("subjects", "array-contains-any", subjectNames)
+  );
+  const unsubStud = onSnapshot(qStud, (snap) => {
+    const studentList = snap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+    setStudents(studentList);
+    const grades = new Set<string>();
+    studentList.forEach(s => { if (s.grade) grades.add(s.grade); });
+    setAvailableGrades(Array.from(grades).sort());
+  });
 
-    return () => { unsubTime(); unsubStud(); };
-  }, [teacherFullName, profile?.subjects]);
+  return () => { unsubTime(); unsubAll(); unsubStud(); };
+}, [teacherFullName, profile?.subjects]);
 
   /* ======================================================
      3. RESOURCE ENGINE (CRUD & AUDIT TRAIL)
@@ -755,10 +769,10 @@ const TeacherDashboard: React.FC = () => {
 
 
   // DOWNLOAD FUNCTION
-  const handleDownload = () => {
-    // Replace 'currentUser.uid' with your actual auth state variable (e.g., user.uid)
-    const mySlots = timetable.filter(slot => slot.teacherUid === user?.uid);
-    exportTeacherTimetablePDF(user?.displayName || "My Timetable", mySlots);
+  const handleDownloadTeacher = (teacher: any) => {
+    // Filter timetable specifically for this teacher only
+    const mySlots = timetable.filter(slot => slot.teacherUid === teacher.uid);
+    exportTimetablePDF(`${teacher.name} Timetable`, mySlots, false);
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
@@ -891,15 +905,12 @@ const TeacherDashboard: React.FC = () => {
             </Card>
           </TabsContent>
 
-          <div className="flex justify-between items-center mb-6">
-            <Button
-              onClick={handleDownload}
-              className="flex gap-2 bg-indigo-600 hover:bg-indigo-700"
-            >
-              <Download className="w-4 h-4" />
-              Download PDF Timetable
-            </Button>
-          </div>
+          {/* DOWNLOAD PDF BUTTON */}
+      <TimetableExportManager
+        timetableData={allTimetable}   // ← full school data
+        lockedTeacherUid={teacher.uid}
+        lockedTeacherName={teacher.teacherName}
+      />
 
           <MoodleCard />
 

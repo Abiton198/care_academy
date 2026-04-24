@@ -27,6 +27,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { TimetableExportManager } from "@/lib/exportTimetable";
+import { Download } from "lucide-react";
 
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useNavigate } from "react-router-dom";
@@ -179,6 +181,7 @@ const PrincipalDashboard: React.FC = () => {
   const teacherUsersQuery = query(collection(db, "users"), where("role", "==", "teacher"), where("applicationStatus", "==", "submitted"));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [timetable, setTimetable] = useState<any[]>([]);
   //  const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
@@ -465,6 +468,9 @@ const PrincipalDashboard: React.FC = () => {
 
   const saveTimetableSlot = async (slotData: any) => {
     await addDoc(collection(db, "timetable"), { ...slotData, updatedAt: serverTimestamp() });
+    const querySnapshot = await getDocs(collection(db, "timetable"));
+    const docs = querySnapshot.docs.map(doc => doc.data());
+    setTimetable(docs)
   };
 
   // 4. MEMOS
@@ -506,6 +512,27 @@ const PrincipalDashboard: React.FC = () => {
   //     setLoading(false);
   //   }
   // };
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "timetable"), (snap) => {
+      const data = snap.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      // console.log("🔥 FIRESTORE DATA:", data); // 👈 MUST SEE THIS
+
+      setTimetable(data);
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, []);
+
+  const handleDownloadMaster = () => {
+    // Pass EVERYTHING (the full timetable state)
+    exportTimetablePDF("Master School Timetable", timetable, true);
+  };
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
 
@@ -743,6 +770,14 @@ const PrincipalDashboard: React.FC = () => {
           <ManagementCard title="Timetable" icon={<Calendar />} color="bg-indigo-100" expanded={timetableExpanded} onToggle={() => setTimetableExpanded(!timetableExpanded)}>
             <TimetableManager onSave={saveTimetableSlot} />
           </ManagementCard>
+        </div>
+
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold">Timetable Management</h1>
+
+          <div className="flex gap-3">
+            <TimetableExportManager timetableData={timetable} />
+          </div>
         </div>
 
 
