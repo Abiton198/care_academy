@@ -53,7 +53,8 @@ src/
 - **Profile**: Profile for parents, students, teachers, principals  
 - **Review Modal**: Review Modal for parents  
 - **Parent-Teacher Chat (Full)**: Communication between teachers and parents in dashboards
-- **Timetable PDF Download**: Teachers can download their timetable as a PDF  
+- **Timetable PDF Download & Masterview**: Teachers and Principal can view or download their timetable as a PDF  
+
 
 
 ### Firestore Schema
