@@ -782,7 +782,8 @@ const [allTimetable, setAllTimetable] = useState<TimetableSlot[]>([]);  // full 
 
       {/* HEADER SECTION */}
       <div className="bg-indigo-600 text-white shadow-xl">
-        <div className="max-w-7xl mx-auto px-6 py-8 flex justify-between items-center">
+        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+        {/* <div className="max-w-7xl mx-auto px-6 py-8 flex justify-between items-center"> */}
           <div>
             <h1 className="text-3xl font-black flex items-center gap-2 tracking-tight">
               <img src={logo} alt="Logo" className="w-12 h-12" />
@@ -824,9 +825,9 @@ const [allTimetable, setAllTimetable] = useState<TimetableSlot[]>([]);  // full 
 
 
 
-      <div className="max-w-7xl mx-auto p-8">
+      <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-4 sm:p-6 lg:p-8">
         <Tabs defaultValue="overview" className="space-y-8">
-          <TabsList className="bg-white p-1 rounded-2xl shadow-md border inline-flex overflow-hidden">
+          <TabsList className="bg-white p-1 rounded-2xl shadow-md border flex overflow-x-auto whitespace-nowrap">
             <TabsTrigger value="overview" className="px-8 py-3 font-bold">Overview</TabsTrigger>
             <TabsTrigger value="students" className="px-8 py-3 font-bold">Students</TabsTrigger>
             <TabsTrigger value="links" className="px-8 py-3 font-bold">Link Engine</TabsTrigger>
@@ -852,7 +853,7 @@ const [allTimetable, setAllTimetable] = useState<TimetableSlot[]>([]);  // full 
           <TabsContent value="overview">
 
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:p-6 lg:p-4 sm:p-6 lg:p-8">
 
               <NextClassCountdownCard
                 userUid={teacher.uid}
@@ -879,12 +880,12 @@ const [allTimetable, setAllTimetable] = useState<TimetableSlot[]>([]);  // full 
           {/* STUDENT LIST */}
           <TabsContent value="students">
             <Card className="shadow-2xl border-0 rounded-[2rem] overflow-hidden">
-              <CardHeader className="bg-slate-900 text-white p-8">
+              <CardHeader className="bg-slate-900 text-white p-4 sm:p-6 lg:p-4 sm:p-6 lg:p-8">
                 <CardTitle className="flex items-center gap-3 text-2xl font-black">
                   <Users className="text-indigo-400" /> STUDENT ROSTER
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-8">
+              <CardContent className="p-4 sm:p-6 lg:p-4 sm:p-6 lg:p-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {students.map(s => (
                     <div key={s.id} className="group p-6 border-2 rounded-3xl bg-white shadow-sm hover:border-indigo-500 hover:shadow-xl transition-all duration-300">
@@ -920,7 +921,7 @@ const [allTimetable, setAllTimetable] = useState<TimetableSlot[]>([]);  // full 
 
               {/* PUBLISHING ENGINE */}
               <Card className="border-0 shadow-2xl bg-indigo-900 text-white rounded-[2rem] overflow-hidden">
-                <div className="p-8 border-b border-white/10 bg-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="p-4 sm:p-6 lg:p-4 sm:p-6 lg:p-8 border-b border-white/10 bg-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                   <div>
                     <h2 className="text-2xl font-black italic tracking-tighter">LINK PUBLISHING ENGINE</h2>
                     <p className="text-xs text-indigo-300 font-bold uppercase tracking-widest mt-1">Updates Student Dashboards instantly</p>
@@ -937,7 +938,7 @@ const [allTimetable, setAllTimetable] = useState<TimetableSlot[]>([]);  // full 
                     </select>
                   </div>
                 </div>
-                <CardContent className="p-8">
+                <CardContent className="p-4 sm:p-6 lg:p-4 sm:p-6 lg:p-8">
                   <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-end">
                     <div className="space-y-2">
                       <Label className="text-[10px] uppercase font-black text-indigo-200">Target Grade</Label>
@@ -978,7 +979,7 @@ const [allTimetable, setAllTimetable] = useState<TimetableSlot[]>([]);  // full 
 
               {/* AUDIT TRAIL / MANAGEMENT TABLE */}
               <div className="bg-white rounded-[2rem] shadow-2xl border-0 overflow-hidden">
-                <div className="p-8 border-b bg-slate-50 flex justify-between items-center">
+                <div className="p-4 sm:p-6 lg:p-4 sm:p-6 lg:p-8 border-b bg-slate-50 flex justify-between items-center">
                   <h3 className="font-black text-slate-800 text-xl tracking-tight uppercase">Audit Trail & Record Management</h3>
                   <Badge className="px-4 py-1 rounded-full font-black bg-indigo-100 text-indigo-600 border-none">{filteredResources.length} RECORDS ACTIVE</Badge>
                 </div>
@@ -1151,7 +1152,7 @@ const [allTimetable, setAllTimetable] = useState<TimetableSlot[]>([]);  // full 
           {/* TEACHER PROFILE */}
           <TabsContent value="profile">
             <Card className="shadow-2xl border-0 rounded-[2rem] overflow-hidden">
-              <CardHeader className="flex flex-row justify-between items-center bg-indigo-50 p-8">
+              <CardHeader className="flex flex-row justify-between items-center bg-indigo-50 p-4 sm:p-6 lg:p-4 sm:p-6 lg:p-8">
                 <CardTitle className="text-2xl font-black text-indigo-900">IDENTITY PROFILE</CardTitle>
                 {!isEditingProfile ? (
                   <Button onClick={() => setIsEditingProfile(true)} className="rounded-xl shadow-lg font-bold"><Edit2 size={16} className="mr-2" /> EDIT BIO</Button>
@@ -1163,7 +1164,7 @@ const [allTimetable, setAllTimetable] = useState<TimetableSlot[]>([]);  // full 
                 )}
               </CardHeader>
               <CardContent className="p-10 space-y-10">
-                <div className="grid md:grid-cols-2 gap-8">
+                <div className="grid md:grid-cols-2 gap-4 sm:p-6 lg:p-4 sm:p-6 lg:p-8">
                   <div className="space-y-2"><Label className="font-black text-[10px] text-slate-400 uppercase">First Name</Label><Input className="h-12 rounded-xl bg-slate-50 border-none font-bold text-slate-900" value={profile?.firstName} disabled /></div>
                   <div className="space-y-2"><Label className="font-black text-[10px] text-slate-400 uppercase">Last Name</Label><Input className="h-12 rounded-xl bg-slate-50 border-none font-bold text-slate-900" value={profile?.lastName} disabled /></div>
                   <div className="space-y-2"><Label className="font-black text-[10px] text-slate-400 uppercase">Registered Email</Label><Input className="h-12 rounded-xl bg-slate-50 border-none font-bold text-slate-900" value={profile?.email} disabled /></div>
@@ -1279,7 +1280,7 @@ const [allTimetable, setAllTimetable] = useState<TimetableSlot[]>([]);  // full 
       {/* Audit Trail Modal */}
       {selectedResource && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-3xl p-8 w-[700px] max-h-[80vh] overflow-y-auto shadow-2xl">
+          <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-4 sm:p-6 lg:p-4 sm:p-6 lg:p-8 w-[700px] max-h-[80vh] overflow-y-auto shadow-2xl">
 
             <h2 className="text-xl font-black mb-6 uppercase">
               Attendance Trail – {selectedResource.title}

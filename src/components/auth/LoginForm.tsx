@@ -137,49 +137,65 @@ export default function LoginForm() {
      GOOGLE LOGIN
   ================================== */
   const handleGoogle = async () => {
-    if (authLoading) return;
+  if (authLoading) return;
 
-    if (tab === "signup" && !selectedRole) {
-      setError("Please select a role first.");
+  if (tab === "signup" && !selectedRole) {
+    setError("Please select a role first.");
+    return;
+  }
+
+  setError(null);
+  setAuthLoading(true);
+
+  try {
+    googleProvider.setCustomParameters({
+      prompt: "select_account",
+    });
+
+    const result = await signInWithPopup(auth, googleProvider);
+    const user = result.user;
+
+    const userRef = doc(db, "users", user.uid);
+    const snap = await getDoc(userRef);
+
+    let roleToUse = "parent";
+
+    if (snap.exists()) {
+      roleToUse = snap.data().role;
+    } else {
+      roleToUse = selectedRole || "parent";
+
+      await setDoc(userRef, {
+        uid: user.uid,
+        email: user.email,
+        role: roleToUse,
+        applicationStatus:
+          roleToUse === "teacher"
+            ? "pending"
+            : "approved",
+        createdAt: serverTimestamp(),
+      });
+    }
+
+    redirectedRef.current = true;
+
+    // TEACHERS -> modal first
+    if (roleToUse === "teacher") {
+      setTeacherUid(user.uid);
+      setTimeout(() => setShowTeacherModal(true), 100);
       return;
     }
 
-    setError(null);
-    setAuthLoading(true);
+    // PARENTS / PRINCIPALS redirect immediately
+    navigate(`/${roleToUse}-dashboard`);
 
-    try {
-      googleProvider.setCustomParameters({ prompt: "select_account" });
-
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-
-      const userRef = doc(db, "users", user.uid);
-      const snap = await getDoc(userRef);
-
-      const roleToUse = snap.exists() ? snap.data().role : selectedRole || "parent";
-
-      if (!snap.exists()) {
-        await setDoc(userRef, {
-          uid: user.uid,
-          email: user.email,
-          role: roleToUse,
-          applicationStatus: roleToUse === "teacher" ? "pending" : "approved",
-          createdAt: serverTimestamp(),
-        });
-      }
-
-      if (roleToUse === "teacher") {
-        setTeacherUid(user.uid);
-        setTimeout(() => setShowTeacherModal(true), 100);
-        return;
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
+  } catch (err:any) {
+    console.error(err);
+    setError(err.message || "Google sign in failed");
+  } finally {
+    setAuthLoading(false);
+  }
+};
   /* ================================
      EMAIL LOGIN
   ================================== */
