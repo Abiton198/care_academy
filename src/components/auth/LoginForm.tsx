@@ -136,7 +136,7 @@ export default function LoginForm() {
   /* ================================
      GOOGLE LOGIN
   ================================== */
-  const handleGoogle = async () => {
+ const handleGoogle = async () => {
   if (authLoading) return;
 
   if (tab === "signup" && !selectedRole) {
@@ -144,58 +144,169 @@ export default function LoginForm() {
     return;
   }
 
-  setError(null);
   setAuthLoading(true);
+  setError(null);
 
   try {
     googleProvider.setCustomParameters({
-      prompt: "select_account",
+      prompt: "select_account"
     });
 
-    const result = await signInWithPopup(auth, googleProvider);
+    // Firebase Authentication user created here
+    const result = await signInWithPopup(
+      auth,
+      googleProvider
+    );
+
     const user = result.user;
 
-    const userRef = doc(db, "users", user.uid);
-    const snap = await getDoc(userRef);
+    const uid = user.uid;
+    const roleToUse =
+      selectedRole || "parent";
 
-    let roleToUse = "parent";
+    const userRef =
+      doc(db,"users",uid);
 
-    if (snap.exists()) {
-      roleToUse = snap.data().role;
-    } else {
-      roleToUse = selectedRole || "parent";
+    const existing =
+      await getDoc(userRef);
 
-      await setDoc(userRef, {
-        uid: user.uid,
+    /* ---------------------------------
+       FIRST TIME REGISTRATION
+    ---------------------------------- */
+    if(!existing.exists()){
+
+      const baseProfile = {
+        uid,
         email: user.email,
+        firstName:
+          user.displayName?.split(" ")[0] || "",
+        lastName:
+          user.displayName
+            ?.split(" ")
+            .slice(1)
+            .join(" ") || "",
+        fullName:
+          user.displayName || "",
+        photoURL:
+          user.photoURL || "",
         role: roleToUse,
-        applicationStatus:
-          roleToUse === "teacher"
-            ? "pending"
-            : "approved",
+        profileCompleted:false,
         createdAt: serverTimestamp(),
-      });
+        updatedAt: serverTimestamp(),
+      };
+
+      // MASTER USERS RECORD
+      await setDoc(
+        doc(db,"users",uid),
+        {
+          ...baseProfile,
+          applicationStatus:
+            roleToUse==="teacher"
+             ? "pending"
+             : "approved"
+        }
+      );
+
+      /* -------------------------------
+         ROLE COLLECTIONS
+      -------------------------------- */
+
+      if(roleToUse==="parent"){
+
+        await setDoc(
+          doc(db,"parents",uid),
+          {
+            ...baseProfile,
+            students:[],
+            address:"",
+            contact:"",
+            title:"",
+            linkedStudents:0
+          }
+        );
+      }
+
+      if(roleToUse==="principal"){
+
+        await setDoc(
+          doc(db,"principals",uid),
+          {
+            ...baseProfile,
+            schoolName:"",
+            schoolCode:"",
+            address:"",
+            contact:"",
+            verified:false
+          }
+        );
+      }
+
+      if(roleToUse==="teacher"){
+
+        // teacher profile
+        await setDoc(
+          doc(db,"teachers",uid),
+          {
+            ...baseProfile,
+            subjects:[],
+            grades:[],
+            bio:"",
+            verified:false
+          }
+        );
+
+        // teacher application workflow
+        await setDoc(
+          doc(
+            db,
+            "teacherApplications",
+            uid
+          ),
+          {
+            teacherId:uid,
+            email:user.email,
+            status:"pending",
+            submitted:false,
+            createdAt:
+              serverTimestamp()
+          }
+        );
+      }
     }
 
-    redirectedRef.current = true;
+    /* -------------------------------
+       TEACHER APPLICATION FLOW
+    -------------------------------- */
 
-    // TEACHERS -> modal first
-    if (roleToUse === "teacher") {
-      setTeacherUid(user.uid);
-      setTimeout(() => setShowTeacherModal(true), 100);
+    if(roleToUse==="teacher"){
+      setTeacherUid(uid);
+      setShowTeacherModal(true);
       return;
     }
 
-    // PARENTS / PRINCIPALS redirect immediately
-    navigate(`/${roleToUse}-dashboard`);
+    /* -------------------------------
+       DASHBOARD REDIRECT
+    -------------------------------- */
 
-  } catch (err:any) {
-    console.error(err);
-    setError(err.message || "Google sign in failed");
-  } finally {
+    navigate(
+      `/${roleToUse}-dashboard`
+    );
+
+  } catch(err:any){
+    console.error(
+      "Signup failed:",
+      err
+    );
+
+    setError(
+      err.message ||
+      "Registration failed"
+    );
+  } finally{
     setAuthLoading(false);
   }
 };
+
   /* ================================
      EMAIL LOGIN
   ================================== */
