@@ -102,90 +102,91 @@
 
 // // ===========================================TREVOR =======================================================
 
-// import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-// import { db } from "@/lib/firebaseConfig";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebaseConfig";
 
-// export async function createProfile() {
-//   const targetUid =  "Vgtg6VXh8wOPcwyB5bWV3uiwqdx1";
-//   const targetEmail = "trevor.ryan.187@gmail.com"; 
+export async function createProfile() {
+  const targetUid =  "Vgtg6VXh8wOPcwyB5bWV3uiwqdx1";
+  const targetEmail = "trevor.ryan.187@gmail.com"; 
 
-//   try {
-//     const subjects = [
-//       { name: "Mathematics (AS-Level)", curriculum: "British Curriculum" },
-//         { name: "Mathematics (A-Level)", curriculum: "British Curriculum" },
-//       { name: "Physics (A-Level)", curriculum: "British Curriculum" },
-//       { name: "Physics (AS-Level)", curriculum: "British Curriculum" },
-//       { name: "Further Mathematics (A-Level)", curriculum: "British Curriculum" },
-//       { name: "Mathematics (IGCSE)", curriculum: "British Curriculum" },
-//       { name: "Physics (IGCSE)", curriculum: "British Curriculum" },
-//       { name: "Chemistry (IGCSE)", curriculum: "British Curriculum" },
-//       { name: "Chemistry (AS-Level)", curriculum: "British Curriculum" },
-//       { name: "Mathematics (Checkpoint)", curriculum: "British Curriculum" },
-//       { name: "Bible Study", curriculum: "British Curriculum" }
-//     ];
+  try {
+    const subjects = [
+      { name: "Mathematics (AS-Level)", curriculum: "British Curriculum" },
+        { name: "Mathematics (A-Level)", curriculum: "British Curriculum" },
+      { name: "Physics (A-Level)", curriculum: "British Curriculum" },
+      { name: "Physics (AS-Level)", curriculum: "British Curriculum" },
+      { name: "Further Mathematics (A-Level)", curriculum: "British Curriculum" },
+      { name: "Mathematics (IGCSE)", curriculum: "British Curriculum" },
+      { name: "Physics (IGCSE)", curriculum: "British Curriculum" },
+      { name: "Chemistry (IGCSE)", curriculum: "British Curriculum" },
+      { name: "Chemistry (AS-Level)", curriculum: "British Curriculum" },
+      { name: "Mathematics (Checkpoint)", curriculum: "British Curriculum" },
+      { name: "Bible Study", curriculum: "British Curriculum" },
+      
+    ];
 
-//     console.log("🛠️ Syncing Profile for:", targetUid);
+    console.log("🛠️ Syncing Profile for:", targetUid);
 
-//     // 1️⃣ USERS Collection
-//     await setDoc(doc(db, "users", targetUid), {
-//       uid: targetUid,
-//       email: targetEmail,
-//       role: "teacher",
-//       applicationStatus: "approved",
-//       profileCompleted: true,
-//       updatedAt: serverTimestamp(),
-//     }, { merge: true });
+    // 1️⃣ USERS Collection
+    await setDoc(doc(db, "users", targetUid), {
+      uid: targetUid,
+      email: targetEmail,
+      role: "teacher",
+      applicationStatus: "approved",
+      profileCompleted: true,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
 
-//     // 2️⃣ TEACHERS Collection
-//     await setDoc(doc(db, "teachers", targetUid), {
-//       uid: targetUid,
-//       email: targetEmail,
-//       firstName: "Trevor",
-//       lastName: "Ryan",
-//       status: "approved",
-//       yearsOfExperience: 30,
-//       personalInfo: {
-//         firstName: "Trevor",
-//         lastName: "Ryan",
-//         email: targetEmail,
-//         phone: "0826449390",
-//         bio: "",
-//         gradePhase: "Secondary",
-//         curriculum: "British Curriculum",
-//       },
-//       subjects: subjects,
-//       updatedAt: serverTimestamp(),
-//     }, { merge: true });
+    // 2️⃣ TEACHERS Collection
+    await setDoc(doc(db, "teachers", targetUid), {
+      uid: targetUid,
+      email: targetEmail,
+      firstName: "Trevor",
+      lastName: "Ryan",
+      status: "approved",
+      yearsOfExperience: 30,
+      personalInfo: {
+        firstName: "Trevor",
+        lastName: "Ryan",
+        email: targetEmail,
+        phone: "0826449390",
+        bio: "",
+        gradePhase: "Secondary",
+        curriculum: "British Curriculum",
+      },
+      subjects: subjects,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
 
-//     // 3️⃣ TEACHER APPLICATIONS Collection
-//     await setDoc(doc(db, "teacherApplications", targetUid), {
-//       uid: targetUid,
-//       email: targetEmail,
-//       firstName: "Trevor",
-//       lastName: "Ryan",
-//       status: "approved",
-//       yearsOfExperience: 30,
-//       personalInfo: {
-//         firstName: "Trevor",
-//         lastName: "Ryan",
-//         email: targetEmail,
-//         phone: "0826449390",
-//         bio: "",
-//         gradePhase: "Secondary",
-//         curriculum: "British Curriculum",
-//       },
-//       subjects: subjects,
-//       updatedAt: serverTimestamp(),
-//     }, { merge: true });
+    // 3️⃣ TEACHER APPLICATIONS Collection
+    await setDoc(doc(db, "teacherApplications", targetUid), {
+      uid: targetUid,
+      email: targetEmail,
+      firstName: "Trevor",
+      lastName: "Ryan",
+      status: "approved",
+      yearsOfExperience: 30,
+      personalInfo: {
+        firstName: "Trevor",
+        lastName: "Ryan",
+        email: targetEmail,
+        phone: "0826449390",
+        bio: "",
+        gradePhase: "Secondary",
+        curriculum: "British Curriculum",
+      },
+      subjects: subjects,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
 
-//     console.log("✅ Trevor Ryan profile synced successfully.");
-//     alert("✅ Trevor Ryan's profile updated successfully.");
+    console.log("✅ Trevor Ryan profile synced successfully.");
+    alert("✅ Trevor Ryan's profile updated successfully.");
 
-//   } catch (error: any) {
-//     console.error("🔥 Firestore Error:", error);
-//     alert("Update failed: " + (error.message || "Permission Denied"));
-//   }
-// }
+  } catch (error: any) {
+    console.error("🔥 Firestore Error:", error);
+    alert("Update failed: " + (error.message || "Permission Denied"));
+  }
+}
 
 // // ===========================================TANYA =======================================================
 
@@ -350,80 +351,80 @@
 
 // ===========================================ABITON=======================================================
 
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebaseConfig";
+// import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+// import { db } from "@/lib/firebaseConfig";
 
-export async function createProfile() {
-  const targetUid = "LbKKY3pKsaMJoJnkfT3HrMu4B1l1";
-  const targetEmail = "abitonp@gmail.com";
+// export async function createProfile() {
+//   const targetUid = "LbKKY3pKsaMJoJnkfT3HrMu4B1l1";
+//   const targetEmail = "abitonp@gmail.com";
 
-  try {
-    const subjects = [
-      { name: "Coding", curriculum: "British Curriculum" },
-      { name: "AI", curriculum: "British Curriculum" },
-      { name: "Robotics", curriculum: "British Curriculum" },
+//   try {
+//     const subjects = [
+//       { name: "Coding", curriculum: "British Curriculum" },
+//       { name: "AI", curriculum: "British Curriculum" },
+//       { name: "Robotics", curriculum: "British Curriculum" },
 
-    ];
+//     ];
 
-    console.log("🛠️ Syncing Profile for:", targetUid);
+//     console.log("🛠️ Syncing Profile for:", targetUid);
 
-    // 1️⃣ USERS Collection
-    await setDoc(doc(db, "users", targetUid), {
-      uid: targetUid,
-      email: targetEmail,
-      role: "teacher",
-      applicationStatus: "approved",
-      profileCompleted: true,
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+//     // 1️⃣ USERS Collection
+//     await setDoc(doc(db, "users", targetUid), {
+//       uid: targetUid,
+//       email: targetEmail,
+//       role: "teacher",
+//       applicationStatus: "approved",
+//       profileCompleted: true,
+//       updatedAt: serverTimestamp(),
+//     }, { merge: true });
 
-    // 2️⃣ TEACHERS Collection
-    await setDoc(doc(db, "teachers", targetUid), {
-      uid: targetUid,
-      email: targetEmail,
-      firstName: "Abiton",
-      lastName: "Padera",
-      status: "approved",
-      yearsOfExperience: 15,
-      personalInfo: {
-        firstName: "Abiton",
-        lastName: "Padera",
-        email: targetEmail,
-        phone: "0656564983",
-        bio: "",
-        gradePhase: "secondary",
-        curriculum: "British Curriculum",
-      },
-      subjects: subjects,
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+//     // 2️⃣ TEACHERS Collection
+//     await setDoc(doc(db, "teachers", targetUid), {
+//       uid: targetUid,
+//       email: targetEmail,
+//       firstName: "Abiton",
+//       lastName: "Padera",
+//       status: "approved",
+//       yearsOfExperience: 15,
+//       personalInfo: {
+//         firstName: "Abiton",
+//         lastName: "Padera",
+//         email: targetEmail,
+//         phone: "0656564983",
+//         bio: "",
+//         gradePhase: "secondary",
+//         curriculum: "British Curriculum",
+//       },
+//       subjects: subjects,
+//       updatedAt: serverTimestamp(),
+//     }, { merge: true });
 
-    // 3️⃣ TEACHER APPLICATIONS Collection
-    await setDoc(doc(db, "teacherApplications", targetUid), {
-      uid: targetUid,
-      email: targetEmail,
-      firstName: "Abiton",
-      lastName: "Padera",
-      status: "approved",
-      yearsOfExperience: 5,
-      personalInfo: {
-        firstName: "Abiton",
-        lastName: "Padera",
-        email: targetEmail,
-        phone: "0656564983",
-        bio: "",
-        gradePhase: "secondary",
-        curriculum: "British Curriculum",
-      },
-      subjects: subjects,
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+//     // 3️⃣ TEACHER APPLICATIONS Collection
+//     await setDoc(doc(db, "teacherApplications", targetUid), {
+//       uid: targetUid,
+//       email: targetEmail,
+//       firstName: "Abiton",
+//       lastName: "Padera",
+//       status: "approved",
+//       yearsOfExperience: 5,
+//       personalInfo: {
+//         firstName: "Abiton",
+//         lastName: "Padera",
+//         email: targetEmail,
+//         phone: "0656564983",
+//         bio: "",
+//         gradePhase: "secondary",
+//         curriculum: "British Curriculum",
+//       },
+//       subjects: subjects,
+//       updatedAt: serverTimestamp(),
+//     }, { merge: true });
 
-    console.log("✅ Abiton Padera profile synced successfully.");
-    alert("✅ Abiton's profile updated successfully.");
+//     console.log("✅ Abiton Padera profile synced successfully.");
+//     alert("✅ Abiton's profile updated successfully.");
 
-  } catch (error: any) {
-    console.error("🔥 Firestore Error:", error);
-    alert("Update failed: " + (error.message || "Permission Denied"));
-  }
-}
+//   } catch (error: any) {
+//     console.error("🔥 Firestore Error:", error);
+//     alert("Update failed: " + (error.message || "Permission Denied"));
+//   }
+// }

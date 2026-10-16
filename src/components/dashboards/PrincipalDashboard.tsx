@@ -43,7 +43,7 @@ import {
 import StudentLockButton from "@/lib/StudentLockButton";
 // import { BulkDeleteTool } from "@/lib/BulkDeleteTool";
 import TeacherLessonStatsCard from "@/lib/TeacherLessonStatsCard";
-// import { createProfile } from "@/lib/createTempTeacher";
+import { createProfile } from "@/lib/createTempTeacher";
 import logo from "@/img/care.png";
 
 
@@ -498,20 +498,20 @@ const PrincipalDashboard: React.FC = () => {
 
 
   // 5. DEV OVERRIDE (FOR TESTING PURPOSES ONLY - NOT FOR PRODUCTION)
-  // const handleOverride = async () => {
-  //   if (!window.confirm("Force-approve Jason? This will bypass all application steps.")) return;
+  const handleOverride = async () => {
+    if (!window.confirm("Force-approve Jason? This will bypass all application steps.")) return;
 
-  //   setLoading(true);
-  //   try {
-  //     await createProfile(); // Your script from earlier
-  //     alert("✅ Jason is now fully active.");
-  //   } catch (err) {
-  //     console.error(err);
-  //     alert("Permission Denied: Make sure YOUR account is marked as a Principal in Firestore.");
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
+    setLoading(true);
+    try {
+      await createProfile(); // Your script from earlier
+      alert("✅ Jason is now fully active.");
+    } catch (err) {
+      console.error(err);
+      alert("Permission Denied: Make sure YOUR account is marked as a Principal in Firestore.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "timetable"), (snap) => {
@@ -1033,7 +1033,7 @@ const PrincipalDashboard: React.FC = () => {
 
 
         {/* APPROVE TEACHER  - 3*/}
-        {/* <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl mt-4">
+        <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl mt-4">
           <h3 className="text-amber-800 font-bold mb-2">Administrative Actions</h3>
           <Button
             onClick={handleOverride}
@@ -1042,7 +1042,7 @@ const PrincipalDashboard: React.FC = () => {
           >
             {loading ? "Processing..." : "Force-Approve Teacher"}
           </Button>
-        </div> */}
+        </div>
 
 
         {/* Delete Profile */}

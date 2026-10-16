@@ -162,6 +162,10 @@ const LandingPage: React.FC = () => {
                             © {new Date().getFullYear()} British Curriculum Hybrid Christian Academy
                             <span className="mx-2 text-white/10">|</span>
                             Excellence Reformed
+
+                            <div className="mt-1 text-[8px] tracking-widest uppercase text-white/20">
+                                <p>Developed by <a href="https://www.essenceweb.co.za" target="_blank" className="hover:text-white transition-colors">Nextgen Skills Development</a></p>
+                            </div>
                         </div>
 
                         {/* Compliance Links */}
